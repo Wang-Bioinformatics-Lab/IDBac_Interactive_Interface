@@ -4,9 +4,10 @@ import requests
 import numpy as np
 import io
 import plotly.figure_factory as ff
+# Now lets do pairwise cosine similarity
+from sklearn.metrics.pairwise import cosine_distances, euclidean_distances
 
-
-def create_dendrogram(data_np, all_spectra_df, selected_distance_fun="euclidean", label_column="filename", metadata_df=None):
+def create_dendrogram(data_np, all_spectra_df, selected_distance_fun=cosine_distances, label_column="filename", metadata_df=None):
 
     if metadata_df is not None:
         all_spectra_df = all_spectra_df.merge(metadata_df, how="left", left_on="filename", right_on="Filename")
