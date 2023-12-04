@@ -44,7 +44,14 @@ all_spectra_df = pd.read_csv(labels_url, sep="\t")
 
 st.write(all_spectra_df)
 
+# Getting the metadata
+metadata_url = "https://gnps2.org/resultfile?task={}&file=nf_output/output_histogram_data_directory/metadata_table.tsv".format(task)
+try:
+    metadata_df = pd.read_csv(metadata_url, sep="\t")
+except:
+    metadata_df = None
+
 # Creating the dendrogram
-dendro = create_dendrogram(numpy_array, all_spectra_df, metadata_df=None)
+dendro = create_dendrogram(numpy_array, all_spectra_df, metadata_df=metadata_df)
 
 st.plotly_chart(dendro, use_container_width=True)
