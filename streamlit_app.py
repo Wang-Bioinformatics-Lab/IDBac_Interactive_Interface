@@ -25,7 +25,14 @@ def create_dendrogram(data_np, all_spectra_df, selected_distance_fun=cosine_dist
     return dendro
 
 # Here we will add an input field for the GNPS2 task ID
-task = st.text_input('GNPS2 Task ID', '0e744752fdd44faba37df671b9d1997c')
+url_parameters = st.experimental_get_query_params()
+
+default_task = "0e744752fdd44faba37df671b9d1997c"
+if "task" in url_parameters:
+    default_task = url_parameters["task"][0]
+
+
+task = st.text_input('GNPS2 Task ID', default_task)
 st.write(task)
 
 # Now we will get all the relevant data from GNPS2 for plotting
