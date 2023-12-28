@@ -7,9 +7,22 @@ import plotly.figure_factory as ff
 # Now lets do pairwise cosine similarity
 from sklearn.metrics.pairwise import cosine_distances, euclidean_distances
 
-def create_dendrogram(data_np, all_spectra_df, selected_distance_fun=cosine_distances, label_column="filename", metadata_df=None):
-    print("refreshing dendrogram")
-    print("Label Column", label_column, flush=True)
+import numpy as np
+
+def create_dendrogram(data_np, all_spectra_df, selected_distance_fun=np.cosine_distances, label_column="filename", metadata_df=None):
+    """
+    Create a dendrogram using the given data and parameters.
+
+    Parameters:
+    - data_np (numpy.ndarray): The input data as a numpy array.
+    - all_spectra_df (pandas.DataFrame): The dataframe containing all spectra data.
+    - selected_distance_fun (function, optional): The distance function to be used for calculating distances between data points. Defaults to numpy.cosine_distances.
+    - label_column (str, optional): The column name to be used as labels for the dendrogram. Defaults to "filename".
+    - metadata_df (pandas.DataFrame, optional): The dataframe containing metadata information. Defaults to None.
+
+    Returns:
+    - dendro (plotly.graph_objs._figure.Figure): The generated dendrogram as a Plotly figure.
+    """
     if metadata_df is not None:
         # Attempt to fall back to lowercase filename if uppercase filename is not present
         if 'Filename' not in metadata_df.columns and 'filename' in metadata_df.columns:
@@ -26,7 +39,6 @@ def create_dendrogram(data_np, all_spectra_df, selected_distance_fun=cosine_dist
 
         all_spectra_df["label"] = all_spectra_df[label_column].fillna("No Metadata")
     else:
-        print("NO METADATA")
         all_spectra_df["label"] = "No Metadata"
 
     all_spectra_df["label"] = all_spectra_df["label"].astype(str) + " - " + all_spectra_df["filename"].astype(str)
