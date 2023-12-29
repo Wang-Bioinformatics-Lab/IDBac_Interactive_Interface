@@ -9,7 +9,7 @@ from sklearn.metrics.pairwise import cosine_distances, euclidean_distances
 
 import numpy as np
 
-def create_dendrogram(data_np, all_spectra_df, selected_distance_fun=np.cosine_distances, label_column="filename", metadata_df=None):
+def create_dendrogram(data_np, all_spectra_df, selected_distance_fun=cosine_distances, label_column="filename", metadata_df=None):
     """
     Create a dendrogram using the given data and parameters.
 
