@@ -7,15 +7,41 @@ import plotly.figure_factory as ff
 # Now lets do pairwise cosine similarity
 from sklearn.metrics.pairwise import cosine_distances, euclidean_distances
 
-def create_dendrogram(data_np, all_spectra_df, selected_distance_fun=cosine_distances, label_column="filename", metadata_df=None):
+import numpy as np
 
+def create_dendrogram(data_np, all_spectra_df, selected_distance_fun=cosine_distances, label_column="filename", metadata_df=None):
+    """
+    Create a dendrogram using the given data and parameters.
+
+    Parameters:
+    - data_np (numpy.ndarray): The input data as a numpy array.
+    - all_spectra_df (pandas.DataFrame): The dataframe containing all spectra data.
+    - selected_distance_fun (function, optional): The distance function to be used for calculating distances between data points. Defaults to numpy.cosine_distances.
+    - label_column (str, optional): The column name to be used as labels for the dendrogram. Defaults to "filename".
+    - metadata_df (pandas.DataFrame, optional): The dataframe containing metadata information. Defaults to None.
+
+    Returns:
+    - dendro (plotly.graph_objs._figure.Figure): The generated dendrogram as a Plotly figure.
+    """
     if metadata_df is not None:
-        all_spectra_df = all_spectra_df.merge(metadata_df, how="left", left_on="filename", right_on="Filename")
+        # Attempt to fall back to lowercase filename if uppercase filename is not present
+        if 'Filename' not in metadata_df.columns and 'filename' in metadata_df.columns:
+            metadata_df['Filename'] = metadata_df['filename']
+        # Raise an error if there is not filename column
+        if 'Filename' not in metadata_df.columns and 'filename' not in metadata_df.columns:
+            st.error("Metadata file does not have a 'Filename' column")
+        
+        # If the label column is in the original dataframe, a suffix is added
+        if label_column in all_spectra_df.columns:
+            label_column = label_column + "_metadata"
+            
+        all_spectra_df = all_spectra_df.merge(metadata_df, how="left", left_on="filename", right_on="Filename", suffixes=("", "_metadata"))
+
         all_spectra_df["label"] = all_spectra_df[label_column].fillna("No Metadata")
     else:
         all_spectra_df["label"] = "No Metadata"
 
-    all_spectra_df["label"] = all_spectra_df["label"] + " - " + all_spectra_df["filename"]
+    all_spectra_df["label"] = all_spectra_df["label"].astype(str) + " - " + all_spectra_df["filename"].astype(str)
     all_labels_list = all_spectra_df["label"].to_list()
 
     # Creating Dendrogram
@@ -33,6 +59,8 @@ if "task" in url_parameters:
 
 
 task = st.text_input('GNPS2 Task ID', default_task)
+if task == '':
+    st.error("Please input a valid GNPS2 Task ID")
 st.write(task)
 
 # Now we will get all the relevant data from GNPS2 for plotting
@@ -51,14 +79,27 @@ all_spectra_df = pd.read_csv(labels_url, sep="\t")
 
 st.write(all_spectra_df)
 
+
 # Getting the metadata
-metadata_url = "https://gnps2.org/resultfile?task={}&file=nf_output/output_histogram_data_directory/metadata_table.tsv".format(task)
+metadata_url = "https://gnps2.org/resultfile?task={}&file=nf_output/output_histogram_data_directory/metadata.tsv".format(task)
 try:
-    metadata_df = pd.read_csv(metadata_url, sep="\t")
+    metadata_df = pd.read_csv(metadata_url, sep="\t", index_col=False)
 except:
     metadata_df = None
 
+
+# Create a session state for the metadata label    
+if "metadata_label" not in st.session_state:
+    st.session_state["metadata_label"] = "filename"
+
+# Add Metadata dropdown
+if metadata_df is None:
+    # If there is no metadata, then we will disable the dropdown
+    st.session_state["metadata_label"] = st.selectbox("Metadata Column", ["No Metadata Available"], placeholder="No Metadata Available", disabled=True)
+else:
+    st.session_state["metadata_label"]  = st.selectbox("Metadata Column", metadata_df.columns, placeholder=metadata_df.columns[0])
+
 # Creating the dendrogram
-dendro = create_dendrogram(numpy_array, all_spectra_df, metadata_df=metadata_df)
+dendro = create_dendrogram(numpy_array, all_spectra_df, label_column=st.session_state["metadata_label"] , metadata_df=metadata_df)
 
 st.plotly_chart(dendro, use_container_width=True)
