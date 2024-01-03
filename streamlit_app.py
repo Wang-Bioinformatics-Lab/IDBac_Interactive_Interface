@@ -9,16 +9,105 @@ from sklearn.metrics.pairwise import cosine_distances, euclidean_distances
 
 import numpy as np
 
-def create_dendrogram(data_np, all_spectra_df, selected_distance_fun=cosine_distances, label_column="filename", metadata_df=None):
+class np_data_wrapper():
+    def __init__(self, data_np, spectrum_data_df, db_similarity_dict):
+        """
+        A wrapper around a numpy array that contains metadata and database similarity information.
+        
+        Parameters:
+        - data_np (numpy.ndarray): The input data as a numpy array where each row represents binary binned peaks.
+        - spectrum_data_df (pandas.DataFrame): The dataframe containing columns ['filename','db_search_result']. 
+            'filename' denotes the name of the id of the spectrum. 'db_search_result' denotes whether the spectrum is a database search result.
+        - db_similarity_dict (dict): The dictionary containing the database similarity information.
+        """
+        self.data_np = data_np
+        self.spectrum_data_df = spectrum_data_df
+        self.db_similarity_dict = db_similarity_dict
+
+    def __getitem__(self, index):
+        return self.data_np[index]
+    
+    def __getattr__(self, name):
+        return getattr(self.data_np, name)
+
+def get_dist_function_wrapper(distfun):
+    """
+    A function that returns a wrapper around the distance function that allows us to pass in a numpy array with metadata and a dictionary of database 
+    similarity information.
+    
+    Parameters:
+    - distfun (function): The distance function to be used for calculating distances between data points.
+    
+    Returns:
+    - dist_function_wrapper (function): The wrapped distance function.
+    """
+    def dist_function_wrapper(wrapped_np_array):
+        """
+        A wrapper around the distance function that allows us to pass in a numpy array with metadata and a dictionary of database similarity information.
+        
+        Parameters:
+        - wrapped_np_array (np_data_wrapper): The numpy array with metadata and database similarity information. Contains 
+            a numpy array, a dataframe with columns ['filename','db_search_result'], and a dictionary of database similarity information.
+        
+        Returns:
+        - distance_matrix (numpy.ndarray): The distance matrix.
+        """
+        data_np = wrapped_np_array.data_np
+        spectrum_data_df = wrapped_np_array.spectrum_data_df
+        db_similarity_dict = wrapped_np_array.db_similarity_dict
+        
+        # Select rows that are not databse search results and send to the distance function
+        non_db_search_result_filenames = spectrum_data_df.filename[spectrum_data_df['db_search_result'] == False].tolist()
+        non_db_search_result_indices   = spectrum_data_df.index[spectrum_data_df['db_search_result'] == False].tolist()
+        num_inputs = len(non_db_search_result_indices)
+        
+        computed_distances = distfun(data_np[non_db_search_result_indices])
+        
+        # Add database search results
+        db_search_result_filenames = spectrum_data_df.filename[spectrum_data_df['db_search_result'] == True].tolist()
+        num_db_search_results = len(db_search_result_filenames)
+        
+        # Shortcut out to speed up computation
+        if num_db_search_results == 0:
+            return computed_distances
+        
+        # In theory this should never happen, but it's a good sanity check
+        if num_db_search_results + num_inputs != spectrum_data_df.shape[0]:
+            raise Exception("Error in creating distance matrix")
+        
+        db_distance_matrix = np.zeros((num_inputs, num_db_search_results))
+        for i, filename in enumerate(non_db_search_result_filenames):
+            for j, db_filename in enumerate(db_search_result_filenames):
+                db_sim_lst = db_similarity_dict.get(filename)
+                if db_sim_lst is not None:
+                    db_sim = db_sim_lst.get(db_filename, 0)
+                    db_distance_matrix[i, j] = db_sim
+                else:
+                    db_distance_matrix[i, j] = 0
+        
+        # Create a matrix of zeros
+        distance_matrix = np.zeros((num_inputs + num_db_search_results, num_inputs + num_db_search_results))
+        distance_matrix[:num_inputs, :num_inputs] = computed_distances
+        distance_matrix[:num_inputs, num_inputs:] = db_distance_matrix
+        distance_matrix[num_inputs:, :num_inputs] = db_distance_matrix.T
+        # The bottom right corner is all zeros
+        
+        return distance_matrix
+
+    return dist_function_wrapper
+
+def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_distance_fun=cosine_distances, label_column="filename", db_label_column=None,metadata_df=None, db_search_columns=None):
     """
     Create a dendrogram using the given data and parameters.
 
     Parameters:
     - data_np (numpy.ndarray): The input data as a numpy array.
     - all_spectra_df (pandas.DataFrame): The dataframe containing all spectra data.
+    - db_similarity_dict (dict): The dictionary containing the database similarity information.
     - selected_distance_fun (function, optional): The distance function to be used for calculating distances between data points. Defaults to numpy.cosine_distances.
     - label_column (str, optional): The column name to be used as labels for the dendrogram. Defaults to "filename".
     - metadata_df (pandas.DataFrame, optional): The dataframe containing metadata information. Defaults to None.
+    - db_search_columns (list, optional): The list of columns to be used for displaying database search result metadata. Defaults to None.
 
     Returns:
     - dendro (plotly.graph_objs._figure.Figure): The generated dendrogram as a Plotly figure.
@@ -36,19 +125,77 @@ def create_dendrogram(data_np, all_spectra_df, selected_distance_fun=cosine_dist
             label_column = label_column + "_metadata"
             
         all_spectra_df = all_spectra_df.merge(metadata_df, how="left", left_on="filename", right_on="Filename", suffixes=("", "_metadata"))
-
+        
+        all_spectra_df[label_column].fillna("No Metadata", inplace=True)
         all_spectra_df["label"] = all_spectra_df[label_column].fillna("No Metadata")
     else:
         all_spectra_df["label"] = "No Metadata"
-
+        
+    # Add metadata for db search results
+    if db_label_column is not "No Database Search Results":
+        all_spectra_df.loc[all_spectra_df["db_search_result"] == True, db_label_column].fillna("No Metadata", inplace=True)
+        all_spectra_df.loc[all_spectra_df["db_search_result"] == True, "label"] = all_spectra_df.loc[all_spectra_df["db_search_result"] == True, db_label_column]
+        print(all_spectra_df.loc[all_spectra_df["db_search_result"] == True, "label"], flush=True)
+        
     all_spectra_df["label"] = all_spectra_df["label"].astype(str) + " - " + all_spectra_df["filename"].astype(str)
     all_labels_list = all_spectra_df["label"].to_list()
 
     # Creating Dendrogram
-    dendro = ff.create_dendrogram(data_np, orientation='left', labels=all_labels_list, distfun=selected_distance_fun)
+    dendro = ff.create_dendrogram(np_data_wrapper(data_np, all_spectra_df[['filename','db_search_result']], db_similarity_dict), orientation='left', labels=all_labels_list, distfun=get_dist_function_wrapper(selected_distance_fun))
+    # print(dir(dendro), flush=True)
     dendro.update_layout(width=800, height=max(15*len(all_labels_list), 350))
 
     return dendro
+
+def collect_database_search_results(task):
+    """
+    Collect the database search results from the IDBAC Database. If the database search results are not available, then None is returned.
+
+    Parameters:
+    - task (str): The GNPS2 task ID.
+
+    Returns:
+    - database_search_results_df (pandas.DataFrame): The dataframe containing the database search results.
+    """
+    try:
+        # Getting the database search results
+        database_search_results_url = "https://gnps2.org/resultfile?task={}&file=nf_output/search/enriched_db_results.tsv".format(task)
+        database_search_results_df = pd.read_csv(database_search_results_url, sep="\t")
+    except:
+        database_search_results_df = None
+    return database_search_results_df
+
+
+def integrate_database_search_results(data_np: np.ndarray, all_spectra_df: pd.DataFrame, database_search_results_df: pd.DataFrame, db_label_column="db_strain_name", similarity_threshold=0.70):
+    
+    # If there are no database search results, mark everything as not a database search result and return
+    if database_search_results_df is None:
+        all_spectra_df["db_search_result"] = False
+        return all_spectra_df, None
+    
+    
+    trimmed_search_results_df = database_search_results_df[database_search_results_df["similarity"] >= similarity_threshold]
+    
+    # We will abuse filename because during display, we display "metadata - filename"
+    trimmed_search_results_df["filename"] = trimmed_search_results_df[db_label_column].astype(str)
+    
+    all_spectra_df["db_search_result"] = False
+    trimmed_search_results_df["db_search_result"] = True
+    
+    # Concatenate DB search results
+    trimmed_search_results_df = trimmed_search_results_df.drop_duplicates(subset=["database_id"])          # Get unique database hits, assuming databsae_id is unique
+    to_concat = trimmed_search_results_df.drop(columns=['query_filename','similarity'])    # Remove similarity info 
+    all_spectra_df = pd.concat((all_spectra_df, to_concat), axis=0)
+    
+    # Build a similarity dict for the database hits
+    database_similarity_dict = {}
+    for index, row in trimmed_search_results_df.iterrows():
+        if database_similarity_dict.get(row['query_filename']) is None:
+            database_similarity_dict[row['query_filename']] = {row['filename']: row['similarity']}
+        else:
+            database_similarity_dict[row['query_filename']][row['filename']] = row['similarity']
+    
+    return all_spectra_df, database_similarity_dict
 
 # Here we will add an input field for the GNPS2 task ID
 url_parameters = st.experimental_get_query_params()
@@ -77,8 +224,19 @@ numpy_array = np.load(io.BytesIO(numpy_file.content))
 # read pandas dataframe from url
 all_spectra_df = pd.read_csv(labels_url, sep="\t")
 
-st.write(all_spectra_df)
+st.write(all_spectra_df) # Currently, we're not displaying db search results
 
+# Integrate the database search results
+db_search_results = collect_database_search_results(task)
+all_spectra_df, db_similarity_dict = integrate_database_search_results(numpy_array, all_spectra_df, db_search_results)
+
+# Get displayable metadata columns for the database search results
+if db_search_results is not None:
+    # Remove database search result columns we don't want displayed
+    invisible_cols = ['query_filename','similarity','query_index','database_index','row_count']
+    db_search_columns = [x for x in db_search_results.columns if x not in invisible_cols]
+else:
+    db_search_columns = []
 
 # Getting the metadata
 metadata_url = "https://gnps2.org/resultfile?task={}&file=nf_output/output_histogram_data_directory/metadata.tsv".format(task)
@@ -91,6 +249,9 @@ except:
 # Create a session state for the metadata label    
 if "metadata_label" not in st.session_state:
     st.session_state["metadata_label"] = "filename"
+# Create a session state for the db search result label
+if "db_search_result_label" not in st.session_state and db_search_results is not None:
+    st.session_state["db_search_result_label"] = db_search_columns[0]
 
 # Add Metadata dropdown
 if metadata_df is None:
@@ -98,8 +259,20 @@ if metadata_df is None:
     st.session_state["metadata_label"] = st.selectbox("Metadata Column", ["No Metadata Available"], placeholder="No Metadata Available", disabled=True)
 else:
     st.session_state["metadata_label"]  = st.selectbox("Metadata Column", metadata_df.columns, placeholder=metadata_df.columns[0])
+# Add DB Search Result dropdown
+if db_search_results is None:
+    # If there is no db search result, then we will disable the dropdown
+    st.session_state["db_search_result_label"] = st.selectbox("Database Search Result Column", ["No Database Search Results"], placeholder="No Database Search Results", disabled=True)
+else:
+    st.session_state["db_search_result_label"] = st.selectbox("Database Search Result Column", db_search_columns, placeholder=db_search_columns[0])
 
 # Creating the dendrogram
-dendro = create_dendrogram(numpy_array, all_spectra_df, label_column=st.session_state["metadata_label"] , metadata_df=metadata_df)
+dendro = create_dendrogram(numpy_array, 
+                           all_spectra_df, 
+                           db_similarity_dict, 
+                           label_column=st.session_state["metadata_label"], 
+                           db_label_column=st.session_state["db_search_result_label"], 
+                           metadata_df=metadata_df, 
+                           db_search_columns=db_search_columns)
 
 st.plotly_chart(dendro, use_container_width=True)
