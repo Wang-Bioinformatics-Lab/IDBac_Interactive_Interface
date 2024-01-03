@@ -164,8 +164,21 @@ def collect_database_search_results(task):
     return database_search_results_df
 
 
-def integrate_database_search_results(data_np: np.ndarray, all_spectra_df: pd.DataFrame, database_search_results_df: pd.DataFrame, session_state, db_label_column="db_strain_name"):
-
+def integrate_database_search_results(all_spectra_df: pd.DataFrame, database_search_results_df: pd.DataFrame, session_state, db_label_column="db_strain_name"):
+    """
+    Integrate the database search results into the original data. Adds unique database search results to the original data and returns a dictionary of database similarities.
+    Only the database_id column is considered for uniqueness.
+    
+    Parameters:
+    - all_spectra_df (pandas.DataFrame): The dataframe containing all spectra data.
+    - database_search_results_df (pandas.DataFrame): The dataframe containing the database search results.
+    - session_state (dict): The session state containing the display parameters.
+    - db_label_column (str, optional): The column name to be used for displaying database search result metadata. Defaults to "db_strain_name".
+    
+    Returns:
+    - all_spectra_df (pandas.DataFrame): The dataframe containing all spectra data with database search results added.
+    - database_similarity_dict (dict): The dictionary containing the database similarities.
+    """
     db_taxonomy_filter   = session_state["db_taxonomy_filter"]
     similarity_threshold = session_state["db_similarity_threshold"]
     maximum_db_results   = session_state["max_db_results"]
@@ -321,7 +334,7 @@ else:
         st.session_state["db_taxonomy_filter"] = st.multiselect("DB Taxonomy Filter", db_taxonomies)
 
 # Process the db search results (it's done in this order to allow for db_search parameters)
-all_spectra_df, db_similarity_dict = integrate_database_search_results(numpy_array, all_spectra_df, db_search_results, st.session_state)
+all_spectra_df, db_similarity_dict = integrate_database_search_results(all_spectra_df, db_search_results, st.session_state)
 
 # Creating the dendrogram
 dendro = create_dendrogram(numpy_array, 
