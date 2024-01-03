@@ -132,17 +132,15 @@ def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_dist
         all_spectra_df["label"] = "No Metadata"
         
     # Add metadata for db search results
-    if db_label_column is not "No Database Search Results":
+    if db_label_column != "No Database Search Results":
         all_spectra_df.loc[all_spectra_df["db_search_result"] == True, db_label_column].fillna("No Metadata", inplace=True)
         all_spectra_df.loc[all_spectra_df["db_search_result"] == True, "label"] = all_spectra_df.loc[all_spectra_df["db_search_result"] == True, db_label_column]
-        print(all_spectra_df.loc[all_spectra_df["db_search_result"] == True, "label"], flush=True)
         
     all_spectra_df["label"] = all_spectra_df["label"].astype(str) + " - " + all_spectra_df["filename"].astype(str)
     all_labels_list = all_spectra_df["label"].to_list()
 
     # Creating Dendrogram
     dendro = ff.create_dendrogram(np_data_wrapper(data_np, all_spectra_df[['filename','db_search_result']], db_similarity_dict), orientation='left', labels=all_labels_list, distfun=get_dist_function_wrapper(selected_distance_fun))
-    # print(dir(dendro), flush=True)
     dendro.update_layout(width=800, height=max(15*len(all_labels_list), 350))
 
     return dendro
@@ -226,9 +224,8 @@ all_spectra_df = pd.read_csv(labels_url, sep="\t")
 
 st.write(all_spectra_df) # Currently, we're not displaying db search results
 
-# Integrate the database search results
+# Collect the database search results
 db_search_results = collect_database_search_results(task)
-all_spectra_df, db_similarity_dict = integrate_database_search_results(numpy_array, all_spectra_df, db_search_results)
 
 # Get displayable metadata columns for the database search results
 if db_search_results is not None:
@@ -252,6 +249,11 @@ if "metadata_label" not in st.session_state:
 # Create a session state for the db search result label
 if "db_search_result_label" not in st.session_state and db_search_results is not None:
     st.session_state["db_search_result_label"] = db_search_columns[0]
+# Create a session state for the db similarity threshold
+if "db_similarity_threshold" not in st.session_state and db_search_results is not None:
+    st.session_state["db_similarity_threshold"] = 0.70
+elif db_search_results is None:
+    st.session_state["db_similarity_threshold"] = 0.70
 
 # Add Metadata dropdown
 if metadata_df is None:
@@ -265,6 +267,15 @@ if db_search_results is None:
     st.session_state["db_search_result_label"] = st.selectbox("Database Search Result Column", ["No Database Search Results"], placeholder="No Database Search Results", disabled=True)
 else:
     st.session_state["db_search_result_label"] = st.selectbox("Database Search Result Column", db_search_columns, placeholder=db_search_columns[0])
+# Add DB similarity threshold slider
+if db_search_results is None:
+    # If there is no db search result, don't draw the slider at all
+    pass
+else:
+    st.session_state["db_similarity_threshold"] = st.slider("Database Similarity Threshold", 0.0, 1.0, 0.70, 0.05)
+
+# Process the db search results (it's done in this order to allow for db_search parameters)
+all_spectra_df, db_similarity_dict = integrate_database_search_results(numpy_array, all_spectra_df, db_search_results, similarity_threshold=st.session_state["db_similarity_threshold"])
 
 # Creating the dendrogram
 dendro = create_dendrogram(numpy_array, 
