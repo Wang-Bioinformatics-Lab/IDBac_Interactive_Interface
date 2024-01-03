@@ -164,15 +164,28 @@ def collect_database_search_results(task):
     return database_search_results_df
 
 
-def integrate_database_search_results(data_np: np.ndarray, all_spectra_df: pd.DataFrame, database_search_results_df: pd.DataFrame, db_label_column="db_strain_name", similarity_threshold=0.70):
+def integrate_database_search_results(data_np: np.ndarray, all_spectra_df: pd.DataFrame, database_search_results_df: pd.DataFrame, session_state, db_label_column="db_strain_name"):
+
+    db_taxonomy_filter   = session_state["db_taxonomy_filter"]
+    similarity_threshold = session_state["db_similarity_threshold"]
+    maximum_db_results   = session_state["max_db_results"]
     
     # If there are no database search results, mark everything as not a database search result and return
     if database_search_results_df is None:
         all_spectra_df["db_search_result"] = False
         return all_spectra_df, None
     
+    # Apply DB Taxonomy Filter
+    split_taxonomy = database_search_results_df['db_taxonomy'].str.split(";")
+    trimmed_search_results_df = database_search_results_df.loc[[any([x in db_taxonomy_filter for x in y]) for y in split_taxonomy]]
     
-    trimmed_search_results_df = database_search_results_df[database_search_results_df["similarity"] >= similarity_threshold]
+    # Apply Similarity Filter
+    trimmed_search_results_df = trimmed_search_results_df[trimmed_search_results_df["similarity"] >= similarity_threshold]
+       
+    # Apply Maximum DB Results Filter
+    trimmed_search_results_df = trimmed_search_results_df.sort_values(by="similarity", ascending=False)
+    if maximum_db_results != -1:
+        trimmed_search_results_df = trimmed_search_results_df.iloc[:maximum_db_results]             # Safe out of bounds
     
     # We will abuse filename because during display, we display "metadata - filename"
     trimmed_search_results_df["filename"] = trimmed_search_results_df[db_label_column].astype(str)
@@ -181,8 +194,8 @@ def integrate_database_search_results(data_np: np.ndarray, all_spectra_df: pd.Da
     trimmed_search_results_df["db_search_result"] = True
     
     # Concatenate DB search results
-    trimmed_search_results_df = trimmed_search_results_df.drop_duplicates(subset=["database_id"])          # Get unique database hits, assuming databsae_id is unique
-    to_concat = trimmed_search_results_df.drop(columns=['query_filename','similarity'])    # Remove similarity info 
+    trimmed_search_results_df = trimmed_search_results_df.drop_duplicates(subset=["database_id"])   # Get unique database hits, assuming databsae_id is unique
+    to_concat = trimmed_search_results_df.drop(columns=['query_filename','similarity'])             # Remove similarity info 
     all_spectra_df = pd.concat((all_spectra_df, to_concat), axis=0)
     
     # Build a similarity dict for the database hits
@@ -232,6 +245,10 @@ if db_search_results is not None:
     # Remove database search result columns we don't want displayed
     invisible_cols = ['query_filename','similarity','query_index','database_index','row_count']
     db_search_columns = [x for x in db_search_results.columns if x not in invisible_cols]
+    db_taxonomies = db_search_results['db_taxonomy'].str.split(";").to_list()
+    # Flatten
+    db_taxonomies = [item for sublist in db_taxonomies for item in sublist]
+    db_taxonomies = list(set(db_taxonomies))
 else:
     db_search_columns = []
 
@@ -242,40 +259,58 @@ try:
 except:
     metadata_df = None
 
-
+##### Create Session States #####
 # Create a session state for the metadata label    
 if "metadata_label" not in st.session_state:
     st.session_state["metadata_label"] = "filename"
 # Create a session state for the db search result label
 if "db_search_result_label" not in st.session_state and db_search_results is not None:
     st.session_state["db_search_result_label"] = db_search_columns[0]
+elif "db_search_result_label" not in st.session_state and db_search_results is None:
+    st.session_state["db_search_result_label"] = "No Database Search Results"
 # Create a session state for the db similarity threshold
-if "db_similarity_threshold" not in st.session_state and db_search_results is not None:
+if "db_similarity_threshold" not in st.session_state:
     st.session_state["db_similarity_threshold"] = 0.70
-elif db_search_results is None:
-    st.session_state["db_similarity_threshold"] = 0.70
+# Create a session state for the maximum number of database results shown
+if "max_db_results" not in st.session_state:
+    st.session_state["max_db_results"] = -1
+# Create a session state to filter by db taxonomy
+if "db_taxonomy_filter" not in st.session_state:
+    st.session_state["db_taxonomy_filter"] = None
 
+##### Add Display Parameters #####
+st.subheader("Dendrogram Display Options")
 # Add Metadata dropdown
 if metadata_df is None:
     # If there is no metadata, then we will disable the dropdown
     st.session_state["metadata_label"] = st.selectbox("Metadata Column", ["No Metadata Available"], placeholder="No Metadata Available", disabled=True)
 else:
     st.session_state["metadata_label"]  = st.selectbox("Metadata Column", metadata_df.columns, placeholder=metadata_df.columns[0])
-# Add DB Search Result dropdown
+
 if db_search_results is None:
-    # If there is no db search result, then we will disable the dropdown
-    st.session_state["db_search_result_label"] = st.selectbox("Database Search Result Column", ["No Database Search Results"], placeholder="No Database Search Results", disabled=True)
+    # Write a message saying there are no db search results
+    text = "No database search results found for this task."
+    st.write(f":grey[{text}]")
+
 else:
+    # Add DB Search Result dropdown
     st.session_state["db_search_result_label"] = st.selectbox("Database Search Result Column", db_search_columns, placeholder=db_search_columns[0])
-# Add DB similarity threshold slider
-if db_search_results is None:
-    # If there is no db search result, don't draw the slider at all
-    pass
-else:
+    # Add DB similarity threshold slider
     st.session_state["db_similarity_threshold"] = st.slider("Database Similarity Threshold", 0.0, 1.0, 0.70, 0.05)
+    # Create a box for the maximum number of database results shown
+    st.session_state["max_db_results"] = st.number_input("Maximum Number of Database Results Shown", min_value=-1, max_value=None, value=-1, help="Enter -1 to show all database results.")
+    # Create a 'select all' box for the db taxonomy filter
+    if st.checkbox("Select All DB Taxonomies", value=True):
+        st.session_state["db_taxonomy_filter"] = db_taxonomies
+        # Add disabled multiselect to make this less jarring
+        st.multiselect("DB Taxonomy Filter", db_taxonomies, disabled=True)
+    else:
+        # st.session_state["db_taxonomy_filter"] = st.multiselect("DB Taxonomy Filter", db_taxonomies)
+        # Add multiselect with update button
+        st.session_state["db_taxonomy_filter"] = st.multiselect("DB Taxonomy Filter", db_taxonomies)
 
 # Process the db search results (it's done in this order to allow for db_search parameters)
-all_spectra_df, db_similarity_dict = integrate_database_search_results(numpy_array, all_spectra_df, db_search_results, similarity_threshold=st.session_state["db_similarity_threshold"])
+all_spectra_df, db_similarity_dict = integrate_database_search_results(numpy_array, all_spectra_df, db_search_results, st.session_state)
 
 # Creating the dendrogram
 dendro = create_dendrogram(numpy_array, 
