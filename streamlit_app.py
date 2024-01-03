@@ -214,6 +214,17 @@ url_parameters = st.experimental_get_query_params()
 default_task = "0e744752fdd44faba37df671b9d1997c"
 if "task" in url_parameters:
     default_task = url_parameters["task"][0]
+# Add other items to session state if available
+if "metadata_label" in url_parameters:
+    st.session_state["metadata_label"] = url_parameters["metadata_label"][0]
+if "db_search_result_label" in url_parameters:
+    st.session_state["db_search_result_label"] = url_parameters["db_search_result_label"][0]
+if "db_similarity_threshold" in url_parameters:
+    st.session_state["db_similarity_threshold"] = float(url_parameters["db_similarity_threshold"][0])
+if "max_db_results" in url_parameters:
+    st.session_state["max_db_results"] = int(url_parameters["max_db_results"][0])
+if "db_taxonomy_filter" in url_parameters:
+    st.session_state["db_taxonomy_filter"] = url_parameters["db_taxonomy_filter"][0].split(",")
 
 
 task = st.text_input('GNPS2 Task ID', default_task)
@@ -322,3 +333,11 @@ dendro = create_dendrogram(numpy_array,
                            db_search_columns=db_search_columns)
 
 st.plotly_chart(dendro, use_container_width=True)
+
+# Create a shareable link to this page
+st.write("Shareable Link: ")
+if st.session_state['db_taxonomy_filter'] is None:
+    link = f"https://analysis.idbac.org/?task={task}&metadata_label={st.session_state['metadata_label']}&db_search_result_label={st.session_state['db_search_result_label']}&db_similarity_threshold={st.session_state['db_similarity_threshold']}&max_db_results={st.session_state['max_db_results']}"
+else:
+    link = f"https://analysis.idbac.org/?task={task}&metadata_label={st.session_state['metadata_label']}&db_search_result_label={st.session_state['db_search_result_label']}&db_similarity_threshold={st.session_state['db_similarity_threshold']}&max_db_results={st.session_state['max_db_results']}&db_taxonomy_filter={','.join(st.session_state['db_taxonomy_filter'])}"
+st.code(link)
