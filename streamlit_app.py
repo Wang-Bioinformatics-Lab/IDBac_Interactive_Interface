@@ -6,6 +6,8 @@ import io
 import plotly.figure_factory as ff
 # Now lets do pairwise cosine similarity
 from sklearn.metrics.pairwise import cosine_distances, euclidean_distances
+from scipy.cluster.hierarchy import linkage
+from scipy.spatial.distance import squareform
 
 import numpy as np
 
@@ -69,30 +71,35 @@ def get_dist_function_wrapper(distfun):
         
         # Shortcut out to speed up computation
         if num_db_search_results == 0:
-            return computed_distances
+            return squareform(computed_distances)
         
         # In theory this should never happen, but it's a good sanity check
         if num_db_search_results + num_inputs != spectrum_data_df.shape[0]:
             raise Exception("Error in creating distance matrix")
         
-        db_distance_matrix = np.zeros((num_inputs, num_db_search_results))
+        db_distance_matrix = np.ones((num_inputs, num_db_search_results))
         for i, filename in enumerate(non_db_search_result_filenames):
+            db_sim_dict = db_similarity_dict.get(filename)
+            if db_sim_dict is None:
+                continue
             for j, db_filename in enumerate(db_search_result_filenames):
-                db_sim_lst = db_similarity_dict.get(filename)
-                if db_sim_lst is not None:
-                    db_sim = db_sim_lst.get(db_filename, 0)
-                    db_distance_matrix[i, j] = db_sim
-                else:
-                    db_distance_matrix[i, j] = 0
+                this_sim = db_sim_dict.get(db_filename)
+                if this_sim is not None:
+                    # Deal with numerical precisin error due to subtractive cancellation
+                    if this_sim > 0.999:
+                        db_distance_matrix[i, j] = 0
+                    else:
+                        db_distance_matrix[i, j] = 1 - this_sim # 1-sim because we want distance
         
         # Create a matrix of zeros
         distance_matrix = np.zeros((num_inputs + num_db_search_results, num_inputs + num_db_search_results))
         distance_matrix[:num_inputs, :num_inputs] = computed_distances
         distance_matrix[:num_inputs, num_inputs:] = db_distance_matrix
         distance_matrix[num_inputs:, :num_inputs] = db_distance_matrix.T
-        # The bottom right corner is all zeros
-        
-        return distance_matrix
+
+        # The bottom right corner is all ones
+        # assert np.max(distance_matrix) < 1.000001, f"Maximum distnace is {np.max(distance_matrix)}"
+        return squareform(distance_matrix)
 
     return dist_function_wrapper
 
@@ -139,7 +146,7 @@ def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_dist
     all_spectra_df["label"] = all_spectra_df["label"].astype(str) + " - " + all_spectra_df["filename"].astype(str)
     all_labels_list = all_spectra_df["label"].to_list()
 
-    # Creating Dendrogram
+    # Creating Dendrogram  
     dendro = ff.create_dendrogram(np_data_wrapper(data_np, all_spectra_df[['filename','db_search_result']], db_similarity_dict), orientation='left', labels=all_labels_list, distfun=get_dist_function_wrapper(selected_distance_fun))
     dendro.update_layout(width=800, height=max(15*len(all_labels_list), 350))
 
@@ -207,8 +214,8 @@ def integrate_database_search_results(all_spectra_df: pd.DataFrame, database_sea
     trimmed_search_results_df["db_search_result"] = True
     
     # Concatenate DB search results
-    trimmed_search_results_df = trimmed_search_results_df.drop_duplicates(subset=["database_id"])   # Get unique database hits, assuming databsae_id is unique
-    to_concat = trimmed_search_results_df.drop(columns=['query_filename','similarity'])             # Remove similarity info 
+    to_concat = trimmed_search_results_df.drop_duplicates(subset=["database_id"])   # Get unique database hits, assuming databsae_id is unique
+    to_concat = to_concat.drop(columns=['query_filename','similarity'])             # Remove similarity info 
     all_spectra_df = pd.concat((all_spectra_df, to_concat), axis=0)
     
     # Build a similarity dict for the database hits
