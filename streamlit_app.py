@@ -6,6 +6,8 @@ import io
 import plotly.figure_factory as ff
 # Now lets do pairwise cosine similarity
 from sklearn.metrics.pairwise import cosine_distances, euclidean_distances
+from scipy.cluster.hierarchy import linkage
+from scipy.spatial.distance import squareform
 
 import numpy as np
 
@@ -69,34 +71,39 @@ def get_dist_function_wrapper(distfun):
         
         # Shortcut out to speed up computation
         if num_db_search_results == 0:
-            return computed_distances
+            return squareform(computed_distances)
         
         # In theory this should never happen, but it's a good sanity check
         if num_db_search_results + num_inputs != spectrum_data_df.shape[0]:
             raise Exception("Error in creating distance matrix")
         
-        db_distance_matrix = np.zeros((num_inputs, num_db_search_results))
+        db_distance_matrix = np.ones((num_inputs, num_db_search_results))
         for i, filename in enumerate(non_db_search_result_filenames):
+            db_sim_dict = db_similarity_dict.get(filename)
+            if db_sim_dict is None:
+                continue
             for j, db_filename in enumerate(db_search_result_filenames):
-                db_sim_lst = db_similarity_dict.get(filename)
-                if db_sim_lst is not None:
-                    db_sim = db_sim_lst.get(db_filename, 0)
-                    db_distance_matrix[i, j] = db_sim
-                else:
-                    db_distance_matrix[i, j] = 0
+                this_sim = db_sim_dict.get(db_filename)
+                if this_sim is not None:
+                    # Deal with numerical precisin error due to subtractive cancellation
+                    if this_sim > 0.999:
+                        db_distance_matrix[i, j] = 0
+                    else:
+                        db_distance_matrix[i, j] = 1 - this_sim # 1-sim because we want distance
         
         # Create a matrix of zeros
         distance_matrix = np.zeros((num_inputs + num_db_search_results, num_inputs + num_db_search_results))
         distance_matrix[:num_inputs, :num_inputs] = computed_distances
         distance_matrix[:num_inputs, num_inputs:] = db_distance_matrix
         distance_matrix[num_inputs:, :num_inputs] = db_distance_matrix.T
-        # The bottom right corner is all zeros
-        
-        return distance_matrix
+
+        # The bottom right corner is all ones
+        # assert np.max(distance_matrix) < 1.000001, f"Maximum distnace is {np.max(distance_matrix)}"
+        return squareform(distance_matrix)
 
     return dist_function_wrapper
 
-def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_distance_fun=cosine_distances, label_column="filename", db_label_column=None,metadata_df=None, db_search_columns=None):
+def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_distance_fun=cosine_distances, label_column="filename", db_label_column=None,metadata_df=None, db_search_columns=None, cluster_method="ward"):
     """
     Create a dendrogram using the given data and parameters.
 
@@ -108,6 +115,7 @@ def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_dist
     - label_column (str, optional): The column name to be used as labels for the dendrogram. Defaults to "filename".
     - metadata_df (pandas.DataFrame, optional): The dataframe containing metadata information. Defaults to None.
     - db_search_columns (list, optional): The list of columns to be used for displaying database search result metadata. Defaults to None.
+    - cluster_method (str, optional): The clustering method to be used for clustering the data. Defaults to "ward".
 
     Returns:
     - dendro (plotly.graph_objs._figure.Figure): The generated dendrogram as a Plotly figure.
@@ -139,8 +147,8 @@ def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_dist
     all_spectra_df["label"] = all_spectra_df["label"].astype(str) + " - " + all_spectra_df["filename"].astype(str)
     all_labels_list = all_spectra_df["label"].to_list()
 
-    # Creating Dendrogram
-    dendro = ff.create_dendrogram(np_data_wrapper(data_np, all_spectra_df[['filename','db_search_result']], db_similarity_dict), orientation='left', labels=all_labels_list, distfun=get_dist_function_wrapper(selected_distance_fun))
+    # Creating Dendrogram  
+    dendro = ff.create_dendrogram(np_data_wrapper(data_np, all_spectra_df[['filename','db_search_result']], db_similarity_dict), orientation='left', labels=all_labels_list, distfun=get_dist_function_wrapper(selected_distance_fun), linkagefun=lambda x: linkage(x, method=cluster_method))
     dendro.update_layout(width=800, height=max(15*len(all_labels_list), 350))
 
     return dendro
@@ -207,8 +215,8 @@ def integrate_database_search_results(all_spectra_df: pd.DataFrame, database_sea
     trimmed_search_results_df["db_search_result"] = True
     
     # Concatenate DB search results
-    trimmed_search_results_df = trimmed_search_results_df.drop_duplicates(subset=["database_id"])   # Get unique database hits, assuming databsae_id is unique
-    to_concat = trimmed_search_results_df.drop(columns=['query_filename','similarity'])             # Remove similarity info 
+    to_concat = trimmed_search_results_df.drop_duplicates(subset=["database_id"])   # Get unique database hits, assuming databsae_id is unique
+    to_concat = to_concat.drop(columns=['query_filename','similarity'])             # Remove similarity info 
     all_spectra_df = pd.concat((all_spectra_df, to_concat), axis=0)
     
     # Build a similarity dict for the database hits
@@ -238,6 +246,8 @@ if "max_db_results" in url_parameters:
     st.session_state["max_db_results"] = int(url_parameters["max_db_results"][0])
 if "db_taxonomy_filter" in url_parameters:
     st.session_state["db_taxonomy_filter"] = url_parameters["db_taxonomy_filter"][0].split(",")
+if "clustering_method" in url_parameters:
+    st.session_state["clustering_method"] = url_parameters["clustering_method"][0]
 
 
 task = st.text_input('GNPS2 Task ID', default_task)
@@ -301,9 +311,17 @@ if "max_db_results" not in st.session_state:
 # Create a session state to filter by db taxonomy
 if "db_taxonomy_filter" not in st.session_state:
     st.session_state["db_taxonomy_filter"] = None
+# Create a session state for the clustering method
+if "clustering_method" not in st.session_state:
+    st.session_state["clustering_method"] = "ward"
 
 ##### Add Display Parameters #####
 st.subheader("Dendrogram Display Options")
+
+# Add Clustering Method dropdown
+clustering_options = ["ward", "single", "complete", "average", "weighted", "centroid", "median"]
+st.session_state["clustering_method"] = st.selectbox("Clustering Method", clustering_options, index=0)
+
 # Add Metadata dropdown
 if metadata_df is None:
     # If there is no metadata, then we will disable the dropdown
@@ -343,14 +361,15 @@ dendro = create_dendrogram(numpy_array,
                            label_column=st.session_state["metadata_label"], 
                            db_label_column=st.session_state["db_search_result_label"], 
                            metadata_df=metadata_df, 
-                           db_search_columns=db_search_columns)
+                           db_search_columns=db_search_columns,
+                           cluster_method=st.session_state["clustering_method"])
 
 st.plotly_chart(dendro, use_container_width=True)
 
 # Create a shareable link to this page
 st.write("Shareable Link: ")
 if st.session_state['db_taxonomy_filter'] is None:
-    link = f"https://analysis.idbac.org/?task={task}&metadata_label={st.session_state['metadata_label']}&db_search_result_label={st.session_state['db_search_result_label']}&db_similarity_threshold={st.session_state['db_similarity_threshold']}&max_db_results={st.session_state['max_db_results']}"
+    link = f"https://analysis.idbac.org/?task={task}&metadata_label={st.session_state['metadata_label']}&db_search_result_label={st.session_state['db_search_result_label']}&db_similarity_threshold={st.session_state['db_similarity_threshold']}&max_db_results={st.session_state['max_db_results']}&clustering_method={st.session_state['clustering_method']}"
 else:
-    link = f"https://analysis.idbac.org/?task={task}&metadata_label={st.session_state['metadata_label']}&db_search_result_label={st.session_state['db_search_result_label']}&db_similarity_threshold={st.session_state['db_similarity_threshold']}&max_db_results={st.session_state['max_db_results']}&db_taxonomy_filter={','.join(st.session_state['db_taxonomy_filter'])}"
+    link = f"https://analysis.idbac.org/?task={task}&metadata_label={st.session_state['metadata_label']}&db_search_result_label={st.session_state['db_search_result_label']}&db_similarity_threshold={st.session_state['db_similarity_threshold']}&max_db_results={st.session_state['max_db_results']}&db_taxonomy_filter={','.join(st.session_state['db_taxonomy_filter'])}&clustering_method={st.session_state['clustering_method']}"
 st.code(link)
