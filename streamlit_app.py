@@ -279,6 +279,7 @@ if db_search_results is not None:
     # Remove database search result columns we don't want displayed
     invisible_cols = ['query_filename','similarity','query_index','database_index','row_count']
     db_search_columns = [x for x in db_search_results.columns if x not in invisible_cols]
+    db_search_results['db_taxonomy'] = db_search_results['db_taxonomy'].fillna("No Taxonomy")
     db_taxonomies = db_search_results['db_taxonomy'].str.split(";").to_list()
     # Flatten
     db_taxonomies = [item for sublist in db_taxonomies for item in sublist]
