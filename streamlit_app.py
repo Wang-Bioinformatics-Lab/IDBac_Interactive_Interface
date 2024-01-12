@@ -142,7 +142,7 @@ def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_dist
     # Add metadata for db search results
     if db_label_column != "No Database Search Results":
         all_spectra_df.loc[all_spectra_df["db_search_result"] == True, db_label_column].fillna("No Metadata", inplace=True)
-        all_spectra_df.loc[all_spectra_df["db_search_result"] == True, "label"] = all_spectra_df.loc[all_spectra_df["db_search_result"] == True, db_label_column]
+        all_spectra_df.loc[all_spectra_df["db_search_result"] == True, "label"] = 'DB Result - ' + all_spectra_df.loc[all_spectra_df["db_search_result"] == True][db_label_column].astype(str)
         
     all_spectra_df["label"] = all_spectra_df["label"].astype(str) + " - " + all_spectra_df["filename"].astype(str)
     all_labels_list = all_spectra_df["label"].to_list()
@@ -200,13 +200,19 @@ def integrate_database_search_results(all_spectra_df: pd.DataFrame, database_sea
     split_taxonomy = database_search_results_df['db_taxonomy'].str.split(";")
     trimmed_search_results_df = database_search_results_df.loc[[any([x in db_taxonomy_filter for x in y]) for y in split_taxonomy]]
     
+    # Reduce visible taxonomy to only Genus, Family, Species
+    trimmed_search_results_df['db_taxonomy'] = trimmed_search_results_df['db_taxonomy'].str.split(";").str[:3].str.join(" - ")
+    
     # Apply Similarity Filter
     trimmed_search_results_df = trimmed_search_results_df[trimmed_search_results_df["similarity"] >= similarity_threshold]
        
     # Apply Maximum DB Results Filter
-    trimmed_search_results_df = trimmed_search_results_df.sort_values(by="similarity", ascending=False)
+    grouped_results = trimmed_search_results_df.groupby("database_id")
+    best_results = grouped_results.apply(lambda x: x.sort_values(by="similarity", ascending=False).iloc[0])
+    # Get maximum_db_results database_ids
     if maximum_db_results != -1:
-        trimmed_search_results_df = trimmed_search_results_df.iloc[:maximum_db_results]             # Safe out of bounds
+        best_results = best_results.iloc[:maximum_db_results]             # Safe out of bounds
+        trimmed_search_results_df = trimmed_search_results_df[trimmed_search_results_df["database_id"].isin(best_results["database_id"])]
     
     # We will abuse filename because during display, we display "metadata - filename"
     trimmed_search_results_df["filename"] = trimmed_search_results_df[db_label_column].astype(str)
@@ -287,13 +293,6 @@ if db_search_results is not None:
 else:
     db_search_columns = []
 
-# Getting the metadata
-metadata_url = "https://gnps2.org/resultfile?task={}&file=nf_output/output_histogram_data_directory/metadata.tsv".format(task)
-try:
-    metadata_df = pd.read_csv(metadata_url, sep="\t", index_col=False)
-except:
-    metadata_df = None
-
 ##### Create Session States #####
 # Create a session state for the metadata label    
 if "metadata_label" not in st.session_state:
@@ -315,6 +314,33 @@ if "db_taxonomy_filter" not in st.session_state:
 # Create a session state for the clustering method
 if "clustering_method" not in st.session_state:
     st.session_state["clustering_method"] = "ward"
+# Create a session state for alternate metadata
+if "upload_metadata" not in st.session_state:
+    st.session_state["upload_metadata"] = False
+
+# Add checkbox for manual metadata upload
+if st.checkbox("Upload Metadata", help="If left unchecked, the metadata associated with the task will be used."):
+    st.session_state["upload_metadata"] = True
+    # Add file uploader
+    metadata_file = st.file_uploader("Upload Metadata File", type=["csv", "tsv", "txt"])
+    if metadata_file is not None:
+        if metadata_file.name.endswith(".txt"):
+            metadata_df = pd.read_table(metadata_file, index_col=False)
+        elif metadata_file.name.endswith(".csv"):
+            metadata_df = pd.read_csv(metadata_file, sep=",", index_col=False)
+        elif metadata_file.name.endswith(".tsv"):
+            metadata_df = pd.read_csv(metadata_file, sep="\t", index_col=False)
+        else:
+            st.error("Please upload a .csv, .tsv, or .txt file")
+    else:
+        metadata_df = None
+else:
+    # Getting the metadata
+    metadata_url = "https://gnps2.org/resultfile?task={}&file=nf_output/output_histogram_data_directory/metadata.tsv".format(task)
+    try:
+        metadata_df = pd.read_csv(metadata_url, sep="\t", index_col=False)
+    except:
+        metadata_df = None 
 
 ##### Add Display Parameters #####
 st.subheader("Dendrogram Display Options")
@@ -341,9 +367,9 @@ else:
     # Add DB similarity threshold slider
     st.session_state["db_similarity_threshold"] = st.slider("Database Similarity Threshold", 0.0, 1.0, 0.70, 0.05)
     # Create a box for the maximum number of database results shown
-    st.session_state["max_db_results"] = st.number_input("Maximum Number of Database Results Shown", min_value=-1, max_value=None, value=-1, help="Enter -1 to show all database results.")
+    st.session_state["max_db_results"] = st.number_input("Maximum Number of Database Results Shown", min_value=-1, max_value=None, value=-1, help="Enter -1 to show all database results.")  
     # Create a 'select all' box for the db taxonomy filter
-    if st.checkbox("Select All DB Taxonomies", value=True):
+    if st.checkbox("Select All Database Result Taxonomies", value=True):
         st.session_state["db_taxonomy_filter"] = db_taxonomies
         # Add disabled multiselect to make this less jarring
         st.multiselect("DB Taxonomy Filter", db_taxonomies, disabled=True)
