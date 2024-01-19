@@ -104,7 +104,7 @@ def get_dist_function_wrapper(distfun):
 
     return dist_function_wrapper
 
-def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_distance_fun=cosine_distances, label_column="filename", db_label_column=None,metadata_df=None, db_search_columns=None, cluster_method="ward"):
+def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_distance_fun=cosine_distances, label_column="filename", db_label_column=None,metadata_df=None, db_search_columns=None, cluster_method="ward", coloring_threshold=None):
     """
     Create a dendrogram using the given data and parameters.
 
@@ -149,7 +149,12 @@ def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_dist
     all_labels_list = all_spectra_df["label"].to_list()
 
     # Creating Dendrogram  
-    dendro = ff.create_dendrogram(np_data_wrapper(data_np, all_spectra_df[['filename','db_search_result']], db_similarity_dict), orientation='left', labels=all_labels_list, distfun=get_dist_function_wrapper(selected_distance_fun), linkagefun=lambda x: linkage(x, method=cluster_method))
+    dendro = ff.create_dendrogram(np_data_wrapper(data_np, all_spectra_df[['filename','db_search_result']], db_similarity_dict), 
+                                  orientation='left', 
+                                  labels=all_labels_list, 
+                                  distfun=get_dist_function_wrapper(selected_distance_fun), 
+                                  linkagefun=lambda x: linkage(x, method=cluster_method), 
+                                  color_threshold=coloring_threshold)
     dendro.update_layout(width=800, height=max(15*len(all_labels_list), 350))
 
     return dendro
@@ -333,6 +338,8 @@ if "db_taxonomy_filter" in url_parameters:
     st.session_state["db_taxonomy_filter"] = url_parameters["db_taxonomy_filter"][0].split(",")
 if "clustering_method" in url_parameters:
     st.session_state["clustering_method"] = url_parameters["clustering_method"][0]
+if "coloring_threshold" in url_parameters:
+    st.session_state["coloring_threshold"] = float(url_parameters["coloring_threshold"][0])
 
 
 task = st.text_input('GNPS2 Task ID', default_task)
@@ -377,6 +384,12 @@ else:
     db_search_columns = []
 
 ##### Create Session States #####
+# Create a session state for the clustering method
+if "clustering_method" not in st.session_state:
+    st.session_state["clustering_method"] = "ward"
+# Create a session state for the coloring threshold
+if "coloring_threshold" not in st.session_state:
+    st.session_state["coloring_threshold"] = 0.70
 # Create a session state for the metadata label    
 if "metadata_label" not in st.session_state:
     st.session_state["metadata_label"] = "filename"
@@ -394,9 +407,6 @@ if "max_db_results" not in st.session_state:
 # Create a session state to filter by db taxonomy
 if "db_taxonomy_filter" not in st.session_state:
     st.session_state["db_taxonomy_filter"] = None
-# Create a session state for the clustering method
-if "clustering_method" not in st.session_state:
-    st.session_state["clustering_method"] = "ward"
 # Create a session state for alternate metadata
 if "upload_metadata" not in st.session_state:
     st.session_state["upload_metadata"] = False
@@ -432,6 +442,8 @@ st.subheader("Clustering")
 # Add Clustering Method dropdown
 clustering_options = ["ward", "single", "complete", "average", "weighted", "centroid", "median"]
 st.session_state["clustering_method"] = st.selectbox("Clustering Method", clustering_options, index=0)
+# Add coloring threshold slider
+st.session_state["coloring_threshold"] = st.slider("Coloring Threshold", 0.0, 1.0, st.session_state["coloring_threshold"], 0.05)
 
 st.subheader("Metadata")
 # Add Metadata dropdown
@@ -453,7 +465,7 @@ else:
     st.subheader("Database Search Result Filters")
     
     # Add DB similarity threshold slider
-    st.session_state["db_similarity_threshold"] = st.slider("Database Similarity Threshold", 0.0, 1.0, 0.70, 0.05)
+    st.session_state["db_similarity_threshold"] = st.slider("Database Similarity Threshold", 0.0, 1.0, st.session_state["db_similarity_threshold"], 0.05)
     # Create a box for the maximum number of database results shown
     st.session_state["max_db_results"] = st.number_input("Maximum Number of Database Results Shown", min_value=-1, max_value=None, value=-1, help="Enter -1 to show all database results.")  
     # Create a 'select all' box for the db taxonomy filter
@@ -470,14 +482,15 @@ else:
 all_spectra_df, db_similarity_dict = integrate_database_search_results(all_spectra_df, db_search_results, st.session_state)
 
 # Creating the dendrogram
-dendro = create_dendrogram(numpy_array, 
-                           all_spectra_df, 
-                           db_similarity_dict, 
-                           label_column=st.session_state["metadata_label"], 
-                           db_label_column=st.session_state["db_search_result_label"], 
-                           metadata_df=metadata_df, 
+dendro = create_dendrogram(numpy_array,
+                           all_spectra_df,
+                           db_similarity_dict,
+                           label_column=st.session_state["metadata_label"],
+                           db_label_column=st.session_state["db_search_result_label"],
+                           metadata_df=metadata_df,
                            db_search_columns=db_search_columns,
-                           cluster_method=st.session_state["clustering_method"])
+                           cluster_method=st.session_state["clustering_method"],
+                           coloring_threshold=st.session_state["coloring_threshold"])
 
 st.plotly_chart(dendro, use_container_width=True)
 
@@ -508,9 +521,9 @@ st.link_button(label="View Plot", url=get_mirror_plot_url(spectra_one_USI, spect
 # Create a shareable link to this page
 st.write("Shareable Link: ")
 if st.session_state['db_taxonomy_filter'] is None:
-    link = f"https://analysis.idbac.org/?task={task}&metadata_label={st.session_state['metadata_label']}&db_search_result_label={st.session_state['db_search_result_label']}&db_similarity_threshold={st.session_state['db_similarity_threshold']}&max_db_results={st.session_state['max_db_results']}&clustering_method={st.session_state['clustering_method']}"
+    link = f"https://analysis.idbac.org/?task={task}&metadata_label={st.session_state['metadata_label']}&db_search_result_label={st.session_state['db_search_result_label']}&db_similarity_threshold={st.session_state['db_similarity_threshold']}&max_db_results={st.session_state['max_db_results']}&clustering_method={st.session_state['clustering_method']}&coloring_threshold={st.session_state['coloring_threshold']}"
 else:
-    link = f"https://analysis.idbac.org/?task={task}&metadata_label={st.session_state['metadata_label']}&db_search_result_label={st.session_state['db_search_result_label']}&db_similarity_threshold={st.session_state['db_similarity_threshold']}&max_db_results={st.session_state['max_db_results']}&db_taxonomy_filter={','.join(st.session_state['db_taxonomy_filter'])}&clustering_method={st.session_state['clustering_method']}"
+    link = f"https://analysis.idbac.org/?task={task}&metadata_label={st.session_state['metadata_label']}&db_search_result_label={st.session_state['db_search_result_label']}&db_similarity_threshold={st.session_state['db_similarity_threshold']}&max_db_results={st.session_state['max_db_results']}&db_taxonomy_filter={','.join(st.session_state['db_taxonomy_filter'])}&clustering_method={st.session_state['clustering_method']}&coloring_threshold={st.session_state['coloring_threshold']}"
 st.code(link)
 
 # Add documentation
@@ -522,8 +535,7 @@ st.markdown("""
             * The metadata file must be a .csv, .tsv, or .txt file.
             #### Visualization
             * Flat lines at x=0, are a result of perfect database search results.
-            * Coloring: The color of the lines follows the MATLAB(TM) default behavior where the threshold is set to 0.7 times the maximum linkage 
-            distance. All descendant links below an arbitrary cluster node will be colored the same color as that cluster node if that node is the 
+            * Coloring: All descendant links below an arbitrary cluster node will be colored the same color as that cluster node if that node is the 
             first one below the cut threshold. Links between clustering nodes greater than the cut threshold are colored blue. See this 
             [link](https://docs.scipy.org/doc/scipy/reference/generated/scipy.cluster.hierarchy.dendrogram.html) for more details.
             """)
