@@ -426,12 +426,14 @@ else:
         metadata_df = None 
 
 ##### Add Display Parameters #####
-st.subheader("Dendrogram Display Options")
+st.header("Dendrogram Display Options")
 
+st.subheader("Clustering")
 # Add Clustering Method dropdown
 clustering_options = ["ward", "single", "complete", "average", "weighted", "centroid", "median"]
 st.session_state["clustering_method"] = st.selectbox("Clustering Method", clustering_options, index=0)
 
+st.subheader("Metadata")
 # Add Metadata dropdown
 if metadata_df is None:
     # If there is no metadata, then we will disable the dropdown
@@ -447,6 +449,9 @@ if db_search_results is None:
 else:
     # Add DB Search Result dropdown
     st.session_state["db_search_result_label"] = st.selectbox("Database Search Result Column", db_search_columns, placeholder=db_search_columns[0])
+    
+    st.subheader("Database Search Result Filters")
+    
     # Add DB similarity threshold slider
     st.session_state["db_similarity_threshold"] = st.slider("Database Similarity Threshold", 0.0, 1.0, 0.70, 0.05)
     # Create a box for the maximum number of database results shown
@@ -477,7 +482,7 @@ dendro = create_dendrogram(numpy_array,
 st.plotly_chart(dendro, use_container_width=True)
 
 # Add a dropdown allowing for mirror plots:
-st.subheader("Plot Spectra")
+st.header("Plot Spectra")
 
 def mirror_plot_format_function(df):
     output = []
@@ -509,7 +514,7 @@ else:
 st.code(link)
 
 # Add documentation
-st.subheader("Additional Information")
+st.header("Additional Information")
 # Add a bulleted list of more information
 st.markdown("""
             #### Metadata
