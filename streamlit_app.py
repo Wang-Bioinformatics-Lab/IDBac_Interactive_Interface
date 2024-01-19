@@ -280,7 +280,7 @@ def integrate_database_search_results(all_spectra_df: pd.DataFrame, database_sea
     trimmed_search_results_df = database_search_results_df.loc[[any([x in db_taxonomy_filter for x in y]) for y in split_taxonomy]]
     
     # Reduce visible taxonomy to only Genus, Family, Species
-    trimmed_search_results_df['db_taxonomy'] = trimmed_search_results_df['db_taxonomy'].str.split(";").str[:3].str.join(" - ")
+    trimmed_search_results_df['db_taxonomy'] = trimmed_search_results_df['db_taxonomy'].str.split(";").str[-3:].str.join(" - ")
     
     # Apply Similarity Filter
     trimmed_search_results_df = trimmed_search_results_df[trimmed_search_results_df["similarity"] >= similarity_threshold]
