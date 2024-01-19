@@ -35,7 +35,8 @@ class np_data_wrapper():
 def get_dist_function_wrapper(distfun):
     """
     A function that returns a wrapper around the distance function that allows us to pass in a numpy array with metadata and a dictionary of database 
-    similarity information.
+    similarity information. The goal here is we want to use precomputed distances when given a database search result, but want to compute distances
+    between non-database search results.
     
     Parameters:
     - distfun (function): The distance function to be used for calculating distances between data points.
@@ -103,7 +104,7 @@ def get_dist_function_wrapper(distfun):
 
     return dist_function_wrapper
 
-def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_distance_fun=cosine_distances, label_column="filename", db_label_column=None,metadata_df=None, db_search_columns=None, cluster_method="ward"):
+def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_distance_fun=cosine_distances, label_column="filename", db_label_column=None,metadata_df=None, db_search_columns=None, cluster_method="ward", coloring_threshold=None):
     """
     Create a dendrogram using the given data and parameters.
 
@@ -148,7 +149,12 @@ def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_dist
     all_labels_list = all_spectra_df["label"].to_list()
 
     # Creating Dendrogram  
-    dendro = ff.create_dendrogram(np_data_wrapper(data_np, all_spectra_df[['filename','db_search_result']], db_similarity_dict), orientation='left', labels=all_labels_list, distfun=get_dist_function_wrapper(selected_distance_fun), linkagefun=lambda x: linkage(x, method=cluster_method))
+    dendro = ff.create_dendrogram(np_data_wrapper(data_np, all_spectra_df[['filename','db_search_result']], db_similarity_dict), 
+                                  orientation='left', 
+                                  labels=all_labels_list, 
+                                  distfun=get_dist_function_wrapper(selected_distance_fun), 
+                                  linkagefun=lambda x: linkage(x, method=cluster_method), 
+                                  color_threshold=coloring_threshold)
     dendro.update_layout(width=800, height=max(15*len(all_labels_list), 350))
 
     return dendro
@@ -162,14 +168,92 @@ def collect_database_search_results(task):
 
     Returns:
     - database_search_results_df (pandas.DataFrame): The dataframe containing the database search results.
+    - database_similarity_table (pandas.DataFrame): The dataframe containing the database similarity tabl (contains original fikle)
     """
     try:
         # Getting the database search results
-        database_search_results_url = "https://gnps2.org/resultfile?task={}&file=nf_output/search/enriched_db_results.tsv".format(task)
+        database_search_results_url = f"https://gnps2.org/resultfile?task={task}&file=nf_output/search/enriched_db_results.tsv"
         database_search_results_df = pd.read_csv(database_search_results_url, sep="\t")
     except:
         database_search_results_df = None
+
     return database_search_results_df
+
+def build_database_result_USI(database_id:str, file_name:str):
+    """
+    Build a USI for a database search result given a database_id. Note, if the original
+    task is missing/deteleted from GNPS2, this will not work.
+    
+    Parameters:
+    - database_id (str): The database_id of the database search result.
+    
+    Returns:
+    - usi (str): The USI of the database search result.
+    """
+    
+    # User database id to get original task id
+    # Example URL: https://idbac-kb.gnps2.org/api/spectrum?database_id=01HHBSS17717HA7VN5C167FYHC
+    url = "https://idbac-kb.gnps2.org/api/spectrum?database_id={}".format(database_id)
+    r = requests.get(url)
+    retries = 3
+    while r.status_code != 200 and retries > 0:
+        r = requests.get(url)
+        retries -= 1
+    if r.status_code != 200:
+        # Throw an exception for this because the database ids are supplied internally
+        raise ValueError("Database ID not found")
+    result_dictionary = r.json()
+    task = result_dictionary["task"]
+    file_name = result_dictionary["Filename"]
+       
+    return_usi = f"mzspec:GNPS2:TASK-{task}-nf_output/merged/{file_name}:scan:1"
+    
+    # Test the USI, so we can return an error message on the page
+    r = requests.get(f"https://metabolomics-usi.gnps2.org/json/?usi1={return_usi}")
+    if r.status_code != 200:
+        # Return None, signifying an error if the USI is not valid, this would imply that the original task is missing/deleted
+        st.error("File Upload Task is Missing or Deleted from GNPS2")
+        return None
+    
+    return return_usi
+
+def get_USI(all_spectra_df: pd.DataFrame, filename: str, task:str):
+    """
+    Get the USI of a given filename.
+    
+    Parameters:
+    - all_spectra_df (pandas.DataFrame): The dataframe containing all spectra data.
+    - filename (str): The filename of the spectrum.
+    - task (str): The IDBAc_analysis task number
+    
+    Returns:
+    - usi (str): The USI of the spectrum.
+    """
+    if filename == 'None':
+        return None
+    
+    db_result = False
+    if filename.startswith("DB Result - "):
+        filename = filename.replace("DB Result - ", "")
+        db_result = True
+        
+    # Attempt to mitigate issues due to duplicate filenames
+    row = all_spectra_df.loc[(all_spectra_df["filename"] == filename) & (all_spectra_df["db_search_result"] == db_result)]
+
+    if db_result:
+        # If it's a database search result, use the database_id to get the USI
+        output_USI = build_database_result_USI(row["database_id"].iloc[0], row["filename"].iloc[0])
+    else:
+        # If it's a query, use the query job to get the USI
+        output_USI = f"mzspec:GNPS2:TASK-{task}-nf_output/merged/{row['filename'].iloc[0]}:scan:1"
+    return output_USI
+    
+def get_mirror_plot_url(usi1, usi2=None):
+    if usi2 is None:
+        url = f"https://metabolomics-usi.gnps2.org/dashinterface/?usi1={usi1}"
+    else:
+        url = f"https://metabolomics-usi.gnps2.org/dashinterface/?usi1={usi1}&usi2={usi2}"
+    return url
 
 
 def integrate_database_search_results(all_spectra_df: pd.DataFrame, database_search_results_df: pd.DataFrame, session_state, db_label_column="db_strain_name"):
@@ -201,7 +285,7 @@ def integrate_database_search_results(all_spectra_df: pd.DataFrame, database_sea
     trimmed_search_results_df = database_search_results_df.loc[[any([x in db_taxonomy_filter for x in y]) for y in split_taxonomy]]
     
     # Reduce visible taxonomy to only Genus, Family, Species
-    trimmed_search_results_df['db_taxonomy'] = trimmed_search_results_df['db_taxonomy'].str.split(";").str[:3].str.join(" - ")
+    trimmed_search_results_df['db_taxonomy'] = trimmed_search_results_df['db_taxonomy'].str.split(";").str[-3:].str.join(" - ")
     
     # Apply Similarity Filter
     trimmed_search_results_df = trimmed_search_results_df[trimmed_search_results_df["similarity"] >= similarity_threshold]
@@ -254,6 +338,8 @@ if "db_taxonomy_filter" in url_parameters:
     st.session_state["db_taxonomy_filter"] = url_parameters["db_taxonomy_filter"][0].split(",")
 if "clustering_method" in url_parameters:
     st.session_state["clustering_method"] = url_parameters["clustering_method"][0]
+if "coloring_threshold" in url_parameters:
+    st.session_state["coloring_threshold"] = float(url_parameters["coloring_threshold"][0])
 
 
 task = st.text_input('GNPS2 Task ID', default_task)
@@ -265,7 +351,9 @@ st.write(task)
 labels_url = "https://gnps2.org/resultfile?task={}&file=nf_output/output_histogram_data_directory/labels_spectra.tsv".format(task)
 numpy_url = "https://gnps2.org/resultfile?task={}&file=nf_output/output_histogram_data_directory/numerical_spectra.npy".format(task)
 
-st.write(labels_url)
+# By request, no longer displaying labels url
+if False:
+    st.write(labels_url)
 
 # read numpy from url into a numpy array
 numpy_file = requests.get(numpy_url)
@@ -275,7 +363,9 @@ numpy_array = np.load(io.BytesIO(numpy_file.content))
 # read pandas dataframe from url
 all_spectra_df = pd.read_csv(labels_url, sep="\t")
 
-st.write(all_spectra_df) # Currently, we're not displaying db search results
+# By request, no longer displaying dataframe table
+if False:
+    st.write(all_spectra_df) # Currently, we're not displaying db search results
 
 # Collect the database search results
 db_search_results = collect_database_search_results(task)
@@ -294,6 +384,12 @@ else:
     db_search_columns = []
 
 ##### Create Session States #####
+# Create a session state for the clustering method
+if "clustering_method" not in st.session_state:
+    st.session_state["clustering_method"] = "ward"
+# Create a session state for the coloring threshold
+if "coloring_threshold" not in st.session_state:
+    st.session_state["coloring_threshold"] = 0.70
 # Create a session state for the metadata label    
 if "metadata_label" not in st.session_state:
     st.session_state["metadata_label"] = "filename"
@@ -311,9 +407,6 @@ if "max_db_results" not in st.session_state:
 # Create a session state to filter by db taxonomy
 if "db_taxonomy_filter" not in st.session_state:
     st.session_state["db_taxonomy_filter"] = None
-# Create a session state for the clustering method
-if "clustering_method" not in st.session_state:
-    st.session_state["clustering_method"] = "ward"
 # Create a session state for alternate metadata
 if "upload_metadata" not in st.session_state:
     st.session_state["upload_metadata"] = False
@@ -343,12 +436,16 @@ else:
         metadata_df = None 
 
 ##### Add Display Parameters #####
-st.subheader("Dendrogram Display Options")
+st.header("Dendrogram Display Options")
 
+st.subheader("Clustering")
 # Add Clustering Method dropdown
 clustering_options = ["ward", "single", "complete", "average", "weighted", "centroid", "median"]
 st.session_state["clustering_method"] = st.selectbox("Clustering Method", clustering_options, index=0)
+# Add coloring threshold slider
+st.session_state["coloring_threshold"] = st.slider("Coloring Threshold", 0.0, 1.0, st.session_state["coloring_threshold"], 0.05)
 
+st.subheader("Metadata")
 # Add Metadata dropdown
 if metadata_df is None:
     # If there is no metadata, then we will disable the dropdown
@@ -364,8 +461,11 @@ if db_search_results is None:
 else:
     # Add DB Search Result dropdown
     st.session_state["db_search_result_label"] = st.selectbox("Database Search Result Column", db_search_columns, placeholder=db_search_columns[0])
+    
+    st.subheader("Database Search Result Filters")
+    
     # Add DB similarity threshold slider
-    st.session_state["db_similarity_threshold"] = st.slider("Database Similarity Threshold", 0.0, 1.0, 0.70, 0.05)
+    st.session_state["db_similarity_threshold"] = st.slider("Database Similarity Threshold", 0.0, 1.0, st.session_state["db_similarity_threshold"], 0.05)
     # Create a box for the maximum number of database results shown
     st.session_state["max_db_results"] = st.number_input("Maximum Number of Database Results Shown", min_value=-1, max_value=None, value=-1, help="Enter -1 to show all database results.")  
     # Create a 'select all' box for the db taxonomy filter
@@ -382,21 +482,60 @@ else:
 all_spectra_df, db_similarity_dict = integrate_database_search_results(all_spectra_df, db_search_results, st.session_state)
 
 # Creating the dendrogram
-dendro = create_dendrogram(numpy_array, 
-                           all_spectra_df, 
-                           db_similarity_dict, 
-                           label_column=st.session_state["metadata_label"], 
-                           db_label_column=st.session_state["db_search_result_label"], 
-                           metadata_df=metadata_df, 
+dendro = create_dendrogram(numpy_array,
+                           all_spectra_df,
+                           db_similarity_dict,
+                           label_column=st.session_state["metadata_label"],
+                           db_label_column=st.session_state["db_search_result_label"],
+                           metadata_df=metadata_df,
                            db_search_columns=db_search_columns,
-                           cluster_method=st.session_state["clustering_method"])
+                           cluster_method=st.session_state["clustering_method"],
+                           coloring_threshold=st.session_state["coloring_threshold"])
 
 st.plotly_chart(dendro, use_container_width=True)
+
+# Add a dropdown allowing for mirror plots:
+st.header("Plot Spectra")
+
+def mirror_plot_format_function(df):
+    output = []
+    for row in df.to_dict(orient="records"):
+        if row['db_search_result']:
+            output.append(f"DB Result - {row['filename']}")
+        else:   
+            output.append(row['filename'])
+            
+    return output
+all_options = mirror_plot_format_function(all_spectra_df)
+
+# Select spectra one
+spectra_one = st.selectbox("Spectra One", all_options)
+# Select spectra two
+spectra_two = st.selectbox("Spectra Two", ['None'] + all_options)
+# Add a button to generate the mirror plot
+spectra_one_USI = get_USI(all_spectra_df, spectra_one, task)
+spectra_two_USI = get_USI(all_spectra_df, spectra_two, task)
+# If a user is able to get click the buttone before the USI is generated, they may get the page with an old option
+st.link_button(label="View Plot", url=get_mirror_plot_url(spectra_one_USI, spectra_two_USI))
 
 # Create a shareable link to this page
 st.write("Shareable Link: ")
 if st.session_state['db_taxonomy_filter'] is None:
-    link = f"https://analysis.idbac.org/?task={task}&metadata_label={st.session_state['metadata_label']}&db_search_result_label={st.session_state['db_search_result_label']}&db_similarity_threshold={st.session_state['db_similarity_threshold']}&max_db_results={st.session_state['max_db_results']}&clustering_method={st.session_state['clustering_method']}"
+    link = f"https://analysis.idbac.org/?task={task}&metadata_label={st.session_state['metadata_label']}&db_search_result_label={st.session_state['db_search_result_label']}&db_similarity_threshold={st.session_state['db_similarity_threshold']}&max_db_results={st.session_state['max_db_results']}&clustering_method={st.session_state['clustering_method']}&coloring_threshold={st.session_state['coloring_threshold']}"
 else:
-    link = f"https://analysis.idbac.org/?task={task}&metadata_label={st.session_state['metadata_label']}&db_search_result_label={st.session_state['db_search_result_label']}&db_similarity_threshold={st.session_state['db_similarity_threshold']}&max_db_results={st.session_state['max_db_results']}&db_taxonomy_filter={','.join(st.session_state['db_taxonomy_filter'])}&clustering_method={st.session_state['clustering_method']}"
+    link = f"https://analysis.idbac.org/?task={task}&metadata_label={st.session_state['metadata_label']}&db_search_result_label={st.session_state['db_search_result_label']}&db_similarity_threshold={st.session_state['db_similarity_threshold']}&max_db_results={st.session_state['max_db_results']}&db_taxonomy_filter={','.join(st.session_state['db_taxonomy_filter'])}&clustering_method={st.session_state['clustering_method']}&coloring_threshold={st.session_state['coloring_threshold']}"
 st.code(link)
+
+# Add documentation
+st.header("Additional Information")
+# Add a bulleted list of more information
+st.markdown("""
+            #### Metadata
+            * Metadata and input spectra match on the "filename" column, it must be included in both files.
+            * The metadata file must be a .csv, .tsv, or .txt file.
+            #### Visualization
+            * Flat lines at x=0, are a result of perfect database search results.
+            * Coloring: All descendant links below an arbitrary cluster node will be colored the same color as that cluster node if that node is the 
+            first one below the cut threshold. Links between clustering nodes greater than the cut threshold are colored blue. See this 
+            [link](https://docs.scipy.org/doc/scipy/reference/generated/scipy.cluster.hierarchy.dendrogram.html) for more details.
+            """)
