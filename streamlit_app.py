@@ -117,6 +117,7 @@ def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_dist
     - metadata_df (pandas.DataFrame, optional): The dataframe containing metadata information. Defaults to None.
     - db_search_columns (list, optional): The list of columns to be used for displaying database search result metadata. Defaults to None.
     - cluster_method (str, optional): The clustering method to be used for clustering the data. Defaults to "ward".
+    - coloring_threshold (float, optional): The threshold for coloring the dendrogram. Defaults to None.
 
     Returns:
     - dendro (plotly.graph_objs._figure.Figure): The generated dendrogram as a Plotly figure.
@@ -340,6 +341,8 @@ if "clustering_method" in url_parameters:
     st.session_state["clustering_method"] = url_parameters["clustering_method"][0]
 if "coloring_threshold" in url_parameters:
     st.session_state["coloring_threshold"] = float(url_parameters["coloring_threshold"][0])
+if "hide_isolates" in url_parameters:
+    st.session_state["hidden_isolates"] = url_parameters["hide_isolates"][0].split(",")
 
 
 task = st.text_input('GNPS2 Task ID', default_task)
@@ -410,12 +413,15 @@ if "db_taxonomy_filter" not in st.session_state:
 # Create a session state for alternate metadata
 if "upload_metadata" not in st.session_state:
     st.session_state["upload_metadata"] = False
+# Create a session state for hidden isolates
+if "hidden_isolates" not in st.session_state:
+    st.session_state["hidden_isolates"] = []
 
 # Add checkbox for manual metadata upload
 if st.checkbox("Upload Metadata", help="If left unchecked, the metadata associated with the task will be used."):
     st.session_state["upload_metadata"] = True
     # Add file uploader
-    metadata_file = st.file_uploader("Upload Metadata File", type=["csv", "tsv", "txt"])
+    metadata_file = st.file_uploader("Upload Metadata File", type=["csv", "tsv", "txt", "xlsx"])
     if metadata_file is not None:
         if metadata_file.name.endswith(".txt"):
             metadata_df = pd.read_table(metadata_file, index_col=False)
@@ -423,6 +429,8 @@ if st.checkbox("Upload Metadata", help="If left unchecked, the metadata associat
             metadata_df = pd.read_csv(metadata_file, sep=",", index_col=False)
         elif metadata_file.name.endswith(".tsv"):
             metadata_df = pd.read_csv(metadata_file, sep="\t", index_col=False)
+        elif metadata_file.name.endswith(".xlsx"):
+            metadata_df = pd.read_excel(metadata_file, index_col=False)
         else:
             st.error("Please upload a .csv, .tsv, or .txt file")
     else:
@@ -478,6 +486,12 @@ else:
         # Add multiselect with update button
         st.session_state["db_taxonomy_filter"] = st.multiselect("DB Taxonomy Filter", db_taxonomies)
 
+st.subheader("General")
+# Add a selectbox that hides isolates
+st.session_state["hidden_isolates"] = st.multiselect("Hide Isolates", all_spectra_df["filename"].unique())
+# Remove selected ones from all_spectra_df
+all_spectra_df = all_spectra_df[~all_spectra_df["filename"].isin(st.session_state["hidden_isolates"])]
+
 # Process the db search results (it's done in this order to allow for db_search parameters)
 all_spectra_df, db_similarity_dict = integrate_database_search_results(all_spectra_df, db_search_results, st.session_state)
 
@@ -490,7 +504,7 @@ dendro = create_dendrogram(numpy_array,
                            metadata_df=metadata_df,
                            db_search_columns=db_search_columns,
                            cluster_method=st.session_state["clustering_method"],
-                           coloring_threshold=st.session_state["coloring_threshold"])
+                           coloring_threshold=st.session_state["coloring_threshold"],)
 
 st.plotly_chart(dendro, use_container_width=True)
 
@@ -521,9 +535,9 @@ st.link_button(label="View Plot", url=get_mirror_plot_url(spectra_one_USI, spect
 # Create a shareable link to this page
 st.write("Shareable Link: ")
 if st.session_state['db_taxonomy_filter'] is None:
-    link = f"https://analysis.idbac.org/?task={task}&metadata_label={st.session_state['metadata_label']}&db_search_result_label={st.session_state['db_search_result_label']}&db_similarity_threshold={st.session_state['db_similarity_threshold']}&max_db_results={st.session_state['max_db_results']}&clustering_method={st.session_state['clustering_method']}&coloring_threshold={st.session_state['coloring_threshold']}"
+    link = f"https://analysis.idbac.org/?task={task}&metadata_label={st.session_state['metadata_label']}&db_search_result_label={st.session_state['db_search_result_label']}&db_similarity_threshold={st.session_state['db_similarity_threshold']}&max_db_results={st.session_state['max_db_results']}&clustering_method={st.session_state['clustering_method']}&coloring_threshold={st.session_state['coloring_threshold']}&hide_isolates={','.join(st.session_state['hidden_isolates'])}"
 else:
-    link = f"https://analysis.idbac.org/?task={task}&metadata_label={st.session_state['metadata_label']}&db_search_result_label={st.session_state['db_search_result_label']}&db_similarity_threshold={st.session_state['db_similarity_threshold']}&max_db_results={st.session_state['max_db_results']}&db_taxonomy_filter={','.join(st.session_state['db_taxonomy_filter'])}&clustering_method={st.session_state['clustering_method']}&coloring_threshold={st.session_state['coloring_threshold']}"
+    link = f"https://analysis.idbac.org/?task={task}&metadata_label={st.session_state['metadata_label']}&db_search_result_label={st.session_state['db_search_result_label']}&db_similarity_threshold={st.session_state['db_similarity_threshold']}&max_db_results={st.session_state['max_db_results']}&db_taxonomy_filter={','.join(st.session_state['db_taxonomy_filter'])}&clustering_method={st.session_state['clustering_method']}&coloring_threshold={st.session_state['coloring_threshold']}&hide_isolates={','.join(st.session_state['hidden_isolates'])}"
 st.code(link)
 
 # Add documentation
