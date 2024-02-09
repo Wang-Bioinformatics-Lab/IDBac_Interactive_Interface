@@ -8,6 +8,9 @@ import plotly.figure_factory as ff
 from sklearn.metrics.pairwise import cosine_distances, euclidean_distances
 from scipy.cluster.hierarchy import linkage
 from scipy.spatial.distance import squareform
+import time
+
+import plotly.graph_objects as go
 
 import numpy as np
 
@@ -104,7 +107,15 @@ def get_dist_function_wrapper(distfun):
 
     return dist_function_wrapper
 
-def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_distance_fun=cosine_distances, label_column="filename", db_label_column=None,metadata_df=None, db_search_columns=None, cluster_method="ward", coloring_threshold=None):
+def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_distance_fun=cosine_distances, 
+                      label_column="filename", 
+                      db_label_column=None,
+                      metadata_df=None, 
+                      db_search_columns=None, 
+                      cluster_method="ward", 
+                      coloring_threshold=None, 
+                      cutoff=None,
+                      show_annotations=True):
     """
     Create a dendrogram using the given data and parameters.
 
@@ -118,6 +129,8 @@ def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_dist
     - db_search_columns (list, optional): The list of columns to be used for displaying database search result metadata. Defaults to None.
     - cluster_method (str, optional): The clustering method to be used for clustering the data. Defaults to "ward".
     - coloring_threshold (float, optional): The threshold for coloring the dendrogram. Defaults to None.
+    - cutoff (float, optional): The cutoff line for the dendrogram. Defaults to None.
+    - show_annotations (bool, optional): Whether to show annotations on the dendrogram. Defaults to True.
 
     Returns:
     - dendro (plotly.graph_objs._figure.Figure): The generated dendrogram as a Plotly figure.
@@ -150,15 +163,40 @@ def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_dist
     all_labels_list = all_spectra_df["label"].to_list()
 
     # Creating Dendrogram  
-    dendro = ff.create_dendrogram(np_data_wrapper(data_np, all_spectra_df[['filename','db_search_result']], db_similarity_dict), 
-                                  orientation='left', 
-                                  labels=all_labels_list, 
-                                  distfun=get_dist_function_wrapper(selected_distance_fun), 
-                                  linkagefun=lambda x: linkage(x, method=cluster_method), 
+    dendro = ff.create_dendrogram(np_data_wrapper(data_np, all_spectra_df[['filename','db_search_result']], db_similarity_dict),
+                                  orientation='left',
+                                  labels=all_labels_list,
+                                  distfun=get_dist_function_wrapper(selected_distance_fun),
+                                  linkagefun=lambda x: linkage(x, method=cluster_method),
                                   color_threshold=coloring_threshold)
     dendro.update_layout(width=800, height=max(15*len(all_labels_list), 350))
+    
+    if cutoff is not None:
+        dendro.add_vline(x=cutoff, line_width=1, line_color='grey')
+    
+    # Add labels for each intersection
+    if show_annotations:
+        for dd in dendro.data:
+            # Get middle two x's and y's
+            x = (dd.x[1] + dd.x[2]) / 2
+            y = (dd.y[1] + dd.y[2]) / 2
+            # Add a text element:
+            dendro.add_trace(go.Scatter
+                                (x=[x-0.005],
+                                y=[y],
+                                text=f'{x:.2f}',
+                                mode='text',
+                                showlegend=False,
+                                textposition='middle left',
+                                textfont=dict(size=10),
+                                hoverinfo='none',
+                                xaxis='x',
+                                yaxis='y'
+                                )
+                            )
 
     return dendro
+
 
 def collect_database_search_results(task):
     """
@@ -343,6 +381,10 @@ if "coloring_threshold" in url_parameters:
     st.session_state["coloring_threshold"] = float(url_parameters["coloring_threshold"][0])
 if "hide_isolates" in url_parameters:
     st.session_state["hidden_isolates"] = url_parameters["hide_isolates"][0].split(",")
+if "cutoff" in url_parameters:
+    st.session_state["cutoff"] = float(url_parameters["cutoff"][0])
+if "show_annotations" in url_parameters:
+    st.session_state["show_annotations"] = bool(url_parameters["show_annotations"][0])
 
 
 task = st.text_input('GNPS2 Task ID', default_task)
@@ -416,6 +458,10 @@ if "upload_metadata" not in st.session_state:
 # Create a session state for hidden isolates
 if "hidden_isolates" not in st.session_state:
     st.session_state["hidden_isolates"] = []
+if "cutoff" not in st.session_state:
+    st.session_state["cutoff"] = None
+if "show_annotations" not in st.session_state:
+    st.session_state["show_annotations"] = True
 
 # Add checkbox for manual metadata upload
 if st.checkbox("Upload Metadata", help="If left unchecked, the metadata associated with the task will be used."):
@@ -451,7 +497,8 @@ st.subheader("Clustering")
 clustering_options = ["ward", "single", "complete", "average", "weighted", "centroid", "median"]
 st.session_state["clustering_method"] = st.selectbox("Clustering Method", clustering_options, index=0)
 # Add coloring threshold slider
-st.session_state["coloring_threshold"] = st.slider("Coloring Threshold", 0.0, 1.0, st.session_state["coloring_threshold"], 0.05)
+st.slider("Coloring Threshold", 0.0, 1.0, step=0.05, key='coloring_threshold',
+          help="Colors all links to the left of the threshold with the same color as long as they're linked below the threshold.")
 
 st.subheader("Metadata")
 # Add Metadata dropdown
@@ -491,6 +538,10 @@ st.subheader("General")
 st.session_state["hidden_isolates"] = st.multiselect("Hide Isolates", all_spectra_df["filename"].unique())
 # Remove selected ones from all_spectra_df
 all_spectra_df = all_spectra_df[~all_spectra_df["filename"].isin(st.session_state["hidden_isolates"])]
+# Add option to add a cutoff line
+st.session_state["cutoff"] = st.number_input("Add Cutoff Line", min_value=0.0, max_value=1.0, value=None, help="Add a vertical line to the dendrogram at the specified distance.")
+# Add option to show annotations
+st.session_state["show_annotations"] = st.checkbox("Show Annotations", value=True, help="Show annotations on the dendrogram.")
 
 # Process the db search results (it's done in this order to allow for db_search parameters)
 all_spectra_df, db_similarity_dict = integrate_database_search_results(all_spectra_df, db_search_results, st.session_state)
@@ -504,7 +555,9 @@ dendro = create_dendrogram(numpy_array,
                            metadata_df=metadata_df,
                            db_search_columns=db_search_columns,
                            cluster_method=st.session_state["clustering_method"],
-                           coloring_threshold=st.session_state["coloring_threshold"],)
+                           coloring_threshold=st.session_state["coloring_threshold"],
+                           cutoff=st.session_state["cutoff"],
+                           show_annotations=st.session_state["show_annotations"])
 
 st.plotly_chart(dendro, use_container_width=True)
 
@@ -523,21 +576,22 @@ def mirror_plot_format_function(df):
 all_options = mirror_plot_format_function(all_spectra_df)
 
 # Select spectra one
-spectra_one = st.selectbox("Spectra One", all_options)
+st.selectbox("Spectra One", all_options, key='mirror_spectra_one')
 # Select spectra two
-spectra_two = st.selectbox("Spectra Two", ['None'] + all_options)
+st.selectbox("Spectra Two", ['None'] + all_options, key='mirror_spectra_two')
 # Add a button to generate the mirror plot
-spectra_one_USI = get_USI(all_spectra_df, spectra_one, task)
-spectra_two_USI = get_USI(all_spectra_df, spectra_two, task)
+spectra_one_USI = get_USI(all_spectra_df, st.session_state['mirror_spectra_one'], task)
+spectra_two_USI = get_USI(all_spectra_df, st.session_state['mirror_spectra_two'], task)
+
 # If a user is able to get click the buttone before the USI is generated, they may get the page with an old option
 st.link_button(label="View Plot", url=get_mirror_plot_url(spectra_one_USI, spectra_two_USI))
 
 # Create a shareable link to this page
 st.write("Shareable Link: ")
 if st.session_state['db_taxonomy_filter'] is None:
-    link = f"https://analysis.idbac.org/?task={task}&metadata_label={st.session_state['metadata_label']}&db_search_result_label={st.session_state['db_search_result_label']}&db_similarity_threshold={st.session_state['db_similarity_threshold']}&max_db_results={st.session_state['max_db_results']}&clustering_method={st.session_state['clustering_method']}&coloring_threshold={st.session_state['coloring_threshold']}&hide_isolates={','.join(st.session_state['hidden_isolates'])}"
+    link = f"https://analysis.idbac.org/?task={task}&metadata_label={st.session_state['metadata_label']}&db_search_result_label={st.session_state['db_search_result_label']}&db_similarity_threshold={st.session_state['db_similarity_threshold']}&max_db_results={st.session_state['max_db_results']}&clustering_method={st.session_state['clustering_method']}&coloring_threshold={st.session_state['coloring_threshold']}&hide_isolates={','.join(st.session_state['hidden_isolates'])}&cutoff={st.session_state['cutoff']}&show_annotations={st.session_state['show_annotations']}"
 else:
-    link = f"https://analysis.idbac.org/?task={task}&metadata_label={st.session_state['metadata_label']}&db_search_result_label={st.session_state['db_search_result_label']}&db_similarity_threshold={st.session_state['db_similarity_threshold']}&max_db_results={st.session_state['max_db_results']}&db_taxonomy_filter={','.join(st.session_state['db_taxonomy_filter'])}&clustering_method={st.session_state['clustering_method']}&coloring_threshold={st.session_state['coloring_threshold']}&hide_isolates={','.join(st.session_state['hidden_isolates'])}"
+    link = f"https://analysis.idbac.org/?task={task}&metadata_label={st.session_state['metadata_label']}&db_search_result_label={st.session_state['db_search_result_label']}&db_similarity_threshold={st.session_state['db_similarity_threshold']}&max_db_results={st.session_state['max_db_results']}&db_taxonomy_filter={','.join(st.session_state['db_taxonomy_filter'])}&clustering_method={st.session_state['clustering_method']}&coloring_threshold={st.session_state['coloring_threshold']}&hide_isolates={','.join(st.session_state['hidden_isolates'])}&cutoff={st.session_state['cutoff']}&show_annotations={st.session_state['show_annotations']}"
 st.code(link)
 
 # Add documentation
@@ -546,7 +600,7 @@ st.header("Additional Information")
 st.markdown("""
             #### Metadata
             * Metadata and input spectra match on the "filename" column, it must be included in both files.
-            * The metadata file must be a .csv, .tsv, or .txt file.
+            * The metadata file must be a .csv, .tsv, .txt, or .xlsx file.
             #### Visualization
             * Flat lines at x=0, are a result of perfect database search results.
             * Coloring: All descendant links below an arbitrary cluster node will be colored the same color as that cluster node if that node is the 
