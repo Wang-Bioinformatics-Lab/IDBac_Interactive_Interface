@@ -65,6 +65,13 @@ def get_dist_function_wrapper(distfun):
         # Select rows that are not databse search results and send to the distance function
         non_db_search_result_filenames = spectrum_data_df.filename[spectrum_data_df['db_search_result'] == False].tolist()
         non_db_search_result_indices   = spectrum_data_df.index[spectrum_data_df['db_search_result'] == False].tolist()
+        
+        # Note that this is only going to work if the database search results are in the bottom of the dataframe
+        begins_at_zero = non_db_search_result_indices[0] == 0
+        is_contiguous = non_db_search_result_indices == list(range(non_db_search_result_indices[0], non_db_search_result_indices[-1] + 1))
+        if not begins_at_zero or not is_contiguous:
+            raise ValueError("To compute distances, database search results should be at the bottom of the dataframe")
+        
         num_inputs = len(non_db_search_result_indices)
         
         computed_distances = distfun(data_np[non_db_search_result_indices])
@@ -178,6 +185,7 @@ def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_dist
     if show_annotations:
         for dd in dendro.data:
             # Get middle two x's and y's
+            # (it's actually drawing rectangles and you can think of these as the top right and bottom right corners)
             x = (dd.x[1] + dd.x[2]) / 2
             y = (dd.y[1] + dd.y[2]) / 2
             # Add a text element:
