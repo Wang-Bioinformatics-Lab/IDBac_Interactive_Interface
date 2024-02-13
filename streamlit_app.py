@@ -65,6 +65,13 @@ def get_dist_function_wrapper(distfun):
         # Select rows that are not databse search results and send to the distance function
         non_db_search_result_filenames = spectrum_data_df.filename[spectrum_data_df['db_search_result'] == False].tolist()
         non_db_search_result_indices   = spectrum_data_df.index[spectrum_data_df['db_search_result'] == False].tolist()
+        
+        # Note that this is only going to work if the database search results are in the bottom of the dataframe
+        begins_at_zero = non_db_search_result_indices[0] == 0
+        is_contiguous = non_db_search_result_indices == list(range(non_db_search_result_indices[0], non_db_search_result_indices[-1] + 1))
+        if not begins_at_zero or not is_contiguous:
+            raise ValueError("To compute distances, database search results should be at the bottom of the dataframe")
+        
         num_inputs = len(non_db_search_result_indices)
         
         computed_distances = distfun(data_np[non_db_search_result_indices])
@@ -135,7 +142,7 @@ def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_dist
     Returns:
     - dendro (plotly.graph_objs._figure.Figure): The generated dendrogram as a Plotly figure.
     """
-    if metadata_df is not None:
+    if metadata_df is not None and label_column != 'None':
         # Attempt to fall back to lowercase filename if uppercase filename is not present
         if 'Filename' not in metadata_df.columns and 'filename' in metadata_df.columns:
             metadata_df['Filename'] = metadata_df['filename']
@@ -149,10 +156,10 @@ def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_dist
             
         all_spectra_df = all_spectra_df.merge(metadata_df, how="left", left_on="filename", right_on="Filename", suffixes=("", "_metadata"))
         
-        all_spectra_df[label_column].fillna("No Metadata", inplace=True)
-        all_spectra_df["label"] = all_spectra_df[label_column].fillna("No Metadata")
+        all_spectra_df.loc[:, label_column].fillna("No Metadata", inplace=True)
+        all_spectra_df.loc[:, "label"] = all_spectra_df[label_column].fillna("No Metadata")
     else:
-        all_spectra_df["label"] = "No Metadata"
+        all_spectra_df.loc[:, "label"] = "No Metadata"
         
     # Add metadata for db search results
     if db_label_column != "No Database Search Results":
@@ -178,6 +185,7 @@ def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_dist
     if show_annotations:
         for dd in dendro.data:
             # Get middle two x's and y's
+            # (it's actually drawing rectangles and you can think of these as the top right and bottom right corners)
             x = (dd.x[1] + dd.x[2]) / 2
             y = (dd.y[1] + dd.y[2]) / 2
             # Add a text element:
@@ -330,12 +338,11 @@ def integrate_database_search_results(all_spectra_df: pd.DataFrame, database_sea
     trimmed_search_results_df = trimmed_search_results_df[trimmed_search_results_df["similarity"] >= similarity_threshold]
        
     # Apply Maximum DB Results Filter
-    grouped_results = trimmed_search_results_df.groupby("database_id")
-    best_results = grouped_results.apply(lambda x: x.sort_values(by="similarity", ascending=False).iloc[0])
+    best_ids = trimmed_search_results_df.sort_values(by="similarity", ascending=False).database_id.drop_duplicates(keep="first")
     # Get maximum_db_results database_ids
     if maximum_db_results != -1:
-        best_results = best_results.iloc[:maximum_db_results]             # Safe out of bounds
-        trimmed_search_results_df = trimmed_search_results_df[trimmed_search_results_df["database_id"].isin(best_results["database_id"])]
+        best_ids = best_ids.iloc[:maximum_db_results]             # Safe out of bounds
+        trimmed_search_results_df = trimmed_search_results_df[trimmed_search_results_df["database_id"].isin(best_ids["database_id"])]
     
     # We will abuse filename because during display, we display "metadata - filename"
     trimmed_search_results_df["filename"] = trimmed_search_results_df[db_label_column].astype(str)
@@ -359,32 +366,35 @@ def integrate_database_search_results(all_spectra_df: pd.DataFrame, database_sea
     return all_spectra_df, database_similarity_dict
 
 # Here we will add an input field for the GNPS2 task ID
-url_parameters = st.experimental_get_query_params()
+url_parameters = st.query_params
 
 default_task = "0e744752fdd44faba37df671b9d1997c"
 if "task" in url_parameters:
-    default_task = url_parameters["task"][0]
+    default_task = url_parameters["task"]
 # Add other items to session state if available
 if "metadata_label" in url_parameters:
-    st.session_state["metadata_label"] = url_parameters["metadata_label"][0]
+    st.session_state["metadata_label"] = url_parameters["metadata_label"]
 if "db_search_result_label" in url_parameters:
-    st.session_state["db_search_result_label"] = url_parameters["db_search_result_label"][0]
+    st.session_state["db_search_result_label"] = url_parameters["db_search_result_label"]
 if "db_similarity_threshold" in url_parameters:
-    st.session_state["db_similarity_threshold"] = float(url_parameters["db_similarity_threshold"][0])
+    st.session_state["db_similarity_threshold"] = float(url_parameters["db_similarity_threshold"])
 if "max_db_results" in url_parameters:
-    st.session_state["max_db_results"] = int(url_parameters["max_db_results"][0])
+    st.session_state["max_db_results"] = int(url_parameters["max_db_results"])
 if "db_taxonomy_filter" in url_parameters:
-    st.session_state["db_taxonomy_filter"] = url_parameters["db_taxonomy_filter"][0].split(",")
+    st.session_state["db_taxonomy_filter"] = url_parameters["db_taxonomy_filter"].split(",")
 if "clustering_method" in url_parameters:
-    st.session_state["clustering_method"] = url_parameters["clustering_method"][0]
+    st.session_state["clustering_method"] = url_parameters["clustering_method"]
 if "coloring_threshold" in url_parameters:
-    st.session_state["coloring_threshold"] = float(url_parameters["coloring_threshold"][0])
+    st.session_state["coloring_threshold"] = float(url_parameters["coloring_threshold"])
 if "hide_isolates" in url_parameters:
-    st.session_state["hidden_isolates"] = url_parameters["hide_isolates"][0].split(",")
+    st.session_state["hidden_isolates"] = url_parameters["hide_isolates"].split(",")
 if "cutoff" in url_parameters:
-    st.session_state["cutoff"] = float(url_parameters["cutoff"][0])
+    if url_parameters["cutoff"] == 'None':
+        st.session_state["cutoff"] = None
+    else:
+        st.session_state["cutoff"] = float(url_parameters["cutoff"])
 if "show_annotations" in url_parameters:
-    st.session_state["show_annotations"] = bool(url_parameters["show_annotations"][0])
+    st.session_state["show_annotations"] = bool(url_parameters["show_annotations"])
 
 
 task = st.text_input('GNPS2 Task ID', default_task)
@@ -418,7 +428,7 @@ db_search_results = collect_database_search_results(task)
 # Get displayable metadata columns for the database search results
 if db_search_results is not None:
     # Remove database search result columns we don't want displayed
-    invisible_cols = ['query_filename','similarity','query_index','database_index','row_count']
+    invisible_cols = ['query_filename','similarity','query_index','database_index','row_count','database_id','database_scan']
     db_search_columns = [x for x in db_search_results.columns if x not in invisible_cols]
     db_search_results['db_taxonomy'] = db_search_results['db_taxonomy'].fillna("No Taxonomy")
     db_taxonomies = db_search_results['db_taxonomy'].str.split(";").to_list()
@@ -437,7 +447,7 @@ if "coloring_threshold" not in st.session_state:
     st.session_state["coloring_threshold"] = 0.70
 # Create a session state for the metadata label    
 if "metadata_label" not in st.session_state:
-    st.session_state["metadata_label"] = "filename"
+    st.session_state["metadata_label"] = None
 # Create a session state for the db search result label
 if "db_search_result_label" not in st.session_state and db_search_results is not None:
     st.session_state["db_search_result_label"] = db_search_columns[0]
@@ -492,7 +502,7 @@ else:
 ##### Add Display Parameters #####
 st.header("Dendrogram Display Options")
 
-st.subheader("Clustering")
+st.subheader("Clustering Settings")
 # Add Clustering Method dropdown
 clustering_options = ["ward", "single", "complete", "average", "weighted", "centroid", "median"]
 st.session_state["clustering_method"] = st.selectbox("Clustering Method", clustering_options, index=0)
@@ -504,9 +514,11 @@ st.subheader("Metadata")
 # Add Metadata dropdown
 if metadata_df is None:
     # If there is no metadata, then we will disable the dropdown
-    st.session_state["metadata_label"] = st.selectbox("Metadata Column", ["No Metadata Available"], placeholder="No Metadata Available", disabled=True)
+    st.session_state["metadata_label"] = st.selectbox("Select a metadata category that will be displayed", ["No Metadata Available"], placeholder="No Metadata Available", disabled=True)
 else:
-    st.session_state["metadata_label"]  = st.selectbox("Metadata Column", metadata_df.columns, placeholder=metadata_df.columns[0])
+    columns_avaiable = list(metadata_df.columns) + ['None']
+    columns_avaialable =[x for x in columns_avaiable if x not in ['filename', 'scan']]
+    st.session_state["metadata_label"]  = st.selectbox("Select a metadata category that will be displayed", columns_avaialable, placeholder=columns_avaialable[0])
 
 if db_search_results is None:
     # Write a message saying there are no db search results
@@ -514,34 +526,56 @@ if db_search_results is None:
     st.write(f":grey[{text}]")
 
 else:
+    st.subheader("Database Search Result Filters")
+    
     # Add DB Search Result dropdown
     st.session_state["db_search_result_label"] = st.selectbox("Database Search Result Column", db_search_columns, placeholder=db_search_columns[0])
     
-    st.subheader("Database Search Result Filters")
     
     # Add DB similarity threshold slider
     st.session_state["db_similarity_threshold"] = st.slider("Database Similarity Threshold", 0.0, 1.0, st.session_state["db_similarity_threshold"], 0.05)
     # Create a box for the maximum number of database results shown
-    st.session_state["max_db_results"] = st.number_input("Maximum Number of Database Results Shown", min_value=-1, max_value=None, value=-1, help="Enter -1 to show all database results.")  
+    st.session_state["max_db_results"] = st.number_input("Maximum Number of Database Results Shown", min_value=-1, max_value=None, value=-1, help="The maximum number of unique database isolates shown, highest similarity is prefered. Enter -1 to show all database results.")  
     # Create a 'select all' box for the db taxonomy filter
-    if st.checkbox("Select All Database Result Taxonomies", value=True):
+    
+    col1, col2 = st.columns([0.84, 0.16])
+    with col1:
+        st.write("Select Displayed Database Taxonomies")
+    
+    with col2:
+        st.checkbox("Select All", value=True, key="select_all_db_taxonomies")
+    if st.session_state["select_all_db_taxonomies"] is True:
         st.session_state["db_taxonomy_filter"] = db_taxonomies
         # Add disabled multiselect to make this less jarring
-        st.multiselect("DB Taxonomy Filter", db_taxonomies, disabled=True)
+        st.multiselect("Select Displayed Database Taxonomies", db_taxonomies, disabled=True, label_visibility="collapsed", placeholder ="Select the taxonomies to display in the dendrogram")
     else:
-        # st.session_state["db_taxonomy_filter"] = st.multiselect("DB Taxonomy Filter", db_taxonomies)
         # Add multiselect with update button
-        st.session_state["db_taxonomy_filter"] = st.multiselect("DB Taxonomy Filter", db_taxonomies)
+        st.session_state["db_taxonomy_filter"] = st.multiselect("Select Displayed Database Taxonomies", db_taxonomies, label_visibility="collapsed", placeholder ="Select the taxonomies to display in the dendrogram")
 
 st.subheader("General")
 # Add a selectbox that hides isolates
-st.session_state["hidden_isolates"] = st.multiselect("Hide Isolates", all_spectra_df["filename"].unique())
+col1, col2 = st.columns([0.84, 0.16])
+with col1:
+    st.write("Select Isolates to be Hidden from the Dendrogram")
+with col2:
+    st.checkbox("Hide All", value=False, key="hide_all_isolates")
+    
+if st.session_state["hide_all_isolates"] is True:
+    st.info("Hiding all isolates is currently disabled. Please select isolates manually.")
+    if False:
+        st.session_state["hidden_isolates"] = all_spectra_df["filename"].unique()
+    # Add disabled multiselect to make this less jarring
+    st.multiselect("Select Isolates to be Hidden from the Dendrogram", all_spectra_df["filename"].unique(), disabled=True, label_visibility="collapsed", placeholder="Select isolates to hide from the dendrogram")
+else:
+    # Add multiselect with update button
+    st.session_state["hidden_isolates"] = st.multiselect("Select Isolates to be Hidden from the Dendrogram", all_spectra_df["filename"].unique(), label_visibility="collapsed", placeholder="Select isolates to hide from the dendrogram")
+
 # Remove selected ones from all_spectra_df
 all_spectra_df = all_spectra_df[~all_spectra_df["filename"].isin(st.session_state["hidden_isolates"])]
 # Add option to add a cutoff line
 st.session_state["cutoff"] = st.number_input("Add Cutoff Line", min_value=0.0, max_value=1.0, value=None, help="Add a vertical line to the dendrogram at the specified distance.")
 # Add option to show annotations
-st.session_state["show_annotations"] = st.checkbox("Show Annotations", value=True, help="Show annotations on the dendrogram.")
+st.session_state["show_annotations"] = st.checkbox("Display Dendrogram Distances", value=True, help="Show distance annotations on the dendrogram.")
 
 # Process the db search results (it's done in this order to allow for db_search parameters)
 all_spectra_df, db_similarity_dict = integrate_database_search_results(all_spectra_df, db_search_results, st.session_state)
@@ -576,9 +610,9 @@ def mirror_plot_format_function(df):
 all_options = mirror_plot_format_function(all_spectra_df)
 
 # Select spectra one
-st.selectbox("Spectra One", all_options, key='mirror_spectra_one')
+st.selectbox("Spectra One", all_options, key='mirror_spectra_one', help="Select the first spectra to be plotted. Database search results are denoted by 'DB Result -'.")
 # Select spectra two
-st.selectbox("Spectra Two", ['None'] + all_options, key='mirror_spectra_two')
+st.selectbox("Spectra Two", ['None'] + all_options, key='mirror_spectra_two', help="Select the second spectra to be plotted. Database search results are denoted by 'DB Result -'.")
 # Add a button to generate the mirror plot
 spectra_one_USI = get_USI(all_spectra_df, st.session_state['mirror_spectra_one'], task)
 spectra_two_USI = get_USI(all_spectra_df, st.session_state['mirror_spectra_two'], task)
