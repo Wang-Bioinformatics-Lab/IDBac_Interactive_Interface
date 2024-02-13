@@ -529,7 +529,7 @@ else:
     st.subheader("Database Search Result Filters")
     
     # Add DB Search Result dropdown
-    st.session_state["db_search_result_label"] = st.selectbox("Database Search Result Column", db_search_columns, placeholder=db_search_columns[0])
+    st.session_state["db_search_result_label"] = st.selectbox("Select a metadata category that will be displayed next to database hits", db_search_columns, placeholder=db_search_columns[0])
     
     
     # Add DB similarity threshold slider
