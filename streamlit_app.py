@@ -575,7 +575,8 @@ all_spectra_df = all_spectra_df[~all_spectra_df["filename"].isin(st.session_stat
 # Add option to add a cutoff line
 st.session_state["cutoff"] = st.number_input("Add Cutoff Line", min_value=0.0, max_value=1.0, value=None, help="Add a vertical line to the dendrogram at the specified distance.")
 # Add option to show annotations
-st.session_state["show_annotations"] = st.checkbox("Display Dendrogram Distances", value=True, help="Show distance annotations on the dendrogram.")
+st.session_state["show_annotations"] = st.checkbox("Display Dendrogram Distances", value=True, help="""The values listed represent dendrogram distance. \n
+                                                                                                       To obtain similarity scores, use the 'Database Search Summary' tab within your workflow.""")
 
 # Process the db search results (it's done in this order to allow for db_search parameters)
 all_spectra_df, db_similarity_dict = integrate_database_search_results(all_spectra_df, db_search_results, st.session_state)
