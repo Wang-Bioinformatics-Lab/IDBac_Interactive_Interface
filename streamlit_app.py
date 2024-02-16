@@ -342,7 +342,7 @@ def integrate_database_search_results(all_spectra_df: pd.DataFrame, database_sea
     # Get maximum_db_results database_ids
     if maximum_db_results != -1:
         best_ids = best_ids.iloc[:maximum_db_results]             # Safe out of bounds
-        trimmed_search_results_df = trimmed_search_results_df[trimmed_search_results_df["database_id"].isin(best_ids["database_id"])]
+        trimmed_search_results_df = trimmed_search_results_df[trimmed_search_results_df["database_id"].isin(best_ids)]
     
     # We will abuse filename because during display, we display "metadata - filename"
     trimmed_search_results_df["filename"] = trimmed_search_results_df[db_label_column].astype(str)
