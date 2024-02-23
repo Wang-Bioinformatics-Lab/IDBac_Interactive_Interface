@@ -103,8 +103,10 @@ def get_dist_function_wrapper(distfun):
                     else:
                         db_distance_matrix[i, j] = 1 - this_sim # 1-sim because we want distance
         
-        # Create a matrix of zeros
-        distance_matrix = np.zeros((num_inputs + num_db_search_results, num_inputs + num_db_search_results))
+        # Create a matrix of ones
+        distance_matrix = np.ones((num_inputs + num_db_search_results, num_inputs + num_db_search_results))
+        for i in range(num_inputs + num_db_search_results):
+            distance_matrix[i,i] = 0
         distance_matrix[:num_inputs, :num_inputs] = computed_distances
         distance_matrix[:num_inputs, num_inputs:] = db_distance_matrix
         distance_matrix[num_inputs:, :num_inputs] = db_distance_matrix.T
@@ -219,14 +221,24 @@ def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_dist
     y_axis_identifiers  = dendro['layout']['yaxis']['ticktext']
     y_labels            = [all_labels_list[int(identifier)] for identifier in y_axis_identifiers]
     
-    # # Add a scatter to show metadata
+    # Add a scatter to show metadata
     if metadata_df is not None and displayed_metadata != []:
         num_cols = len(displayed_metadata) + 1
-        columns_widths = [0.15] * num_cols
-        columns_widths[-1] = 1 - 0.15 * (num_cols - 1)
+        
+        # Calculate ideal column widths based on the number of unique values.
+        column_widths = []
+        for col in displayed_metadata:
+            # Use the unique count if not a numeric type
+            if metadata_df[col].dtype == 'object':
+                num_unique = len(all_spectra_df[col].unique())
+                column_widths.append(min(0.02 * num_unique, 0.3))    # Max width is 0.3 for any given column
+            else:
+                column_widths.append(0.15)                          # Default width for numeric types
+            
+        column_widths.append(1 - sum(column_widths))            # Add the remaining width for the dendrogram
         fig = plotly.subplots.make_subplots(rows=1, cols=num_cols,
                                             shared_yaxes=True,
-                                            column_widths=columns_widths,
+                                            column_widths=column_widths,
                                             horizontal_spacing=0.01)
         fig.update_layout(width=dendrogram_width, height=dendrogram_height, margin=dict(l=0, r=0, b=0, t=0, pad=0))
         
@@ -238,7 +250,12 @@ def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_dist
             # Create the scatter on the new axis
             metadata_scatter = go.Scatter(x=consistently_ordered_metadata, y=y_values, mode='markers')
             # Show all x ticks
-            fig.update_xaxes(tickvals=consistently_ordered_metadata, ticktext=consistently_ordered_metadata, row=1, col=col_counter, tickangle=90)
+            fig.update_xaxes(tickvals=consistently_ordered_metadata, 
+                             ticktext=consistently_ordered_metadata, 
+                             row=1,
+                             col=col_counter,
+                             tickangle=90,
+                             ticks="outside")
             fig.add_trace(metadata_scatter, row=1, col=col_counter)
             
             # Add a grid to the scatter
@@ -252,6 +269,27 @@ def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_dist
                    text=f"<b>{col_name}</b>", row=1, col=col_counter)
             
             col_counter+=1
+            
+        print(dir(fig), flush=True)
+        # Add a border around the scatter plots
+        for x,y in zip(range(1,num_cols), range(1, num_cols)):
+            print(x,y, flush=True)
+            if x == 1:
+                x = ""
+            if y == 1:
+                y = ""
+            fig.update_layout(shapes=[
+                go.layout.Shape(
+                    type="rect",
+                    xref=f"x{x} domain",
+                    yref=f"y domain",
+                    x0= 0.0,
+                    y0 = 0,
+                    x1= 1.,
+                    y1= 1,
+                    line={'width':1, 'color':"rgb(250, 250, 250)"})
+                ],
+            )
         
         # Add the dendrogram to the figure
         for trace in dendro.data:
@@ -261,7 +299,7 @@ def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_dist
         fig.update_layout(showlegend=False)
         
         # Label y axis
-        fig.update_yaxes(tickvals=y_values, ticktext=y_labels, row=1, col=1)
+        fig.update_yaxes(tickvals=y_values, ticktext=y_labels, row=1, col=1, autorange=False, ticksuffix=" ", ticks="outside")
         # # Set ylim
         #     fig.update_yaxes(range=[min(y_values)-10, max(y_values)+10], row=1, col=col_counter)
         
@@ -270,7 +308,7 @@ def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_dist
 
     dendro.update_layout(width=dendrogram_width, height=dendrogram_height, margin=dict(l=0, r=0, b=0, t=0, pad=0))
     # Set ylim
-    dendro.update_yaxes(range=[min(y_values)-5, max(y_values)+5], tickvals=y_values, ticktext=y_labels)
+    dendro.update_yaxes(range=[min(y_values)-5, max(y_values)+5], tickvals=y_values, ticktext=y_labels, autorange=False, ticksuffix=" ", ticks="outside")
     return dendro
 
 
