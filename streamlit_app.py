@@ -158,17 +158,20 @@ def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_dist
             
         all_spectra_df = all_spectra_df.merge(metadata_df, how="left", left_on="filename", right_on="Filename", suffixes=("", "_metadata"))
         
-        all_spectra_df.loc[:, label_column].fillna("No Metadata", inplace=True)
-        all_spectra_df.loc[:, "label"] = all_spectra_df[label_column].fillna("No Metadata")
+        # all_spectra_df.loc[:, label_column].fillna("No Metadata", inplace=True)
+        all_spectra_df.loc[:, "label"] = all_spectra_df[label_column].fillna("")
     else:
-        all_spectra_df.loc[:, "label"] = "No Metadata"
+        # all_spectra_df.loc[:, "label"] = "No Metadata"
+        pass
         
     # Add metadata for db search results
     if db_label_column != "No Database Search Results":
-        all_spectra_df.loc[all_spectra_df["db_search_result"] == True, db_label_column].fillna("No Metadata", inplace=True)
+        all_spectra_df.loc[all_spectra_df["db_search_result"] == True, db_label_column].fillna("", inplace=True)
         all_spectra_df.loc[all_spectra_df["db_search_result"] == True, "label"] = 'DB Result - ' + all_spectra_df.loc[all_spectra_df["db_search_result"] == True][db_label_column].astype(str)
         
-    all_spectra_df["label"] = all_spectra_df["label"].astype(str) + " - " + all_spectra_df["filename"].astype(str)
+    dash = pd.Series([" - "]*all_spectra_df.shape[0])
+    dash.loc[all_spectra_df["label"] == ""] = ""
+    all_spectra_df["label"] = all_spectra_df["label"].astype(str) + dash + all_spectra_df["filename"].astype(str)
     all_labels_list = all_spectra_df["label"].to_list()
 
     # Creating Dendrogram  
