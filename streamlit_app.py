@@ -170,7 +170,8 @@ def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_dist
         all_spectra_df.loc[all_spectra_df["db_search_result"] == True, "label"] = 'DB Result - ' + all_spectra_df.loc[all_spectra_df["db_search_result"] == True][db_label_column].astype(str)
         
     dash = pd.Series([" - "]*all_spectra_df.shape[0])
-    dash.loc[all_spectra_df["label"] == ""] = ""
+    dash.loc[[x == "" for x in all_spectra_df["label"]]] = ""
+    dash.index = all_spectra_df.index
     all_spectra_df["label"] = all_spectra_df["label"].astype(str) + dash + all_spectra_df["filename"].astype(str)
     all_labels_list = all_spectra_df["label"].to_list()
 
