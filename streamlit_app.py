@@ -102,8 +102,10 @@ def get_dist_function_wrapper(distfun):
                     else:
                         db_distance_matrix[i, j] = 1 - this_sim # 1-sim because we want distance
         
-        # Create a matrix of zeros
-        distance_matrix = np.zeros((num_inputs + num_db_search_results, num_inputs + num_db_search_results))
+        # Create a matrix of ones
+        distance_matrix = np.ones((num_inputs + num_db_search_results, num_inputs + num_db_search_results))
+        for i in range(num_inputs + num_db_search_results):
+            distance_matrix[i,i] = 0
         distance_matrix[:num_inputs, :num_inputs] = computed_distances
         distance_matrix[:num_inputs, num_inputs:] = db_distance_matrix
         distance_matrix[num_inputs:, :num_inputs] = db_distance_matrix.T
