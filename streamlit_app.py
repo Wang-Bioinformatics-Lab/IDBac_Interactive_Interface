@@ -4,6 +4,7 @@ import requests
 import numpy as np
 import io
 import plotly.figure_factory as ff
+import plotly
 # Now lets do pairwise cosine similarity
 from sklearn.metrics.pairwise import cosine_distances, euclidean_distances
 from scipy.cluster.hierarchy import linkage
@@ -115,12 +116,12 @@ def get_dist_function_wrapper(distfun):
     return dist_function_wrapper
 
 def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_distance_fun=cosine_distances, 
-                      label_column="filename", 
+                      displayed_metadata=[],
                       db_label_column=None,
-                      metadata_df=None, 
-                      db_search_columns=None, 
-                      cluster_method="ward", 
-                      coloring_threshold=None, 
+                      metadata_df=None,
+                      db_search_columns=None,
+                      cluster_method="ward",
+                      coloring_threshold=None,
                       cutoff=None,
                       show_annotations=True):
     """
@@ -131,7 +132,7 @@ def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_dist
     - all_spectra_df (pandas.DataFrame): The dataframe containing all spectra data.
     - db_similarity_dict (dict): The dictionary containing the database similarity information.
     - selected_distance_fun (function, optional): The distance function to be used for calculating distances between data points. Defaults to numpy.cosine_distances.
-    - label_column (str, optional): The column name to be used as labels for the dendrogram. Defaults to "filename".
+    - displayed_metadata (list of str, optional): The column name to be shown in the scatter plot. Defaults to "filename".
     - metadata_df (pandas.DataFrame, optional): The dataframe containing metadata information. Defaults to None.
     - db_search_columns (list, optional): The list of columns to be used for displaying database search result metadata. Defaults to None.
     - cluster_method (str, optional): The clustering method to be used for clustering the data. Defaults to "ward".
@@ -142,7 +143,8 @@ def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_dist
     Returns:
     - dendro (plotly.graph_objs._figure.Figure): The generated dendrogram as a Plotly figure.
     """
-    if metadata_df is not None and label_column != 'None':
+    # if metadata_df is not None and label_column != 'None':
+    if metadata_df is not None:
         # Attempt to fall back to lowercase filename if uppercase filename is not present
         if 'Filename' not in metadata_df.columns and 'filename' in metadata_df.columns:
             metadata_df['Filename'] = metadata_df['filename']
@@ -151,32 +153,41 @@ def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_dist
             st.error("Metadata file does not have a 'Filename' column")
         
         # If the label column is in the original dataframe, a suffix is added
-        if label_column in all_spectra_df.columns:
-            label_column = label_column + "_metadata"
+        displayed_metadata = [metadata_column if metadata_column not in all_spectra_df.columns else metadata_column+"_metadata" for metadata_column in displayed_metadata]
             
         all_spectra_df = all_spectra_df.merge(metadata_df, how="left", left_on="filename", right_on="Filename", suffixes=("", "_metadata"))
         
-        all_spectra_df.loc[:, label_column].fillna("No Metadata", inplace=True)
-        all_spectra_df.loc[:, "label"] = all_spectra_df[label_column].fillna("No Metadata")
+        # for metadata_column in displayed_metadata:
+            # all_spectra_df.loc[:, metadata_column].fillna("No Metadata", inplace=True)
+        # all_spectra_df.loc[:, "label"] = all_spectra_df[metadata_column].fillna("No Metadata")
     else:
-        all_spectra_df.loc[:, "label"] = "No Metadata"
+        # all_spectra_df.loc[:, "label"] = "No Metadata"
+        pass
         
     # Add metadata for db search results
     if db_label_column != "No Database Search Results":
-        all_spectra_df.loc[all_spectra_df["db_search_result"] == True, db_label_column].fillna("No Metadata", inplace=True)
-        all_spectra_df.loc[all_spectra_df["db_search_result"] == True, "label"] = 'DB Result - ' + all_spectra_df.loc[all_spectra_df["db_search_result"] == True][db_label_column].astype(str)
+        # all_spectra_df.loc[all_spectra_df["db_search_result"] == True, db_metadata_column].fillna("No Metadata", inplace=True)
+        # all_spectra_df.loc[all_spectra_df["db_search_result"] == True, "label"] = 'DB Result - ' + all_spectra_df.loc[all_spectra_df["db_search_result"] == True][db_label_column].astype(str)
+        if db_search_columns != 'None':
+            all_spectra_df.loc[all_spectra_df["db_search_result"] == True, "label"] = 'DB Result - ' + all_spectra_df.loc[all_spectra_df["db_search_result"] == True][db_search_columns].astype(str) + ' - ' + all_spectra_df.loc[all_spectra_df["db_search_result"] == True]['db_strain_name'].astype(str)
+        else:
+            all_spectra_df.loc[all_spectra_df["db_search_result"] == True, "label"] = 'DB Result - ' + all_spectra_df.loc[all_spectra_df["db_search_result"] == True]['db_strain_name'].astype(str)
         
-    all_spectra_df["label"] = all_spectra_df["label"].astype(str) + " - " + all_spectra_df["filename"].astype(str)
+    # all_spectra_df["label"] = all_spectra_df["label"].astype(str) + " - " + all_spectra_df["filename"].astype(str)
     all_labels_list = all_spectra_df["label"].to_list()
+    
+    # Reset index to use as unique identifier
+    all_spectra_df.reset_index(drop=True, inplace=True)
 
     # Creating Dendrogram  
     dendro = ff.create_dendrogram(np_data_wrapper(data_np, all_spectra_df[['filename','db_search_result']], db_similarity_dict),
                                   orientation='left',
-                                  labels=all_labels_list,
+                                  labels=all_spectra_df.index.values, # We will use the labels as a unique identifier
                                   distfun=get_dist_function_wrapper(selected_distance_fun),
                                   linkagefun=lambda x: linkage(x, method=cluster_method),
                                   color_threshold=coloring_threshold)
-    dendro.update_layout(width=800, height=max(15*len(all_labels_list), 350))
+    dendrogram_width = 800
+    dendrogram_height = max(15*len(all_labels_list), 350)
     
     if cutoff is not None:
         dendro.add_vline(x=cutoff, line_width=1, line_color='grey')
@@ -202,7 +213,64 @@ def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_dist
                                 yaxis='y'
                                 )
                             )
+    
+    # Get y values for the axis labels
+    y_values            = dendro['layout']['yaxis']['tickvals']
+    y_axis_identifiers  = dendro['layout']['yaxis']['ticktext']
+    y_labels            = [all_labels_list[int(identifier)] for identifier in y_axis_identifiers]
+    
+    # # Add a scatter to show metadata
+    if metadata_df is not None and displayed_metadata != []:
+        num_cols = len(displayed_metadata) + 1
+        columns_widths = [0.15] * num_cols
+        columns_widths[-1] = 1 - 0.15 * (num_cols - 1)
+        fig = plotly.subplots.make_subplots(rows=1, cols=num_cols,
+                                            shared_yaxes=True,
+                                            column_widths=columns_widths,
+                                            horizontal_spacing=0.01)
+        fig.update_layout(width=dendrogram_width, height=dendrogram_height, margin=dict(l=0, r=0, b=0, t=0, pad=0))
+        
+        col_counter = 1
+        for col_name in displayed_metadata:
+            # Reorder metadata array to be consistent with histogram axis
+            consistently_ordered_metadata = all_spectra_df[col_name].loc[y_axis_identifiers]
+        
+            # Create the scatter on the new axis
+            metadata_scatter = go.Scatter(x=consistently_ordered_metadata, y=y_values, mode='markers')
+            # Show all x ticks
+            fig.update_xaxes(tickvals=consistently_ordered_metadata, ticktext=consistently_ordered_metadata, row=1, col=col_counter, tickangle=90)
+            fig.add_trace(metadata_scatter, row=1, col=col_counter)
+            
+            # Add a grid to the scatter
+            fig.update_xaxes(showgrid=True, row=1, col=col_counter)
+            
+            # ylim must be set for each axis, otherwise we get blank space
+            fig.update_yaxes(range=[min(y_values)-10, max(y_values)+25], row=1, col=col_counter)
+            
+            # Add title
+            fig.add_annotation(xref="x domain",yref="y domain",x=0.5, y=1, showarrow=False,
+                   text=f"<b>{col_name}</b>", row=1, col=col_counter)
+            
+            col_counter+=1
+        
+        # Add the dendrogram to the figure
+        for trace in dendro.data:
+            fig.add_trace(trace, row=1, col=col_counter)
+        
+        # Remove legend from dendrogram
+        fig.update_layout(showlegend=False)
+        
+        # Label y axis
+        fig.update_yaxes(tickvals=y_values, ticktext=y_labels, row=1, col=1)
+        # # Set ylim
+        #     fig.update_yaxes(range=[min(y_values)-10, max(y_values)+10], row=1, col=col_counter)
+        
+        return fig
 
+
+    dendro.update_layout(width=dendrogram_width, height=dendrogram_height, margin=dict(l=0, r=0, b=0, t=0, pad=0))
+    # Set ylim
+    dendro.update_yaxes(range=[min(y_values)-5, max(y_values)+5], tickvals=y_values, ticktext=y_labels)
     return dendro
 
 
@@ -447,10 +515,10 @@ if "coloring_threshold" not in st.session_state:
     st.session_state["coloring_threshold"] = 0.70
 # Create a session state for the metadata label    
 if "metadata_label" not in st.session_state:
-    st.session_state["metadata_label"] = None
+    st.session_state["metadata_label"] = []
 # Create a session state for the db search result label
 if "db_search_result_label" not in st.session_state and db_search_results is not None:
-    st.session_state["db_search_result_label"] = db_search_columns[0]
+    st.session_state["db_search_result_label"] = []
 elif "db_search_result_label" not in st.session_state and db_search_results is None:
     st.session_state["db_search_result_label"] = "No Database Search Results"
 # Create a session state for the db similarity threshold
@@ -514,11 +582,11 @@ st.subheader("Metadata")
 # Add Metadata dropdown
 if metadata_df is None:
     # If there is no metadata, then we will disable the dropdown
-    st.session_state["metadata_label"] = st.selectbox("Select a metadata category that will be displayed", ["No Metadata Available"], placeholder="No Metadata Available", disabled=True)
+    st.session_state["metadata_label"] = st.multiselect("Select a metadata category that will be displayed", ["No Metadata Available"], default="No Metadata Available", disabled=True, max_selections=5)
 else:
-    columns_avaiable = list(metadata_df.columns) + ['None']
+    columns_avaiable = list(metadata_df.columns)
     columns_avaialable =[x for x in columns_avaiable if x not in ['filename', 'scan']]
-    st.session_state["metadata_label"]  = st.selectbox("Select a metadata category that will be displayed", columns_avaialable, placeholder=columns_avaialable[0])
+    st.session_state["metadata_label"]  = st.multiselect("Select a metadata category that will be displayed", columns_avaialable, default=[], max_selections=5)
 
 if db_search_results is None:
     # Write a message saying there are no db search results
@@ -529,7 +597,8 @@ else:
     st.subheader("Database Search Result Filters")
     
     # Add DB Search Result dropdown
-    st.session_state["db_search_result_label"] = st.selectbox("Select a metadata category that will be displayed next to database hits", db_search_columns, placeholder=db_search_columns[0])
+    db_search_columns_for_selection = ['None'] + [x for x in db_search_columns.copy() if x != 'db_strain_name']
+    st.session_state["db_search_result_label"] = st.selectbox("Select a metadata category that will be displayed next to database hits", db_search_columns_for_selection)
     
     
     # Add DB similarity threshold slider
@@ -585,10 +654,10 @@ all_spectra_df, db_similarity_dict = integrate_database_search_results(all_spect
 dendro = create_dendrogram(numpy_array,
                            all_spectra_df,
                            db_similarity_dict,
-                           label_column=st.session_state["metadata_label"],
+                           displayed_metadata=st.session_state["metadata_label"],
                            db_label_column=st.session_state["db_search_result_label"],
                            metadata_df=metadata_df,
-                           db_search_columns=db_search_columns,
+                           db_search_columns=st.session_state["db_search_result_label"] ,
                            cluster_method=st.session_state["clustering_method"],
                            coloring_threshold=st.session_state["coloring_threshold"],
                            cutoff=st.session_state["cutoff"],
