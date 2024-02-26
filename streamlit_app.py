@@ -10,6 +10,7 @@ from sklearn.metrics.pairwise import cosine_distances, euclidean_distances
 from scipy.cluster.hierarchy import linkage
 from scipy.spatial.distance import squareform
 import time
+import textwrap
 
 import plotly.graph_objects as go
 
@@ -250,8 +251,8 @@ def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_dist
             # Create the scatter on the new axis
             metadata_scatter = go.Scatter(x=consistently_ordered_metadata, y=y_values, mode='markers')
             # Show all x ticks
-            fig.update_xaxes(tickvals=consistently_ordered_metadata, 
-                             ticktext=consistently_ordered_metadata, 
+            fig.update_xaxes(tickvals=consistently_ordered_metadata,
+                             ticktext=consistently_ordered_metadata,
                              row=1,
                              col=col_counter,
                              tickangle=90,
@@ -259,37 +260,38 @@ def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_dist
             fig.add_trace(metadata_scatter, row=1, col=col_counter)
             
             # Add a grid to the scatter
-            fig.update_xaxes(showgrid=True, row=1, col=col_counter)
+            fig.update_xaxes(row=1, col=col_counter, showgrid=True)
             
             # ylim must be set for each axis, otherwise we get blank space
-            fig.update_yaxes(range=[min(y_values)-10, max(y_values)+25], row=1, col=col_counter)
+            fig.update_yaxes(range=[min(y_values)-10, max(y_values)+25], row=1, col=col_counter, showgrid=True)
             
             # Add title
+            wrapped_title = col_name.replace(" ", "\n") # TODO: Figure out why this doesn't work
             fig.add_annotation(xref="x domain",yref="y domain",x=0.5, y=1, showarrow=False,
-                   text=f"<b>{col_name}</b>", row=1, col=col_counter)
+                   text=f"<b>{wrapped_title}</b>", row=1, col=col_counter)
             
             col_counter+=1
             
-        print(dir(fig), flush=True)
-        # Add a border around the scatter plots
-        for x,y in zip(range(1,num_cols), range(1, num_cols)):
-            print(x,y, flush=True)
-            if x == 1:
-                x = ""
-            if y == 1:
-                y = ""
-            fig.update_layout(shapes=[
-                go.layout.Shape(
-                    type="rect",
-                    xref=f"x{x} domain",
-                    yref=f"y domain",
-                    x0= 0.0,
-                    y0 = 0,
-                    x1= 1.,
-                    y1= 1,
-                    line={'width':1, 'color':"rgb(250, 250, 250)"})
-                ],
-            )
+        # print(dir(fig), flush=True)
+        # # Add a border around the scatter plots
+        # for x,y in zip(range(1,num_cols), range(1, num_cols)):
+        #     print(x,y, flush=True)
+        #     if x == 1:
+        #         x = ""
+        #     if y == 1:
+        #         y = ""
+        #     fig.update_layout(shapes=[
+        #         go.layout.Shape(
+        #             type="rect",
+        #             xref=f"x{x} domain",
+        #             yref=f"y domain",
+        #             x0= 0.0,
+        #             y0 = 0,
+        #             x1= 1.,
+        #             y1= 1,
+        #             line={'width':1, 'color':"rgb(250, 250, 250)"})
+        #         ],
+        #     )
         
         # Add the dendrogram to the figure
         for trace in dendro.data:
@@ -325,7 +327,10 @@ def collect_database_search_results(task):
     """
     try:
         # Getting the database search results
-        database_search_results_url = f"https://gnps2.org/resultfile?task={task}&file=nf_output/search/enriched_db_results.tsv"
+        if task.startswith("DEV-"):
+            database_search_results_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={task[4:]}&file=nf_output/search/enriched_db_results.tsv"
+        else:
+            database_search_results_url = f"https://gnps2.org/resultfile?task={task}&file=nf_output/search/enriched_db_results.tsv"
         database_search_results_df = pd.read_csv(database_search_results_url, sep="\t")
     except:
         database_search_results_df = None
@@ -509,8 +514,12 @@ if task == '':
 st.write(task)
 
 # Now we will get all the relevant data from GNPS2 for plotting
-labels_url = "https://gnps2.org/resultfile?task={}&file=nf_output/output_histogram_data_directory/labels_spectra.tsv".format(task)
-numpy_url = "https://gnps2.org/resultfile?task={}&file=nf_output/output_histogram_data_directory/numerical_spectra.npy".format(task)
+if task.startswith("DEV-"):
+    labels_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={task[4:]}&file=nf_output/output_histogram_data_directory/labels_spectra.tsv"
+    numpy_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={task[4:]}&file=nf_output/output_histogram_data_directory/numerical_spectra.npy"
+else:
+    labels_url = "https://gnps2.org/resultfile?task={}&file=nf_output/output_histogram_data_directory/labels_spectra.tsv".format(task)
+    numpy_url = "https://gnps2.org/resultfile?task={}&file=nf_output/output_histogram_data_directory/numerical_spectra.npy".format(task)
 
 # By request, no longer displaying labels url
 if False:
@@ -599,7 +608,10 @@ if st.checkbox("Upload Metadata", help="If left unchecked, the metadata associat
         metadata_df = None
 else:
     # Getting the metadata
-    metadata_url = "https://gnps2.org/resultfile?task={}&file=nf_output/output_histogram_data_directory/metadata.tsv".format(task)
+    if task.startswith("DEV-"):
+        metadata_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={task[4:]}&file=nf_output/output_histogram_data_directory/metadata.tsv"
+    else:
+        metadata_url = "https://gnps2.org/resultfile?task={}&file=nf_output/output_histogram_data_directory/metadata.tsv".format(task)
     try:
         metadata_df = pd.read_csv(metadata_url, sep="\t", index_col=False)
     except:
