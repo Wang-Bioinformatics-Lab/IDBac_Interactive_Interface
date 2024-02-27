@@ -514,7 +514,7 @@ clustering_options = ["ward", "single", "complete", "average", "weighted", "cent
 st.session_state["clustering_method"] = st.selectbox("Clustering Method", clustering_options, index=0)
 # Add coloring threshold slider
 st.slider("Coloring Threshold", 0.0, 1.0, step=0.05, key='coloring_threshold',
-          help="Colors all links to the left of the threshold with the same color as long as they're linked below the threshold.")
+          help="All clusters linked below this threshold are colored the same.")
 
 st.subheader("Metadata")
 # Add Metadata dropdown
@@ -535,7 +535,12 @@ else:
     st.subheader("Database Search Result Filters")
     
     # Add DB Search Result dropdown
-    st.session_state["db_search_result_label"] = st.selectbox("Select a metadata category that will be displayed next to database hits", db_search_columns, placeholder=db_search_columns[0])
+    default_index = [i for i, x in enumerate(db_search_columns) if x == st.session_state["db_search_result_label"]]
+    if len(default_index) != 1:
+        default_index = None
+    else:
+        default_index = default_index[0]
+    st.session_state["db_search_result_label"] = st.selectbox("Select a metadata category that will be displayed next to database hits", db_search_columns, index=default_index)
     
     
     # Add DB similarity threshold slider
