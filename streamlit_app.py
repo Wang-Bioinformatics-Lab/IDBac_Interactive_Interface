@@ -68,13 +68,13 @@ def get_dist_function_wrapper(distfun):
         
         # Note that this is only going to work if the database search results are in the bottom of the dataframe
         begins_at_zero = non_db_search_result_indices[0] == 0
-        is_contiguous = non_db_search_result_indices == list(range(non_db_search_result_indices[0], non_db_search_result_indices[-1] + 1))
+        is_contiguous = non_db_search_result_indices == list(spectrum_data_df.index[0:len(non_db_search_result_indices)])
         if not begins_at_zero or not is_contiguous:
             raise ValueError("To compute distances, database search results should be at the bottom of the dataframe")
         
         num_inputs = len(non_db_search_result_indices)
         
-        computed_distances = distfun(data_np[non_db_search_result_indices])
+        computed_distances = distfun(data_np[non_db_search_result_indices]) # Note that we index by the pandas indices, this is because hidden isolates are not removed from data_np 
         
         # Add database search results
         db_search_result_filenames = spectrum_data_df.filename[spectrum_data_df['db_search_result'] == True].tolist()
