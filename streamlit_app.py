@@ -386,6 +386,8 @@ if "db_similarity_threshold" in url_parameters:
     st.session_state["db_similarity_threshold"] = float(url_parameters["db_similarity_threshold"])
 if "max_db_results" in url_parameters:
     st.session_state["max_db_results"] = int(url_parameters["max_db_results"])
+if "select_all_db_taxonomies" in url_parameters:
+    st.session_state["select_all_db_taxonomies"] = (str(url_parameters["select_all_db_taxonomies"]).lower() =='true')
 if "db_taxonomy_filter" in url_parameters:
     st.session_state["db_taxonomy_filter"] = url_parameters["db_taxonomy_filter"].split(",")
 if "clustering_method" in url_parameters:
@@ -466,6 +468,8 @@ if "db_similarity_threshold" not in st.session_state:
 if "max_db_results" not in st.session_state:
     st.session_state["max_db_results"] = -1
 # Create a session state to filter by db taxonomy
+if "select_all_db_taxonomies" not in st.session_state:
+    st.session_state["select_all_db_taxonomies"] = True
 if "db_taxonomy_filter" not in st.session_state:
     st.session_state["db_taxonomy_filter"] = None
 # Create a session state for alternate metadata
@@ -554,7 +558,7 @@ else:
         st.write("Select Displayed Database Taxonomies")
     
     with col2:
-        st.checkbox("Select All", value=True, key="select_all_db_taxonomies")
+        st.session_state["select_all_db_taxonomies"] = st.checkbox("Select All", value=st.session_state["select_all_db_taxonomies"])
     if st.session_state["select_all_db_taxonomies"] is True:
         st.session_state["db_taxonomy_filter"] = db_taxonomies
         # Add disabled multiselect to make this less jarring
@@ -637,7 +641,7 @@ st.write("Shareable Link: ")
 if st.session_state['db_taxonomy_filter'] is None:
     link = f"https://analysis.idbac.org/?task={task}&metadata_label={st.session_state['metadata_label']}&db_search_result_label={st.session_state['db_search_result_label']}&db_similarity_threshold={st.session_state['db_similarity_threshold']}&max_db_results={st.session_state['max_db_results']}&clustering_method={st.session_state['clustering_method']}&coloring_threshold={st.session_state['coloring_threshold']}&hide_isolates={','.join(st.session_state['hidden_isolates'])}&cutoff={st.session_state['cutoff']}&show_annotations={st.session_state['show_annotations']}"
 else:
-    link = f"https://analysis.idbac.org/?task={task}&metadata_label={st.session_state['metadata_label']}&db_search_result_label={st.session_state['db_search_result_label']}&db_similarity_threshold={st.session_state['db_similarity_threshold']}&max_db_results={st.session_state['max_db_results']}&db_taxonomy_filter={','.join(st.session_state['db_taxonomy_filter'])}&clustering_method={st.session_state['clustering_method']}&coloring_threshold={st.session_state['coloring_threshold']}&hide_isolates={','.join(st.session_state['hidden_isolates'])}&cutoff={st.session_state['cutoff']}&show_annotations={st.session_state['show_annotations']}"
+    link = f"https://analysis.idbac.org/?task={task}&metadata_label={st.session_state['metadata_label']}&db_search_result_label={st.session_state['db_search_result_label']}&db_similarity_threshold={st.session_state['db_similarity_threshold']}&max_db_results={st.session_state['max_db_results']}&select_all_db_taxonomies={st.session_state['select_all_db_taxonomies']}&db_taxonomy_filter={','.join(st.session_state['db_taxonomy_filter'])}&clustering_method={st.session_state['clustering_method']}&coloring_threshold={st.session_state['coloring_threshold']}&hide_isolates={','.join(st.session_state['hidden_isolates'])}&cutoff={st.session_state['cutoff']}&show_annotations={st.session_state['show_annotations']}"
 st.code(link)
 
 # Add documentation
