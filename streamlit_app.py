@@ -245,8 +245,8 @@ def build_database_result_USI(database_id:str, file_name:str):
     """
     
     # User database id to get original task id
-    # Example URL: https://idbac-kb.gnps2.org/api/spectrum?database_id=01HHBSS17717HA7VN5C167FYHC
-    url = "https://idbac-kb.gnps2.org/api/spectrum?database_id={}".format(database_id)
+    # Example URL: https://idbac.org/api/spectrum?database_id=01HHBSS17717HA7VN5C167FYHC
+    url = "https://idbac.org/api/spectrum?database_id={}".format(database_id)
     r = requests.get(url)
     retries = 3
     while r.status_code != 200 and retries > 0:
