@@ -5,7 +5,7 @@ import numpy as np
 import io
 import plotly.figure_factory as ff
 import plotly
-# Now lets do pairwise cosine similarity
+# Now lets do pairwise cosine distance
 from sklearn.metrics.pairwise import cosine_distances, euclidean_distances
 from scipy.cluster.hierarchy import linkage
 from scipy.spatial.distance import squareform
@@ -17,19 +17,19 @@ import plotly.graph_objects as go
 import numpy as np
 
 class np_data_wrapper():
-    def __init__(self, data_np, spectrum_data_df, db_similarity_dict):
+    def __init__(self, data_np, spectrum_data_df, db_distance_dict):
         """
-        A wrapper around a numpy array that contains metadata and database similarity information.
+        A wrapper around a numpy array that contains metadata and database distance information.
         
         Parameters:
         - data_np (numpy.ndarray): The input data as a numpy array where each row represents binary binned peaks.
         - spectrum_data_df (pandas.DataFrame): The dataframe containing columns ['filename','db_search_result']. 
             'filename' denotes the name of the id of the spectrum. 'db_search_result' denotes whether the spectrum is a database search result.
-        - db_similarity_dict (dict): The dictionary containing the database similarity information.
+        - db_distance_dict (dict): The dictionary containing the database distance information.
         """
         self.data_np = data_np
         self.spectrum_data_df = spectrum_data_df
-        self.db_similarity_dict = db_similarity_dict
+        self.db_distance_dict = db_distance_dict
 
     def __getitem__(self, index):
         return self.data_np[index]
@@ -40,7 +40,7 @@ class np_data_wrapper():
 def get_dist_function_wrapper(distfun):
     """
     A function that returns a wrapper around the distance function that allows us to pass in a numpy array with metadata and a dictionary of database 
-    similarity information. The goal here is we want to use precomputed distances when given a database search result, but want to compute distances
+    distance information. The goal here is we want to use precomputed distances when given a database search result, but want to compute distances
     between non-database search results.
     
     Parameters:
@@ -51,18 +51,18 @@ def get_dist_function_wrapper(distfun):
     """
     def dist_function_wrapper(wrapped_np_array):
         """
-        A wrapper around the distance function that allows us to pass in a numpy array with metadata and a dictionary of database similarity information.
+        A wrapper around the distance function that allows us to pass in a numpy array with metadata and a dictionary of database distance information.
         
         Parameters:
-        - wrapped_np_array (np_data_wrapper): The numpy array with metadata and database similarity information. Contains 
-            a numpy array, a dataframe with columns ['filename','db_search_result'], and a dictionary of database similarity information.
+        - wrapped_np_array (np_data_wrapper): The numpy array with metadata and database distance information. Contains 
+            a numpy array, a dataframe with columns ['filename','db_search_result'], and a dictionary of database distance information.
         
         Returns:
         - distance_matrix (numpy.ndarray): The distance matrix.
         """
         data_np = wrapped_np_array.data_np
         spectrum_data_df = wrapped_np_array.spectrum_data_df
-        db_similarity_dict = wrapped_np_array.db_similarity_dict
+        db_distance_dict = wrapped_np_array.db_distance_dict
         
         # Select rows that are not databse search results and send to the distance function
         non_db_search_result_filenames = spectrum_data_df.filename[spectrum_data_df['db_search_result'] == False].tolist()
@@ -96,37 +96,37 @@ def get_dist_function_wrapper(distfun):
         
         db_distance_matrix = np.ones((num_inputs, num_db_search_results))
         for i, filename in enumerate(non_db_search_result_filenames):
-            db_sim_dict = db_similarity_dict.get(filename)
-            if db_sim_dict is None:
+            db_dist_dict = db_distance_dict.get(filename)
+            if db_dist_dict is None:
                 continue
             for j, db_filename in enumerate(db_search_result_filenames):
-                this_sim = db_sim_dict.get(db_filename)
-                if this_sim is not None:
+                this_dist = db_dist_dict.get(db_filename)
+                if this_dist is not None:
                     # Deal with numerical percision error due to subtractive cancellation
-                    if this_sim > 0.999:
-                        db_distance_matrix[i, j] = 0
+                    if this_dist > 0.999:
+                        db_distance_matrix[i, j] = 1
                     else:
-                        db_distance_matrix[i, j] = 1 - this_sim # 1-sim because we want distance
+                        db_distance_matrix[i, j] = this_dist # 1-sim because we want distance
         
         db_db_distance_matrix = np.ones((num_db_search_results, num_db_search_results))
         if 'database_id' in spectrum_data_df.columns: # Only included when there are database search results present
-            db_search_result_indices = spectrum_data_df.database_id[spectrum_data_df['db_search_result'] == True].tolist()
-            for i, filename in enumerate(db_search_result_indices):
-                db_sim_dict = db_similarity_dict.get(filename)
-                if db_sim_dict is None:
+            db_search_database_ids = spectrum_data_df.database_id[spectrum_data_df['db_search_result'] == True].tolist()
+            for i, db_id_1 in enumerate(db_search_database_ids):
+                db_dist_dict = db_distance_dict.get(db_id_1)
+                if db_dist_dict is None:
                     continue    # Should only happen for old jobs
-                for j, db_filename in enumerate(db_search_result_indices[i+1:]):
-                    this_sim = db_sim_dict.get(db_filename)
-                    if this_sim is not None:
+                for j, db_id_2 in enumerate(db_search_database_ids[i+1:]):
+                    this_dist = db_dist_dict.get(db_id_2)
+                    if this_dist is not None:
                         # Deal with numerical percision error due to subtractive cancellation
-                        if this_sim > 0.999:
-                            db_db_distance_matrix[i, j] = 0
-                            db_db_distance_matrix[j, i] = 0
+                        if this_dist > 0.999:
+                            db_db_distance_matrix[i, j] = 1
+                            db_db_distance_matrix[j, i] = 1
                         else:
-                            db_db_distance_matrix[i, j] = 1 - this_sim
-                            db_db_distance_matrix[j, i] = 1 - this_sim
+                            db_db_distance_matrix[i, j] = this_dist
+                            db_db_distance_matrix[j, i] = this_dist
                     else:
-                        print("Missing", filename, db_filename, db_sim_dict, flush=True)
+                        raise ValueError("Missing", db_id_1, db_id_2, db_dist_dict, flush=True)
 
         # Create a single matrix to join everything together
         distance_matrix = np.ones((num_inputs + num_db_search_results, num_inputs + num_db_search_results)) * np.inf    # Multiply by inf to allow for a sanity check
@@ -148,7 +148,7 @@ def get_dist_function_wrapper(distfun):
 
     return dist_function_wrapper
 
-def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_distance_fun=cosine_distances, 
+def create_dendrogram(data_np, all_spectra_df, db_distance_dict, selected_distance_fun=cosine_distances, 
                       displayed_metadata=[],
                       db_label_column=None,
                       metadata_df=None,
@@ -163,7 +163,7 @@ def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_dist
     Parameters:
     - data_np (numpy.ndarray): The input data as a numpy array.
     - all_spectra_df (pandas.DataFrame): The dataframe containing all spectra data.
-    - db_similarity_dict (dict): The dictionary containing the database similarity information.
+    - db_distance_dict (dict): The dictionary containing the database distance information.
     - selected_distance_fun (function, optional): The distance function to be used for calculating distances between data points. Defaults to numpy.cosine_distances.
     - displayed_metadata (list of str, optional): The column name to be shown in the scatter plot. Defaults to "filename".
     - metadata_df (pandas.DataFrame, optional): The dataframe containing metadata information. Defaults to None.
@@ -218,7 +218,7 @@ def create_dendrogram(data_np, all_spectra_df, db_similarity_dict, selected_dist
     else:
         all_spectra_input = all_spectra_df[['filename','db_search_result']]
     # Creating Dendrogram  
-    dendro = ff.create_dendrogram(np_data_wrapper(data_np, all_spectra_input, db_similarity_dict),
+    dendro = ff.create_dendrogram(np_data_wrapper(data_np, all_spectra_input, db_distance_dict),
                                   orientation='left',
                                   labels=all_spectra_df.index.values, # We will use the labels as a unique identifier
                                   distfun=get_dist_function_wrapper(selected_distance_fun),
@@ -358,7 +358,7 @@ def collect_database_search_results(task):
 
     Returns:
     - database_search_results_df (pandas.DataFrame): The dataframe containing the database search results.
-    - database_similarity_table (pandas.DataFrame): The dataframe containing the database similarity tabl (contains original fikle)
+    - database_distance_table (pandas.DataFrame): The dataframe containing the database distance tabl (contains original fikle)
     """
     try:
         # Getting the database search results
@@ -371,16 +371,21 @@ def collect_database_search_results(task):
         database_search_results_df = None
         
     try:
-        # Get the DB-DB similarities
+        # Get the DB-DB distances
         if task.startswith("DEV-"):
-            database_similarity_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={task[4:]}&file=nf_output/search/db_db_similarity.tsv"
+            database_distance_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={task[4:]}&file=nf_output/search/db_db_distance.tsv"
         else:
-            database_similarity_url = f"https://gnps2.org/resultfile?task={task}&file=nf_output/search/db_db_similarity.tsv"
-        database_database_similarity_table = pd.read_csv(database_similarity_url, sep="\t")
+            database_distance_url = f"https://gnps2.org/resultfile?task={task}&file=nf_output/search/db_db_distance.tsv"
+        database_database_distance_table = pd.read_csv(database_distance_url, sep="\t")
     except Exception:
-        database_database_similarity_table = None
+        database_database_distance_table = None
         
-    return database_search_results_df, database_database_similarity_table
+        if database_search_results_df is not None:
+            if 'distance' not in database_search_results_df.columns:
+                st.warning("This is an old GNPS task. Please clone it to use the interactive dashboard.")
+                st.stop()
+        
+    return database_search_results_df, database_database_distance_table
         
 
 
@@ -463,9 +468,9 @@ def get_mirror_plot_url(usi1, usi2=None):
     return url
 
 
-def integrate_database_search_results(all_spectra_df:pd.DataFrame, database_search_results_df:pd.DataFrame, database_database_similarities:pd.DataFrame, session_state, db_label_column="db_strain_name"):
+def integrate_database_search_results(all_spectra_df:pd.DataFrame, database_search_results_df:pd.DataFrame, database_database_distances:pd.DataFrame, session_state, db_label_column="db_strain_name"):
     """
-    Integrate the database search results into the original data. Adds unique database search results to the original data and returns a dictionary of database similarities.
+    Integrate the database search results into the original data. Adds unique database search results to the original data and returns a dictionary of database distances.
     Only the database_id column is considered for uniqueness.
     
     Parameters:
@@ -476,10 +481,10 @@ def integrate_database_search_results(all_spectra_df:pd.DataFrame, database_sear
     
     Returns:
     - all_spectra_df (pandas.DataFrame): The dataframe containing all spectra data with database search results added.
-    - database_similarity_dict (dict): The dictionary containing the database similarities.
+    - database_distance_dict (dict): The dictionary containing the database distances.
     """
     db_taxonomy_filter   = session_state["db_taxonomy_filter"]
-    similarity_threshold = session_state["db_similarity_threshold"]
+    distance_threshold = session_state["db_distance_threshold"]
     maximum_db_results   = session_state["max_db_results"]
     
     # If there are no database search results, mark everything as not a database search result and return
@@ -494,25 +499,25 @@ def integrate_database_search_results(all_spectra_df:pd.DataFrame, database_sear
     # Reduce visible taxonomy to only Genus, Family, Species
     trimmed_search_results_df['db_taxonomy'] = trimmed_search_results_df['db_taxonomy'].str.split(";").str[-3:].str.join(" - ")
     
-    # Apply Similarity Filter
-    trimmed_search_results_df = trimmed_search_results_df[trimmed_search_results_df["similarity"] >= similarity_threshold]
+    # Apply distance Filter
+    trimmed_search_results_df = trimmed_search_results_df[trimmed_search_results_df["distance"] <= distance_threshold]
        
     # Apply Maximum DB Results Filter
-    #best_ids = trimmed_search_results_df.sort_values(by="similarity", ascending=False).database_id.drop_duplicates(keep="first")
+    #best_ids = trimmed_search_results_df.sort_values(by="distance", ascending=False).database_id.drop_duplicates(keep="first")
     # Get maximum_db_results database_ids per each query_filename
     if maximum_db_results != -1:
         best_ids = []
         for query_filename in trimmed_search_results_df.query_filename.unique():
             query_results_for_filename = trimmed_search_results_df.loc[trimmed_search_results_df.query_filename == query_filename]
-            best_ids_for_filename = query_results_for_filename.sort_values(by="similarity", ascending=False).database_id
+            best_ids_for_filename = query_results_for_filename.sort_values(by="distance", ascending=True).database_id
             best_ids_for_filename = best_ids_for_filename.iloc[:maximum_db_results] # Safe out of bounds
             best_ids.extend(best_ids_for_filename.values)
             
         best_ids = np.unique(best_ids)
-        trimmed_search_results_df = trimmed_search_results_df[trimmed_search_results_df["database_id"].isin(best_ids)]
-        if database_database_similarities is not None:        
-            database_database_similarities = database_database_similarities[(database_database_similarities["database_id_left"].isin(best_ids)) &
-                                                                            (database_database_similarities["database_id_right"].isin(best_ids))]
+        trimmed_search_results_df = trimmed_search_results_df.loc[trimmed_search_results_df["database_id"].isin(best_ids)]
+        if database_database_distances is not None:        
+            database_database_distances = database_database_distances[(database_database_distances["database_id_left"].isin(best_ids)) &
+                                                                            (database_database_distances["database_id_right"].isin(best_ids))]
     
     # We will abuse filename because during display, we display "metadata - filename"
     trimmed_search_results_df["filename"] = trimmed_search_results_df[db_label_column].astype(str)
@@ -522,25 +527,25 @@ def integrate_database_search_results(all_spectra_df:pd.DataFrame, database_sear
     
     # Concatenate DB search results
     to_concat = trimmed_search_results_df.drop_duplicates(subset=["database_id"])   # Get unique database hits, assuming databsae_id is unique
-    to_concat = to_concat.drop(columns=['query_filename','similarity'])             # Remove similarity info 
+    to_concat = to_concat.drop(columns=['query_filename','distance'])             # Remove distance info 
     all_spectra_df = pd.concat((all_spectra_df, to_concat), axis=0)
     
-    # Build a similarity dict for the database hits
-    database_similarity_dict = {}
+    # Build a distance dict for the database hits
+    database_distance_dict = {}
     for index, row in trimmed_search_results_df.iterrows():
-        if database_similarity_dict.get(row['query_filename']) is None:
-            database_similarity_dict[row['query_filename']] = {row['filename']: row['similarity']}
+        if database_distance_dict.get(row['query_filename']) is None:
+            database_distance_dict[row['query_filename']] = {row['filename']: row['distance']}
         else:
-            database_similarity_dict[row['query_filename']][row['filename']] = row['similarity']
-    if database_database_similarities is not None:    
-        # Add the DB-DB similarities to the distance dictionary
-        for index, row in database_database_similarities.iterrows():    # This is known to be square, no need to flip the indices
-            if database_similarity_dict.get(row['database_id_left']) is None:
-                database_similarity_dict[row['database_id_left']] = {row['database_id_right']: row['similarity']}
+            database_distance_dict[row['query_filename']][row['filename']] = row['distance']
+    if database_database_distances is not None:    
+        # Add the DB-DB distances to the distance dictionary
+        for index, row in database_database_distances.iterrows():    # This is known to be square, no need to flip the indices
+            if database_distance_dict.get(row['database_id_left']) is None:
+                database_distance_dict[row['database_id_left']] = {row['database_id_right']: row['distance']}
             else:
-                database_similarity_dict[row['database_id_left']][row['database_id_right']] = row['similarity']
+                database_distance_dict[row['database_id_left']][row['database_id_right']] = row['distance']
     
-    return all_spectra_df, database_similarity_dict
+    return all_spectra_df, database_distance_dict
 
 # Here we will add an input field for the GNPS2 task ID
 url_parameters = st.query_params
@@ -553,8 +558,8 @@ if "metadata_label" in url_parameters:
     st.session_state["metadata_label"] = url_parameters["metadata_label"]
 if "db_search_result_label" in url_parameters:
     st.session_state["db_search_result_label"] = url_parameters["db_search_result_label"]
-if "db_similarity_threshold" in url_parameters:
-    st.session_state["db_similarity_threshold"] = float(url_parameters["db_similarity_threshold"])
+if "db_distance_threshold" in url_parameters:
+    st.session_state["db_distance_threshold"] = float(url_parameters["db_distance_threshold"])
 if "max_db_results" in url_parameters:
     st.session_state["max_db_results"] = int(url_parameters["max_db_results"])
 if "db_taxonomy_filter" in url_parameters:
@@ -604,17 +609,17 @@ if False:
     st.write(all_spectra_df) # Currently, we're not displaying db search results
 
 # Collect the database search results
-db_search_results, db_db_similarity_table = collect_database_search_results(task)
+db_search_results, db_db_distance_table = collect_database_search_results(task)
 
-if db_db_similarity_table is None:
-    st.warning("""Database-database similarities are not available for this task, perhaps this is an old task?  
+if db_db_distance_table is None:
+    st.warning("""Database-database distances are not available for this task, perhaps this is an old task?  
                 Please clone and rerun the task on GNPS2 for proper visualization. The distances between these examples
                 will be represented as 1.0 to the dendrogram. """)
 
 # Get displayable metadata columns for the database search results
 if db_search_results is not None:
     # Remove database search result columns we don't want displayed
-    invisible_cols = ['query_filename','similarity','query_index','database_index','row_count','database_id','database_scan']
+    invisible_cols = ['query_filename','distance','query_index','database_index','row_count','database_id','database_scan']
     db_search_columns = [x for x in db_search_results.columns if x not in invisible_cols]
     db_search_results['db_taxonomy'] = db_search_results['db_taxonomy'].fillna("No Taxonomy")
     db_taxonomies = db_search_results['db_taxonomy'].str.split(";").to_list()
@@ -639,9 +644,9 @@ if "db_search_result_label" not in st.session_state and db_search_results is not
     st.session_state["db_search_result_label"] = []
 elif "db_search_result_label" not in st.session_state and db_search_results is None:
     st.session_state["db_search_result_label"] = "No Database Search Results"
-# Create a session state for the db similarity threshold
-if "db_similarity_threshold" not in st.session_state:
-    st.session_state["db_similarity_threshold"] = 0.70
+# Create a session state for the db distance threshold
+if "db_distance_threshold" not in st.session_state:
+    st.session_state["db_distance_threshold"] = 0.30
 # Create a session state for the maximum number of database results shown
 if "max_db_results" not in st.session_state:
     st.session_state["max_db_results"] = 1
@@ -722,10 +727,10 @@ else:
     st.session_state["db_search_result_label"] = st.selectbox("Select a metadata category that will be displayed next to database hits", db_search_columns_for_selection)
     
     
-    # Add DB similarity threshold slider
-    st.session_state["db_similarity_threshold"] = st.slider("Database Similarity Threshold", 0.0, 1.0, st.session_state["db_similarity_threshold"], 0.05)
+    # Add DB distance threshold slider
+    st.session_state["db_distance_threshold"] = st.slider("Maximum Database Distance Threshold", 0.0, 1.0, st.session_state["db_distance_threshold"], 0.05)
     # Create a box for the maximum number of database results shown
-    st.session_state["max_db_results"] = st.number_input("Maximum Number of Database Results Shown", min_value=-1, max_value=None, value=st.session_state["max_db_results"], help="The maximum number of unique database isolates shown, highest similarity is prefered. Enter -1 to show all database results.")  
+    st.session_state["max_db_results"] = st.number_input("Maximum Number of Database Results Shown", min_value=-1, max_value=None, value=st.session_state["max_db_results"], help="The maximum number of unique database isolates shown, highest distance is prefered. Enter -1 to show all database results.")  
     # Create a 'select all' box for the db taxonomy filter
     
     col1, col2 = st.columns([0.84, 0.16])
@@ -764,10 +769,10 @@ else:
 st.session_state["cutoff"] = st.number_input("Add Cutoff Line", min_value=0.0, max_value=1.0, value=None, help="Add a vertical line to the dendrogram at the specified distance.")
 # Add option to show annotations
 st.session_state["show_annotations"] = st.checkbox("Display Dendrogram Distances", value=True, help="The values listed represent dendrogram distance. \
-                                                                                                       To obtain similarity scores, use the 'Database Search Summary' tab within your workflow.")
+                                                                                                       To obtain distance scores, use the 'Database Search Summary' tab within your workflow.")
 
 # Process the db search results (it's done in this order to allow for db_search parameters)
-all_spectra_df, db_similarity_dict = integrate_database_search_results(all_spectra_df, db_search_results, db_db_similarity_table, st.session_state)
+all_spectra_df, db_distance_dict = integrate_database_search_results(all_spectra_df, db_search_results, db_db_distance_table, st.session_state)
 
 # Remove selected ones from all_spectra_df (believe it or not, we want to remove this after integrating the database search results. This will allow users to hide the queries)
 all_spectra_df = all_spectra_df[~all_spectra_df["filename"].isin(st.session_state["hidden_isolates"])]
@@ -779,7 +784,7 @@ if len(all_spectra_df) == 0:
 # Creating the dendrogram
 dendro = create_dendrogram(numpy_array,
                            all_spectra_df,
-                           db_similarity_dict,
+                           db_distance_dict,
                            displayed_metadata=st.session_state["metadata_label"],
                            db_label_column=st.session_state["db_search_result_label"],
                            metadata_df=metadata_df,
@@ -819,9 +824,9 @@ st.link_button(label="View Plot", url=get_mirror_plot_url(spectra_one_USI, spect
 # Create a shareable link to this page
 st.write("Shareable Link: ")
 if st.session_state['db_taxonomy_filter'] is None:
-    link = f"https://analysis.idbac.org/?task={task}&metadata_label={st.session_state['metadata_label']}&db_search_result_label={st.session_state['db_search_result_label']}&db_similarity_threshold={st.session_state['db_similarity_threshold']}&max_db_results={st.session_state['max_db_results']}&clustering_method={st.session_state['clustering_method']}&coloring_threshold={st.session_state['coloring_threshold']}&hide_isolates={','.join(st.session_state['hidden_isolates'])}&cutoff={st.session_state['cutoff']}&show_annotations={st.session_state['show_annotations']}"
+    link = f"https://analysis.idbac.org/?task={task}&metadata_label={st.session_state['metadata_label']}&db_search_result_label={st.session_state['db_search_result_label']}&db_distance_threshold={st.session_state['db_distance_threshold']}&max_db_results={st.session_state['max_db_results']}&clustering_method={st.session_state['clustering_method']}&coloring_threshold={st.session_state['coloring_threshold']}&hide_isolates={','.join(st.session_state['hidden_isolates'])}&cutoff={st.session_state['cutoff']}&show_annotations={st.session_state['show_annotations']}"
 else:
-    link = f"https://analysis.idbac.org/?task={task}&metadata_label={st.session_state['metadata_label']}&db_search_result_label={st.session_state['db_search_result_label']}&db_similarity_threshold={st.session_state['db_similarity_threshold']}&max_db_results={st.session_state['max_db_results']}&db_taxonomy_filter={','.join(st.session_state['db_taxonomy_filter'])}&clustering_method={st.session_state['clustering_method']}&coloring_threshold={st.session_state['coloring_threshold']}&hide_isolates={','.join(st.session_state['hidden_isolates'])}&cutoff={st.session_state['cutoff']}&show_annotations={st.session_state['show_annotations']}"
+    link = f"https://analysis.idbac.org/?task={task}&metadata_label={st.session_state['metadata_label']}&db_search_result_label={st.session_state['db_search_result_label']}&db_distance_threshold={st.session_state['db_distance_threshold']}&max_db_results={st.session_state['max_db_results']}&db_taxonomy_filter={','.join(st.session_state['db_taxonomy_filter'])}&clustering_method={st.session_state['clustering_method']}&coloring_threshold={st.session_state['coloring_threshold']}&hide_isolates={','.join(st.session_state['hidden_isolates'])}&cutoff={st.session_state['cutoff']}&show_annotations={st.session_state['show_annotations']}"
 st.code(link)
 
 # Add documentation
