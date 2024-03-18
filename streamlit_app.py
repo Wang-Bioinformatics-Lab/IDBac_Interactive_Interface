@@ -16,6 +16,8 @@ import plotly.graph_objects as go
 
 import numpy as np
 
+from utils import write_job_params
+
 class np_data_wrapper():
     def __init__(self, data_np, spectrum_data_df, db_distance_dict):
         """
@@ -588,9 +590,13 @@ st.write(task)
 if task.startswith("DEV-"):
     labels_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={task[4:]}&file=nf_output/output_histogram_data_directory/labels_spectra.tsv"
     numpy_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={task[4:]}&file=nf_output/output_histogram_data_directory/numerical_spectra.npy"
+    params_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={task[4:]}&file=job_parameters.yaml"
 else:
-    labels_url = "https://gnps2.org/resultfile?task={}&file=nf_output/output_histogram_data_directory/labels_spectra.tsv".format(task)
-    numpy_url = "https://gnps2.org/resultfile?task={}&file=nf_output/output_histogram_data_directory/numerical_spectra.npy".format(task)
+    labels_url = f"https://gnps2.org/resultfile?task={task}&file=nf_output/output_histogram_data_directory/labels_spectra.tsv"
+    numpy_url = f"https://gnps2.org/resultfile?task={task}&file=nf_output/output_histogram_data_directory/numerical_spectra.npy"
+    params_url = f"https://gnps2.org/resultfile?task={task}&file=job_parameters.yaml"
+    
+write_job_params(params_url)
 
 # By request, no longer displaying labels url
 if False:
