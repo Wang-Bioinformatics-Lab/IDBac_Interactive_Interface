@@ -269,7 +269,7 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict, selected_distan
             # Use the unique count if not a numeric type
             if metadata_df[col].dtype == 'object':
                 num_unique = len(all_spectra_df[col].unique())
-                column_widths.append(max(0.02 * num_unique, 0.3))    # Max width is 0.3 for any given column
+                column_widths.append(max(0.02 * num_unique, 0.15))    # Max width is 0.3 for any given column
             else:
                 column_widths.append(0.15)                          # Default width for numeric types
             
@@ -294,7 +294,7 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict, selected_distan
                              col=col_counter,
                              tickangle=90,
                              ticks="outside",
-                             showgrid=True,gridcolor='rgb(250, 250, 250)')
+                             showgrid=True)
             fig.add_trace(metadata_scatter, row=1, col=col_counter)
             
             # ylim must be set for each axis, otherwise we get blank space
@@ -736,7 +736,7 @@ else:
     
     
     # Add DB distance threshold slider
-    st.session_state["db_distance_threshold"] = st.slider("Maximum Database Distance Threshold", 0.0, workflow_params.get("database_search_threshold", 1.0), st.session_state["db_distance_threshold"], 0.05)
+    st.session_state["db_distance_threshold"] = st.slider("Maximum Database Distance Threshold", 0.0, float(workflow_params.get("database_search_threshold", 1.0)), st.session_state["db_distance_threshold"], 0.05)
     # Create a box for the maximum number of database results shown
     st.session_state["max_db_results"] = st.number_input("Maximum Number of Database Results Shown", min_value=-1, max_value=None, value=st.session_state["max_db_results"], help="The maximum number of unique database isolates shown, highest distance is prefered. Enter -1 to show all database results.")  
     # Create a 'select all' box for the db taxonomy filter
