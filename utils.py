@@ -14,7 +14,7 @@ def write_job_params(param_url:str):
         metadata_provided = 'No'
     
     st.info(f"""
-                **Workflow Paramters:** \n
+                **Workflow Parameters:** \n
                 **Description:** {yaml_content.get('description', '')}  
                 **Merge Replicates:** {yaml_content.get('merge_replicates', 'Unknown Parameter')}  
                 **Distance Measure:** {yaml_content.get('distance', 'Unkown Parameter')}  

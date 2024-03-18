@@ -151,14 +151,15 @@ def get_dist_function_wrapper(distfun):
     return dist_function_wrapper
 
 def create_dendrogram(data_np, all_spectra_df, db_distance_dict, selected_distance_fun=cosine_distances, 
-                      displayed_metadata=[],
+                      plotted_metadata=[],
                       db_label_column=None,
                       metadata_df=None,
                       db_search_columns=None,
                       cluster_method="ward",
                       coloring_threshold=None,
                       cutoff=None,
-                      show_annotations=True):
+                      show_annotations=True,
+                      ):
     """
     Create a dendrogram using the given data and parameters.
 
@@ -167,7 +168,7 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict, selected_distan
     - all_spectra_df (pandas.DataFrame): The dataframe containing all spectra data.
     - db_distance_dict (dict): The dictionary containing the database distance information.
     - selected_distance_fun (function, optional): The distance function to be used for calculating distances between data points. Defaults to numpy.cosine_distances.
-    - displayed_metadata (list of str, optional): The column name to be shown in the scatter plot. Defaults to "filename".
+    - plotted_metadata (list of str, optional): The column name to be shown in the scatter plot. Defaults to "filename".
     - metadata_df (pandas.DataFrame, optional): The dataframe containing metadata information. Defaults to None.
     - db_search_columns (list, optional): The list of columns to be used for displaying database search result metadata. Defaults to None.
     - cluster_method (str, optional): The clustering method to be used for clustering the data. Defaults to "ward".
@@ -178,8 +179,25 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict, selected_distan
     Returns:
     - dendro (plotly.graph_objs._figure.Figure): The generated dendrogram as a Plotly figure.
     """
-    # if metadata_df is not None and label_column != 'None':
+    # General Metadata Prep
     if metadata_df is not None:
+        original_all_spectra_cols = all_spectra_df.columns
+        all_spectra_df = all_spectra_df.merge(metadata_df, how="left", left_on="filename", right_on="Filename", suffixes=("", "_metadata"))
+    
+    # Prepare text metadata
+    if metadata_df is not None and st.session_state["metadata_label"] != "None":
+        metadata_column = st.session_state["metadata_label"]
+        if metadata_column not in metadata_df.columns:
+            st.error("Metadata file does not have the specified column")
+        else:
+            has_metadata = ~all_spectra_df[metadata_column].isna()
+            all_spectra_df.loc[has_metadata, metadata_column] = all_spectra_df.loc[has_metadata, metadata_column].astype(str) + ' - ' # Prepend dash only if we have metadata
+            all_spectra_df.loc[:, metadata_column] = all_spectra_df.loc[:, metadata_column].fillna("")
+            db_result_mask = (all_spectra_df["db_search_result"] == False)
+            all_spectra_df.loc[db_result_mask, "label"] = all_spectra_df.loc[db_result_mask][metadata_column].astype(str) + all_spectra_df.loc[db_result_mask]['label'].astype(str)
+    
+    # if metadata_df is not None and label_column != 'None':
+    if metadata_df is not None and len(plotted_metadata) > 0:
         # Attempt to fall back to lowercase filename if uppercase filename is not present
         if 'Filename' not in metadata_df.columns and 'filename' in metadata_df.columns:
             metadata_df['Filename'] = metadata_df['filename']
@@ -188,16 +206,7 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict, selected_distan
             st.error("Metadata file does not have a 'Filename' column")
         
         # If the label column is in the original dataframe, a suffix is added
-        displayed_metadata = [metadata_column if metadata_column not in all_spectra_df.columns else metadata_column+"_metadata" for metadata_column in displayed_metadata]
-            
-        all_spectra_df = all_spectra_df.merge(metadata_df, how="left", left_on="filename", right_on="Filename", suffixes=("", "_metadata"))
-        
-        # for metadata_column in displayed_metadata:
-            # all_spectra_df.loc[:, metadata_column].fillna("No Metadata", inplace=True)
-        # all_spectra_df.loc[:, "label"] = all_spectra_df[metadata_column].fillna("No Metadata")
-    else:
-        # all_spectra_df.loc[:, "label"] = "No Metadata"
-        pass
+        plotted_metadata = [metadata_column if metadata_column not in original_all_spectra_cols else metadata_column+"_metadata" for metadata_column in plotted_metadata]
         
     # Add metadata for db search results
     if db_label_column != "No Database Search Results":
@@ -253,6 +262,9 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict, selected_distan
                                 yaxis='y'
                                 )
                             )
+    # Remove Gridlines from Dendrogram
+    dendro.update_xaxes(showgrid=False)
+    dendro.update_yaxes(showgrid=False)
     
     # Get y values for the axis labels
     y_values            = dendro['layout']['yaxis']['tickvals']
@@ -260,12 +272,12 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict, selected_distan
     y_labels            = [all_labels_list[int(identifier)] for identifier in y_axis_identifiers]
     
     # Add a scatter to show metadata
-    if metadata_df is not None and displayed_metadata != []:
-        num_cols = len(displayed_metadata) + 1
+    if metadata_df is not None and plotted_metadata != []:
+        num_cols = len(plotted_metadata) + 1
         
         # Calculate ideal column widths based on the number of unique values.
         column_widths = []
-        for col in displayed_metadata:
+        for col in plotted_metadata:
             # Use the unique count if not a numeric type
             if metadata_df[col].dtype == 'object':
                 num_unique = len(all_spectra_df[col].unique())
@@ -281,7 +293,7 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict, selected_distan
         fig.update_layout(width=dendrogram_width, height=dendrogram_height, margin=dict(l=0, r=0, b=0, t=0, pad=0))
         
         col_counter = 1
-        for col_name in displayed_metadata:
+        for col_name in plotted_metadata:
             # Reorder metadata array to be consistent with histogram axis
             consistently_ordered_metadata = all_spectra_df[col_name].loc[y_axis_identifiers]
         
@@ -332,6 +344,9 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict, selected_distan
         # Add the dendrogram to the figure
         for trace in dendro.data:
             fig.add_trace(trace, row=1, col=col_counter)
+        
+        # Remove gridlines from dendrogram (again)
+        fig.update_yaxes(showgrid=False, row=1, col=col_counter)
         
         # Remove legend from dendrogram
         fig.update_layout(showlegend=False)
@@ -557,6 +572,8 @@ if "task" in url_parameters:
 # Add other items to session state if available
 if "metadata_label" in url_parameters:
     st.session_state["metadata_label"] = url_parameters["metadata_label"]
+if "metadata_scatter" in url_parameters:
+    st.session_state["metadata_scatter"] = url_parameters["metadata_scatter"]
 if "db_search_result_label" in url_parameters:
     st.session_state["db_search_result_label"] = url_parameters["db_search_result_label"]
 if "db_distance_threshold" in url_parameters:
@@ -641,9 +658,12 @@ if "clustering_method" not in st.session_state:
 # Create a session state for the coloring threshold
 if "coloring_threshold" not in st.session_state:
     st.session_state["coloring_threshold"] = 0.70
-# Create a session state for the metadata label    
+# Create a plot for the metadata text labels
 if "metadata_label" not in st.session_state:
-    st.session_state["metadata_label"] = []
+    st.session_state["metadata_label"] = "None"
+# Create a session state for the metadata scatter    
+if "metadata_scatter" not in st.session_state:
+    st.session_state["metadata_scatter"] = []
 # Create a session state for the db search result label
 if "db_search_result_label" not in st.session_state and db_search_results is not None:
     st.session_state["db_search_result_label"] = []
@@ -670,7 +690,7 @@ if "hidden_isolates" not in st.session_state:
 if "cutoff" not in st.session_state:
     st.session_state["cutoff"] = None
 if "show_annotations" not in st.session_state:
-    st.session_state["show_annotations"] = True
+    st.session_state["show_annotations"] = False
 
 # Add checkbox for manual metadata upload
 if st.checkbox("Upload Metadata", help="If left unchecked, the metadata associated with the task will be used."):
@@ -713,14 +733,27 @@ st.slider("Coloring Threshold", 0.0, 1.0, step=0.05, key='coloring_threshold',
           help="Colors all links to the left of the threshold with the same color as long as they're linked below the threshold.")
 
 st.subheader("Metadata")
-# Add Metadata dropdown
+
+# Add Metadata dropdown for text
 if metadata_df is None:
     # If there is no metadata, then we will disable the dropdown
-    st.session_state["metadata_label"] = st.multiselect("Select a metadata category that will be displayed", ["No Metadata Available"], default="No Metadata Available", disabled=True, max_selections=5)
+    # If there is no metadata, then we will disable the dropdown
+    st.session_state["metadata_label"] = st.selectbox("Select a metadata category that will be displayed as text", ["No Metadata Available"], disabled=True)
+else:
+    columns_available = ["None"] + list(metadata_df.columns)
+    # Remove filename and scan from the metadata
+    columns_available =[x for x in columns_available if x not in ['Filename', 'Scan/Coordinate']]
+    st.session_state["metadata_label"] = st.selectbox("Select a metadata category that will be displayed as text", columns_available)
+
+# Add Metadata dropdown for scatter plots
+if metadata_df is None:
+    # If there is no metadata, then we will disable the dropdown
+    st.session_state["metadata_scatter"] = st.multiselect("Select a metadata category that will be plotted", ["No Metadata Available"], default="No Metadata Available", disabled=True, max_selections=5)
 else:
     columns_avaiable = list(metadata_df.columns)
-    columns_avaialable =[x for x in columns_avaiable if x not in ['filename', 'scan']]
-    st.session_state["metadata_label"]  = st.multiselect("Select a metadata category that will be displayed", columns_avaialable, default=[], max_selections=5)
+    # Remove forbidden columns
+    columns_avaialable =[x for x in columns_avaiable if x not in ['Filename', 'Scan/Coordinate', 'Genbank accession', 'NCBI taxid', 'MS Collected by', 'Isolate Collected by', 'Sample Collected by', 'PI']]
+    st.session_state["metadata_scatter"]  = st.multiselect("Select a metadata category that will be plotted", columns_avaialable, default=[], max_selections=5)
 
 if db_search_results is None:
     # Write a message saying there are no db search results
@@ -776,8 +809,8 @@ else:
 # Add option to add a cutoff line
 st.session_state["cutoff"] = st.number_input("Add Cutoff Line", min_value=0.0, max_value=1.0, value=None, help="Add a vertical line to the dendrogram at the specified distance.")
 # Add option to show annotations
-st.session_state["show_annotations"] = st.checkbox("Display Dendrogram Distances", value=True, help="The values listed represent dendrogram distance. \
-                                                                                                       To obtain distance scores, use the 'Database Search Summary' tab within your workflow.")
+st.session_state["show_annotations"] = st.checkbox("Display Dendrogram Distances", value=bool(st.session_state["show_annotations"]), help="The values listed represent dendrogram distance. \
+                                                                                                       To obtain similarity scores, use the 'Database Search Summary' tab within the workflow output.")
 
 # Process the db search results (it's done in this order to allow for db_search parameters)
 all_spectra_df, db_distance_dict = integrate_database_search_results(all_spectra_df, db_search_results, db_db_distance_table, st.session_state)
@@ -793,7 +826,7 @@ if len(all_spectra_df) == 0:
 dendro = create_dendrogram(numpy_array,
                            all_spectra_df,
                            db_distance_dict,
-                           displayed_metadata=st.session_state["metadata_label"],
+                           plotted_metadata=st.session_state["metadata_scatter"],
                            db_label_column=st.session_state["db_search_result_label"],
                            metadata_df=metadata_df,
                            db_search_columns=st.session_state["db_search_result_label"] ,
@@ -831,10 +864,17 @@ st.link_button(label="View Plot", url=get_mirror_plot_url(spectra_one_USI, spect
 
 # Create a shareable link to this page
 st.write("Shareable Link: ")
-if st.session_state['db_taxonomy_filter'] is None:
-    link = f"https://analysis.idbac.org/?task={task}&metadata_label={st.session_state['metadata_label']}&db_search_result_label={st.session_state['db_search_result_label']}&db_distance_threshold={st.session_state['db_distance_threshold']}&max_db_results={st.session_state['max_db_results']}&clustering_method={st.session_state['clustering_method']}&coloring_threshold={st.session_state['coloring_threshold']}&hide_isolates={','.join(st.session_state['hidden_isolates'])}&cutoff={st.session_state['cutoff']}&show_annotations={st.session_state['show_annotations']}"
-else:
-    link = f"https://analysis.idbac.org/?task={task}&metadata_label={st.session_state['metadata_label']}&db_search_result_label={st.session_state['db_search_result_label']}&db_distance_threshold={st.session_state['db_distance_threshold']}&max_db_results={st.session_state['max_db_results']}&db_taxonomy_filter={','.join(st.session_state['db_taxonomy_filter'])}&clustering_method={st.session_state['clustering_method']}&coloring_threshold={st.session_state['coloring_threshold']}&hide_isolates={','.join(st.session_state['hidden_isolates'])}&cutoff={st.session_state['cutoff']}&show_annotations={st.session_state['show_annotations']}"
+link = f"https://analysis.idbac.org/?task={task}&\
+        metadata_label={st.session_state['metadata_label']}&\
+        metadata_scatter={st.session_state['metadata_scatter']}&\
+        db_search_result_label={st.session_state['db_search_result_label']}&\
+        db_distance_threshold={st.session_state['db_distance_threshold']}&\
+        max_db_results={st.session_state['max_db_results']}&\
+        clustering_method={st.session_state['clustering_method']}&\
+        coloring_threshold={st.session_state['coloring_threshold']}&\
+        hide_isolates={','.join(st.session_state['hidden_isolates'])}&\
+        cutoff={st.session_state['cutoff']}&\
+        show_annotations={st.session_state['show_annotations']}"
 st.code(link)
 
 # Add documentation
