@@ -34,9 +34,14 @@ def write_job_params(param_url:str):
     else:
         metadata_provided = 'No'
     
-    st.write(f"Workflow Description: {yaml_content.get('description', '')}")
-    st.write(f"Merge Replicates: {yaml_content.get('merge_replicates', 'Unknown Parameter')}")
-    st.write(f"Distance Measure: {yaml_content.get('distance', 'Unkown Parameter')}")
-    st.write(f"Database Search Threshold: {yaml_content.get('database_search_threshold', 'Unkown Parameter')}")
-    st.write(f"Metadata File Provided: {metadata_provided}")
+    st.info(f"""
+                **Workflow Paramters:** \n
+                **Description:** {yaml_content.get('description', '')}  
+                **Merge Replicates:** {yaml_content.get('merge_replicates', 'Unknown Parameter')}  
+                **Distance Measure:** {yaml_content.get('distance', 'Unkown Parameter')}  
+                **Database Search Threshold:** {yaml_content.get('database_search_threshold', 'Unkown Parameter')}  
+                **Metadata File Provided:** {metadata_provided}
+                """)
+
+    return yaml_content
     

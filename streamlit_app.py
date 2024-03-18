@@ -596,7 +596,7 @@ else:
     numpy_url = f"https://gnps2.org/resultfile?task={task}&file=nf_output/output_histogram_data_directory/numerical_spectra.npy"
     params_url = f"https://gnps2.org/resultfile?task={task}&file=job_parameters.yaml"
     
-write_job_params(params_url)
+workflow_params = write_job_params(params_url)
 
 # By request, no longer displaying labels url
 if False:
@@ -653,6 +653,9 @@ elif "db_search_result_label" not in st.session_state and db_search_results is N
 # Create a session state for the db distance threshold
 if "db_distance_threshold" not in st.session_state:
     st.session_state["db_distance_threshold"] = 0.30
+# Check if db_distance_threshold is greater than the workflow threshold
+if float(st.session_state["db_distance_threshold"]) > float(workflow_params["database_search_threshold"]):
+    st.session_state["db_distance_threshold"] = float(workflow_params["database_search_threshold"])
 # Create a session state for the maximum number of database results shown
 if "max_db_results" not in st.session_state:
     st.session_state["max_db_results"] = 1
@@ -734,7 +737,7 @@ else:
     
     
     # Add DB distance threshold slider
-    st.session_state["db_distance_threshold"] = st.slider("Maximum Database Distance Threshold", 0.0, 1.0, st.session_state["db_distance_threshold"], 0.05)
+    st.session_state["db_distance_threshold"] = st.slider("Maximum Database Distance Threshold", 0.0, workflow_params.get("database_search_threshold", 1.0), st.session_state["db_distance_threshold"], 0.05)
     # Create a box for the maximum number of database results shown
     st.session_state["max_db_results"] = st.number_input("Maximum Number of Database Results Shown", min_value=-1, max_value=None, value=st.session_state["max_db_results"], help="The maximum number of unique database isolates shown, highest distance is prefered. Enter -1 to show all database results.")  
     # Create a 'select all' box for the db taxonomy filter
