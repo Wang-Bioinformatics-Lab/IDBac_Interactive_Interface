@@ -269,7 +269,7 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict, selected_distan
             # Use the unique count if not a numeric type
             if metadata_df[col].dtype == 'object':
                 num_unique = len(all_spectra_df[col].unique())
-                column_widths.append(min(0.02 * num_unique, 0.3))    # Max width is 0.3 for any given column
+                column_widths.append(max(0.02 * num_unique, 0.3))    # Max width is 0.3 for any given column
             else:
                 column_widths.append(0.15)                          # Default width for numeric types
             
@@ -277,7 +277,7 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict, selected_distan
         fig = plotly.subplots.make_subplots(rows=1, cols=num_cols,
                                             shared_yaxes=True,
                                             column_widths=column_widths,
-                                            horizontal_spacing=0.01)
+                                            horizontal_spacing=0.0)
         fig.update_layout(width=dendrogram_width, height=dendrogram_height, margin=dict(l=0, r=0, b=0, t=0, pad=0))
         
         col_counter = 1
@@ -293,14 +293,12 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict, selected_distan
                              row=1,
                              col=col_counter,
                              tickangle=90,
-                             ticks="outside")
+                             ticks="outside",
+                             showgrid=True,gridcolor='rgb(250, 250, 250)')
             fig.add_trace(metadata_scatter, row=1, col=col_counter)
             
-            # Add a grid to the scatter
-            fig.update_xaxes(row=1, col=col_counter, showgrid=True)
-            
             # ylim must be set for each axis, otherwise we get blank space
-            fig.update_yaxes(range=[min(y_values)-10, max(y_values)+25], row=1, col=col_counter, showgrid=True)
+            fig.update_yaxes(tickvals=y_values, ticktext=y_labels, range=[min(y_values)-10, max(y_values)+25], row=1, col=col_counter, showgrid=True,)
             
             # Add title
             wrapped_title = col_name.replace(" ", "<br>") # TODO: Better wrapping
@@ -310,25 +308,26 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict, selected_distan
             col_counter+=1
             
         # print(dir(fig), flush=True)
-        # # Add a border around the scatter plots
-        # for x,y in zip(range(1,num_cols), range(1, num_cols)):
-        #     print(x,y, flush=True)
-        #     if x == 1:
-        #         x = ""
-        #     if y == 1:
-        #         y = ""
-        #     fig.update_layout(shapes=[
-        #         go.layout.Shape(
-        #             type="rect",
-        #             xref=f"x{x} domain",
-        #             yref=f"y domain",
-        #             x0= 0.0,
-        #             y0 = 0,
-        #             x1= 1.,
-        #             y1= 1,
-        #             line={'width':1, 'color':"rgb(250, 250, 250)"})
-        #         ],
-        #     )
+        # Add a border around the scatter plots
+        rectangles_to_add = []
+        for x,y in zip(range(1,num_cols), range(1, num_cols)):
+            print(x,y, flush=True)
+            if x == 1:
+                x = ""
+            if y == 1:
+                y = ""
+            rectangles_to_add.append(go.layout.Shape(
+                    type="rect",
+                    xref=f"x{x} domain",
+                    yref=f"y domain",
+                    x0= 0.0,
+                    y0 = 0,
+                    x1= 1.,
+                    y1= 1,
+                    line={'width':1, 'color':"rgb(250, 250, 250)"})
+                    )
+        
+        fig.update_layout(shapes=rectangles_to_add)
         
         # Add the dendrogram to the figure
         for trace in dendro.data:
