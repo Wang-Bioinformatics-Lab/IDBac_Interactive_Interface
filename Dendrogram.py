@@ -209,7 +209,7 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict, selected_distan
         plotted_metadata = [metadata_column if metadata_column not in original_all_spectra_cols else metadata_column+"_metadata" for metadata_column in plotted_metadata]
         
     # Add metadata for db search results
-    if db_label_column != "No Database Search Results":
+    if db_label_column != "No Database Search Results" and sum(all_spectra_df["db_search_result"]) > 0:
         # all_spectra_df.loc[all_spectra_df["db_search_result"] == True, db_metadata_column].fillna("No Metadata", inplace=True)
         # all_spectra_df.loc[all_spectra_df["db_search_result"] == True, "label"] = 'DB Result - ' + all_spectra_df.loc[all_spectra_df["db_search_result"] == True][db_label_column].astype(str)
         if db_search_columns != 'None':
@@ -572,6 +572,8 @@ url_parameters = st.query_params
 if "task" in url_parameters:
     st.session_state["task_id"]  = url_parameters["task"]
 elif "task_id" not in st.session_state:
+    print("***********************************", flush=True)
+    print("t.session_state:", st.session_state.get('task_id'), flush=True)
     st.session_state["task_id"] = "e8ce09562a2d47709dd0c14b80d85c8e"
     
 # Add other items to session state if available
@@ -607,6 +609,8 @@ if st.session_state["task_id"] == '':
     st.error("Please input a valid GNPS2 Task ID")
 st.write(st.session_state["task_id"])
 
+task_id = st.session_state["task_id"]
+
 # Now we will get all the relevant data from GNPS2 for plotting
 if st.session_state["task_id"].startswith("DEV-"):
     labels_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={st.session_state['task_id'][4:]}&file=nf_output/output_histogram_data_directory/labels_spectra.tsv"
@@ -636,7 +640,7 @@ if False:
     st.write(all_spectra_df) # Currently, we're not displaying db search results
 
 # Collect the database search results
-db_search_results, db_db_distance_table = collect_database_search_results(st.session_state["task_id"])
+db_search_results, db_db_distance_table = collect_database_search_results(task_id)
 
 if db_db_distance_table is None and db_search_results is not None:
     st.warning("""Database-database distances are not available for this task, perhaps this is an old task?  
@@ -720,7 +724,7 @@ else:
     if st.session_state['task_id'].startswith("DEV-"):
         metadata_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={st.session_state['task_id'][4:]}&file=nf_output/output_histogram_data_directory/metadata.tsv"
     else:
-        metadata_url = "https://gnps2.org/resultfile?task={}&file=nf_output/output_histogram_data_directory/metadata.tsv".format(st.session_state["task_id"])
+        metadata_url = "https://gnps2.org/resultfile?task={}&file=nf_output/output_histogram_data_directory/metadata.tsv".format(task_id)
     try:
         metadata_df = pd.read_csv(metadata_url, sep="\t", index_col=False)
     except:
@@ -866,8 +870,8 @@ st.selectbox("Spectra One", all_options, key='mirror_spectra_one', help="Select 
 # Select spectra two
 st.selectbox("Spectra Two", ['None'] + all_options, key='mirror_spectra_two', help="Select the second spectra to be plotted. Database search results are denoted by 'DB Result -'.")
 # Add a button to generate the mirror plot
-spectra_one_USI = get_USI(all_spectra_df, st.session_state['mirror_spectra_one'], st.session_state["task_id"])
-spectra_two_USI = get_USI(all_spectra_df, st.session_state['mirror_spectra_two'], st.session_state["task_id"])
+spectra_one_USI = get_USI(all_spectra_df, st.session_state['mirror_spectra_one'], task_id)
+spectra_two_USI = get_USI(all_spectra_df, st.session_state['mirror_spectra_two'], task_id)
 
 # If a user is able to get click the buttone before the USI is generated, they may get the page with an old option
 st.link_button(label="View Plot", url=get_mirror_plot_url(spectra_one_USI, spectra_two_USI))
