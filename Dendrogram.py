@@ -563,6 +563,9 @@ def integrate_database_search_results(all_spectra_df:pd.DataFrame, database_sear
     
     return all_spectra_df, database_distance_dict
 
+# Set Page Configuration
+st.set_page_config(page_title="IDBac - Dendrogram", page_icon=None, layout="centered", initial_sidebar_state="auto", menu_items=None)
+
 # Here we will add an input field for the GNPS2 task ID
 url_parameters = st.query_params
 
@@ -750,10 +753,12 @@ if metadata_df is None:
     # If there is no metadata, then we will disable the dropdown
     st.session_state["metadata_scatter"] = st.multiselect("Select a metadata category that will be plotted", ["No Metadata Available"], default="No Metadata Available", disabled=True, max_selections=5)
 else:
-    columns_avaiable = list(metadata_df.columns)
+    columns_available = list(metadata_df.columns)
+    print(columns_available)
     # Remove forbidden columns
-    columns_avaialable =[x for x in columns_avaiable if x not in ['Filename', 'Scan/Coordinate', 'Genbank accession', 'NCBI taxid', 'MS Collected by', 'Isolate Collected by', 'Sample Collected by', 'PI']]
-    st.session_state["metadata_scatter"]  = st.multiselect("Select a metadata category that will be plotted", columns_avaialable, default=[], max_selections=5)
+    columns_available =[x for x in columns_available if x not in ['Filename', 'Scan/Coordinate', 'Genbank accession', 'NCBI taxid', 'MS Collected by', 'Isolate Collected by', 'Sample Collected by', 'PI ', 'PI']]
+    print(columns_available)
+    st.session_state["metadata_scatter"]  = st.multiselect("Select a metadata category that will be plotted", columns_available, default=[], max_selections=5)
 
 if db_search_results is None:
     # Write a message saying there are no db search results
@@ -821,6 +826,9 @@ if len(all_spectra_df) == 0:
     # If there are no spectra to display, then we will stop the script
     st.error("There are no spectra to display. Please select different options.")
     st.stop()
+
+# Add any remaining variables to the session state if needed
+st.session_state["metadata_df"] = metadata_df
 
 # Creating the dendrogram
 dendro = create_dendrogram(numpy_array,
