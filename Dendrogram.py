@@ -323,7 +323,7 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict, selected_distan
         # Add a border around the scatter plots
         rectangles_to_add = []
         for x,y in zip(range(1,num_cols), range(1, num_cols)):
-            print(x,y, flush=True)
+            # print(x,y, flush=True)
             if x == 1:
                 x = ""
             if y == 1:
@@ -572,8 +572,6 @@ url_parameters = st.query_params
 if "task" in url_parameters:
     st.session_state["task_id"]  = url_parameters["task"]
 elif "task_id" not in st.session_state:
-    print("***********************************", flush=True)
-    print("t.session_state:", st.session_state.get('task_id'), flush=True)
     st.session_state["task_id"] = "e8ce09562a2d47709dd0c14b80d85c8e"
     
 # Add other items to session state if available
@@ -760,10 +758,8 @@ if metadata_df is None:
     st.session_state["metadata_scatter"] = st.multiselect("Select a metadata category that will be plotted", ["No Metadata Available"], default="No Metadata Available", disabled=True, max_selections=5)
 else:
     columns_available = list(metadata_df.columns)
-    print(columns_available)
     # Remove forbidden columns
     columns_available =[x for x in columns_available if x not in ['Filename', 'Scan/Coordinate', 'Genbank accession', 'NCBI taxid', 'MS Collected by', 'Isolate Collected by', 'Sample Collected by', 'PI ', 'PI']]
-    print(columns_available)
     st.session_state["metadata_scatter"]  = st.multiselect("Select a metadata category that will be plotted", columns_available, default=[], max_selections=5)
 
 if db_search_results is None:
