@@ -11,6 +11,9 @@ st.info("Welcome to IDBac's Small Molecule Association Page! This page is curren
 
 def generate_network(height=1000, width=600):
     # TODO: Right now we don't integrate all_spectra_df which means there could be nodes that aren't truely in the network
+    if st.session_state.get("metadata_df") is None:
+        st.error("Please upload a metadata file first.")
+        st.stop()
     
     df = st.session_state["metadata_df"]
     
