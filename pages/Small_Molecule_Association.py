@@ -16,6 +16,9 @@ def generate_network(height=1000, width=600):
         st.stop()
     
     df = st.session_state["metadata_df"]
+    if 'Small molecule file name' not in df.columns:
+        st.error("Please upload a metadata file with a 'Small molecule file name' column.")
+        st.stop()
     
     graph = net.Network(height=f'{height}px', width='100%')
     
