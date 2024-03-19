@@ -569,9 +569,11 @@ st.set_page_config(page_title="IDBac - Dendrogram", page_icon=None, layout="cent
 # Here we will add an input field for the GNPS2 task ID
 url_parameters = st.query_params
 
-default_task = "0e744752fdd44faba37df671b9d1997c"
 if "task" in url_parameters:
-    default_task = url_parameters["task"]
+    st.session_state["task_id"]  = url_parameters["task"]
+elif "task_id" not in st.session_state:
+    st.session_state["task_id"] = "0e744752fdd44faba37df671b9d1997c"
+    
 # Add other items to session state if available
 if "metadata_label" in url_parameters:
     st.session_state["metadata_label"] = url_parameters["metadata_label"]
@@ -600,20 +602,20 @@ if "show_annotations" in url_parameters:
     st.session_state["show_annotations"] = bool(url_parameters["show_annotations"])
 
 
-task = st.text_input('GNPS2 Task ID', default_task)
-if task == '':
+st.session_state["task_id"] = st.text_input('GNPS2 Task ID', st.session_state["task_id"])
+if st.session_state["task_id"] == '':
     st.error("Please input a valid GNPS2 Task ID")
-st.write(task)
+st.write(st.session_state["task_id"])
 
 # Now we will get all the relevant data from GNPS2 for plotting
-if task.startswith("DEV-"):
-    labels_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={task[4:]}&file=nf_output/output_histogram_data_directory/labels_spectra.tsv"
-    numpy_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={task[4:]}&file=nf_output/output_histogram_data_directory/numerical_spectra.npy"
-    params_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={task[4:]}&file=job_parameters.yaml"
+if st.session_state["task_id"].startswith("DEV-"):
+    labels_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={st.session_state['task_id'][4:]}&file=nf_output/output_histogram_data_directory/labels_spectra.tsv"
+    numpy_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={st.session_state['task_id'][4:]}&file=nf_output/output_histogram_data_directory/numerical_spectra.npy"
+    params_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={st.session_state['task_id'][4:]}&file=job_parameters.yaml"
 else:
-    labels_url = f"https://gnps2.org/resultfile?task={task}&file=nf_output/output_histogram_data_directory/labels_spectra.tsv"
-    numpy_url = f"https://gnps2.org/resultfile?task={task}&file=nf_output/output_histogram_data_directory/numerical_spectra.npy"
-    params_url = f"https://gnps2.org/resultfile?task={task}&file=job_parameters.yaml"
+    labels_url = f"https://gnps2.org/resultfile?task={st.session_state['task_id']}&file=nf_output/output_histogram_data_directory/labels_spectra.tsv"
+    numpy_url = f"https://gnps2.org/resultfile?task={st.session_state['task_id']}&file=nf_output/output_histogram_data_directory/numerical_spectra.npy"
+    params_url = f"https://gnps2.org/resultfile?task={st.session_state['task_id']}&file=job_parameters.yaml"
     
 workflow_params = write_job_params(params_url)
 
@@ -634,9 +636,9 @@ if False:
     st.write(all_spectra_df) # Currently, we're not displaying db search results
 
 # Collect the database search results
-db_search_results, db_db_distance_table = collect_database_search_results(task)
+db_search_results, db_db_distance_table = collect_database_search_results(st.session_state["task_id"])
 
-if db_db_distance_table is None:
+if db_db_distance_table is None and db_search_results is not None:
     st.warning("""Database-database distances are not available for this task, perhaps this is an old task?  
                 Please clone and rerun the task on GNPS2 for proper visualization. The distances between these examples
                 will be represented as 1.0 to the dendrogram. """)
@@ -715,10 +717,10 @@ if st.checkbox("Upload Metadata", help="If left unchecked, the metadata associat
         metadata_df = None
 else:
     # Getting the metadata
-    if task.startswith("DEV-"):
-        metadata_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={task[4:]}&file=nf_output/output_histogram_data_directory/metadata.tsv"
+    if st.session_state['task_id'].startswith("DEV-"):
+        metadata_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={st.session_state['task_id'][4:]}&file=nf_output/output_histogram_data_directory/metadata.tsv"
     else:
-        metadata_url = "https://gnps2.org/resultfile?task={}&file=nf_output/output_histogram_data_directory/metadata.tsv".format(task)
+        metadata_url = "https://gnps2.org/resultfile?task={}&file=nf_output/output_histogram_data_directory/metadata.tsv".format(st.session_state["task_id"])
     try:
         metadata_df = pd.read_csv(metadata_url, sep="\t", index_col=False)
     except:
@@ -864,15 +866,15 @@ st.selectbox("Spectra One", all_options, key='mirror_spectra_one', help="Select 
 # Select spectra two
 st.selectbox("Spectra Two", ['None'] + all_options, key='mirror_spectra_two', help="Select the second spectra to be plotted. Database search results are denoted by 'DB Result -'.")
 # Add a button to generate the mirror plot
-spectra_one_USI = get_USI(all_spectra_df, st.session_state['mirror_spectra_one'], task)
-spectra_two_USI = get_USI(all_spectra_df, st.session_state['mirror_spectra_two'], task)
+spectra_one_USI = get_USI(all_spectra_df, st.session_state['mirror_spectra_one'], st.session_state["task_id"])
+spectra_two_USI = get_USI(all_spectra_df, st.session_state['mirror_spectra_two'], st.session_state["task_id"])
 
 # If a user is able to get click the buttone before the USI is generated, they may get the page with an old option
 st.link_button(label="View Plot", url=get_mirror_plot_url(spectra_one_USI, spectra_two_USI))
 
 # Create a shareable link to this page
 st.write("Shareable Link: ")
-link = f"https://analysis.idbac.org/?task={task}&\
+link = f"https://analysis.idbac.org/?task={st.session_state['task_id']}&\
         metadata_label={st.session_state['metadata_label']}&\
         metadata_scatter={st.session_state['metadata_scatter']}&\
         db_search_result_label={st.session_state['db_search_result_label']}&\

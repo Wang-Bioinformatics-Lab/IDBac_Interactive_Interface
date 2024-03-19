@@ -36,7 +36,7 @@ def generate_network(height=1000, width=600):
     html_graph = graph.generate_html()
     
     # html_graph = update_graph_html(html_graph)
-    print(html_graph)
+    # print(html_graph)
     
     components.html(html_graph, height=height)
 
