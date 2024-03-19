@@ -1,5 +1,7 @@
 streamlit==1.31.1
+pyvis
 pandas
 plotly
 scipy==1.11.4
 scikit-learn
+pyyaml
