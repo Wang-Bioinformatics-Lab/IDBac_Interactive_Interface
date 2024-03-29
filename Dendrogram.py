@@ -572,7 +572,7 @@ url_parameters = st.query_params
 if "task" in url_parameters:
     st.session_state["task_id"]  = url_parameters["task"]
 elif "task_id" not in st.session_state:
-    st.session_state["task_id"] = "e8ce09562a2d47709dd0c14b80d85c8e"
+    st.session_state["task_id"] = "7bcac5e463b146879b1f6d4058e1ef19"
     
 # Add other items to session state if available
 if "metadata_label" in url_parameters:
