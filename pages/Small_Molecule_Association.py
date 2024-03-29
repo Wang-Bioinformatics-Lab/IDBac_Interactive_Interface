@@ -167,7 +167,7 @@ def make_heatmap():
     
 
 # Add a slider for the relative intensity threshold
-st.slider("Relative Intensity Threshold", min_value=0.05, max_value=1.0, value=0.1, step=0.01, key="sm_relative_intensity_threshold")
+st.slider("Relative Intensity Threshold", min_value=0.05, max_value=1.0, value=0.15, step=0.01, key="sm_relative_intensity_threshold")
 
 generate_network()
 
