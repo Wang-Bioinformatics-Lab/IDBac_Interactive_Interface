@@ -12,6 +12,38 @@ st.set_page_config(page_title="IDBac - Small Molecule Association", page_icon=No
 
 st.info("Welcome to IDBac's Small Molecule Association Page! This page is currently in development.")
 
+def parse_numerical_input(string:str) -> list:
+    initial_list = [entry.strip() for entry in string.split(",")]
+    # Format ranges as tuples: '[10-20]' -> (10, 20), [10-] -> (10, np.inf)
+    output_list = []
+    for entry in initial_list:
+        try:
+            entry_as_float = float(entry)
+            if entry_as_float < 0:
+                st.error(f"Negative values are not allowed: {entry}")
+                return []
+            output_list.append(entry_as_float)
+            continue
+        except Exception as e:
+            pass
+        try:
+            if "-" in entry:
+                entry = entry.replace("[", "").replace("]", "")
+                start, end = entry.split("-")
+                if start == "":
+                    start = 0
+                if end == "":
+                    end = np.inf
+                output_list.append((float(start), float(end)))
+            else:
+                output_list.append(float(entry))
+        except Exception as e:
+            st.error(f"Could not parse entry: {entry}")
+            return []
+    return output_list
+        
+    
+
 def get_small_molecule_dict():
     if st.session_state['task_id'].startswith("DEV-"):
         url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={st.session_state['task_id'][4:]}&file=nf_output/small_molecule/summary.json"
@@ -71,6 +103,21 @@ def filter_small_molecule_dict(small_molecule_dict):
         
         # Get indices where intensity is above threshold
         indices = [i for i, intensity in enumerate(intensity_array) if intensity > st.session_state.get("sm_relative_intensity_threshold", 0.1)]
+        # Get indices where m/z is within tolerance
+        if len(st.session_state.get("sm_parsed_selected_mzs")) > 0:
+            mz_filtered_indices = set()
+            
+            for i, mz in enumerate(mz_array):
+                for filter in st.session_state.get("sm_parsed_selected_mzs"):
+                    if isinstance(filter, float):
+                        if abs(mz - filter) <= st.session_state.get("sm_mz_tolerance", 0.1):
+                            mz_filtered_indices.add(i)
+                    else:
+                        start, end = filter
+                        if start <= mz <= end:
+                            mz_filtered_indices.add(i)
+                            
+            indices = list(set(indices).intersection(mz_filtered_indices))
         
         # Filter mz_array and intensity_array
         mz_array = [mz_array[i] for i in indices]
@@ -136,12 +183,10 @@ def make_heatmap():
     all_mzs = [small_mol_dict.get('m/z array', []) for small_mol_dict in small_mol_dict.values()]
     all_mzs = [mz for sublist in all_mzs for mz in sublist] # Flatten
     all_mzs = np.sort(np.unique(all_mzs))
-    
+       
     heatmap = np.zeros((len(st.session_state["sm_selected_isolates"]), len(all_mzs)))
     
     df = pd.DataFrame(heatmap, columns=all_mzs, index=st.session_state["sm_selected_isolates"])
-    
-    small_mol_dict = get_small_molecule_dict()
     
     for filename in st.session_state["sm_selected_isolates"]:
         relevant_mapping = mapping[mapping['Filename'] == filename]
@@ -159,20 +204,51 @@ def make_heatmap():
     df = df.loc[:, (df != 0).any(axis=0)]
     
     if len(df) != 0:
+        st.markdown("Common m/z values between selected isolates and their intensities. Note: The graph filters are applied here.")
+        # Draw Heatmap
+        fig = plotly.express.imshow(df.values,
+                                    aspect ='equal', 
+                                    width=1600, 
+                                    # height=1600,
+                                    color_continuous_scale='Bluered')
+        # Update axis text (we do this here otherwise spacing is not even)
+        fig.update_layout(
+            xaxis=dict(title="m/z", ticktext=[str(x) for x in df.columns], tickvals=list(range(len(df.columns)))),
+            yaxis=dict(title="Isolate", ticktext=list(df.index.values), tickvals=list(range(len(df.index)))),
+            margin=dict(t=5, pad=2),
+        )
+        
+        # Add text to color bar to indicate intensity
+        fig.update_layout(coloraxis_colorbar=dict(title="Relative Intensity"))
+        
+        st.plotly_chart(fig)
+        
+        # Draw Table
         df
-    
-    # fig = plotly.express.imshow(df.values, x=[str(x) for x in df.columns], y=list(df.index.values), aspect ='equal', width=1600, height=1600)
-    # st.plotly_chart(fig)
-    
-    
 
+st.subheader("Small Molecule Filters")
 # Add a slider for the relative intensity threshold
 st.slider("Relative Intensity Threshold", min_value=0.05, max_value=1.0, value=0.15, step=0.01, key="sm_relative_intensity_threshold")
 
+# Add text input to select certain m/z's (comma-seperated)
+mz_col1, mz_col2 = st.columns([3, 1])
+mz_col1.text_input("Select Displayed m/z Values", key="sm_selected_mzs", help="Enter m/z values seperated by commas. Ranges can be entered as [127.0-], or [125.0-10]. No value will show all m/z values.")
+mz_col2.number_input("Tolerance (m/z)", key="sm_mz_tolerance", value=0.1, help="Tolerance for the selected m/z values. Does not apply to ranges.")
+try:
+    if st.session_state.get("sm_selected_mzs"):
+        st.session_state["sm_parsed_selected_mzs"] = parse_numerical_input(st.session_state["sm_selected_mzs"])
+    else:
+        st.session_state["sm_parsed_selected_mzs"] = []
+except:
+    st.error("Please enter valid m/z values.")
+    st.stop()
+
+# st.subheader("Network Display Options")
+# # TODO
+
 generate_network()
 
-
-st.header("Small Molecule Table")
-st.multiselect("Select Isolates", st.session_state["metadata_df"]['Filename'].unique(), max_selections=5, key='sm_selected_isolates')
+st.header("Small Molecule Heatmap")
+st.multiselect("Select Isolates", st.session_state["metadata_df"]['Filename'].unique(), key='sm_selected_isolates')
 
 make_heatmap()
