@@ -184,11 +184,11 @@ def make_heatmap():
     all_mzs = [mz for sublist in all_mzs for mz in sublist] # Flatten
     all_mzs = np.sort(np.unique(all_mzs))
        
-    heatmap = np.zeros((len(st.session_state["sm_selected_isolates"]), len(all_mzs)))
+    heatmap = np.zeros((len(st.session_state["sm_selected_proteins"]), len(all_mzs)))
     
-    df = pd.DataFrame(heatmap, columns=all_mzs, index=st.session_state["sm_selected_isolates"])
+    df = pd.DataFrame(heatmap, columns=all_mzs, index=st.session_state["sm_selected_proteins"])
     
-    for filename in st.session_state["sm_selected_isolates"]:
+    for filename in st.session_state["sm_selected_proteins"]:
         relevant_mapping = mapping[mapping['Filename'] == filename]
         all_small_molecule_filenames = relevant_mapping['Small molecule file name'].tolist()
         
@@ -204,7 +204,7 @@ def make_heatmap():
     df = df.loc[:, (df != 0).any(axis=0)]
     
     if len(df) != 0:
-        st.markdown("Common m/z values between selected isolates and their intensities. Note: The graph filters are applied here.")
+        st.markdown("Common m/z values between selected proteins and their intensities. Note: The graph filters are applied here.")
         # Draw Heatmap
         fig = plotly.express.imshow(df.values,
                                     aspect ='equal', 
@@ -214,7 +214,7 @@ def make_heatmap():
         # Update axis text (we do this here otherwise spacing is not even)
         fig.update_layout(
             xaxis=dict(title="m/z", ticktext=[str(x) for x in df.columns], tickvals=list(range(len(df.columns)))),
-            yaxis=dict(title="Isolate", ticktext=list(df.index.values), tickvals=list(range(len(df.index)))),
+            yaxis=dict(title="Protein", ticktext=list(df.index.values), tickvals=list(range(len(df.index)))),
             margin=dict(t=5, pad=2),
         )
         
@@ -249,6 +249,6 @@ except:
 generate_network()
 
 st.header("Small Molecule Heatmap")
-st.multiselect("Select Isolates", st.session_state["metadata_df"]['Filename'].unique(), key='sm_selected_isolates')
+st.multiselect("Select Proteins", st.session_state["metadata_df"]['Filename'].unique(), key='sm_selected_proteins')
 
 make_heatmap()
