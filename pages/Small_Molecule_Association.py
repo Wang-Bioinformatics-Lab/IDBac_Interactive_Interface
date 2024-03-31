@@ -159,11 +159,28 @@ def make_heatmap():
     df = df.loc[:, (df != 0).any(axis=0)]
     
     if len(df) != 0:
+        st.markdown("Common m/z values between selected isolates and their intensities")
+        # Draw Heatmap
+        fig = plotly.express.imshow(df.values,
+                                    aspect ='equal', 
+                                    width=1600, 
+                                    # height=1600,
+                                    color_continuous_scale='Bluered')
+        # Update axis text (we do this here otherwise spacing is not even)
+        fig.update_layout(
+            xaxis=dict(title="m/z", ticktext=[str(x) for x in df.columns], tickvals=list(range(len(df.columns)))),
+            yaxis=dict(title="Isolate", ticktext=list(df.index.values), tickvals=list(range(len(df.index)))),
+            margin=dict(t=5, pad=2),
+        )
+        
+        # Add text to color bar to indicate intensity
+        fig.update_layout(coloraxis_colorbar=dict(title="Relative Intensity"))
+        
+        st.plotly_chart(fig)
+        
+        # Draw Table
         df
-    
-    # fig = plotly.express.imshow(df.values, x=[str(x) for x in df.columns], y=list(df.index.values), aspect ='equal', width=1600, height=1600)
-    # st.plotly_chart(fig)
-    
+        
     
 
 # Add a slider for the relative intensity threshold
@@ -173,6 +190,6 @@ generate_network()
 
 
 st.header("Small Molecule Table")
-st.multiselect("Select Isolates", st.session_state["metadata_df"]['Filename'].unique(), max_selections=5, key='sm_selected_isolates')
+st.multiselect("Select Isolates", st.session_state["metadata_df"]['Filename'].unique(), key='sm_selected_isolates')
 
 make_heatmap()
