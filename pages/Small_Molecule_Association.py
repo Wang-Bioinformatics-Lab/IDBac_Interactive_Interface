@@ -183,12 +183,10 @@ def make_heatmap():
     all_mzs = [small_mol_dict.get('m/z array', []) for small_mol_dict in small_mol_dict.values()]
     all_mzs = [mz for sublist in all_mzs for mz in sublist] # Flatten
     all_mzs = np.sort(np.unique(all_mzs))
-    
+       
     heatmap = np.zeros((len(st.session_state["sm_selected_isolates"]), len(all_mzs)))
     
     df = pd.DataFrame(heatmap, columns=all_mzs, index=st.session_state["sm_selected_isolates"])
-    
-    small_mol_dict = get_small_molecule_dict()
     
     for filename in st.session_state["sm_selected_isolates"]:
         relevant_mapping = mapping[mapping['Filename'] == filename]
@@ -228,6 +226,7 @@ def make_heatmap():
         # Draw Table
         df
 
+st.subheader("Small Molecule Filters")
 # Add a slider for the relative intensity threshold
 st.slider("Relative Intensity Threshold", min_value=0.05, max_value=1.0, value=0.15, step=0.01, key="sm_relative_intensity_threshold")
 
@@ -244,9 +243,12 @@ except:
     st.error("Please enter valid m/z values.")
     st.stop()
 
+# st.subheader("Network Display Options")
+# # TODO
+
 generate_network()
 
-st.header("Small Molecule Table")
+st.header("Small Molecule Heatmap")
 st.multiselect("Select Isolates", st.session_state["metadata_df"]['Filename'].unique(), key='sm_selected_isolates')
 
 make_heatmap()
