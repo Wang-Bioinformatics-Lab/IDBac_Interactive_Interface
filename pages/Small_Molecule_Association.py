@@ -190,7 +190,7 @@ def make_heatmap():
     all_mzs = [mz for sublist in all_mzs for mz in sublist] # Flatten
     all_mzs = np.sort(np.unique(all_mzs))
        
-    heatmap = np.zeros((len(st.session_state["sm_selected_proteins"]), len(all_mzs)))
+    heatmap = np.ones((len(st.session_state["sm_selected_proteins"]), len(all_mzs))) * np.nan
     
     df = pd.DataFrame(heatmap, columns=all_mzs, index=st.session_state["sm_selected_proteins"])
     
@@ -206,26 +206,26 @@ def make_heatmap():
                 if intensity > st.session_state.get("sm_relative_intensity_threshold", 0.1):
                     df.at[filename, mz] = intensity
             
-    # Remove cols with all zeros
-    df = df.loc[:, (df != 0).any(axis=0)]
+    # Remove cols with all nans
+    df = df.loc[:, (df.notna()).any(axis=0)]
     
     if len(df) != 0:
         st.markdown("Common m/z values between selected proteins and their intensities. Note: The graph filters are applied here.")
         # Draw Heatmap
         fig = plotly.express.imshow(df.values,
                                     aspect ='equal', 
-                                    width=1600, 
+                                    width=1500, 
                                     # height=1600,
                                     color_continuous_scale='Bluered')
         # Update axis text (we do this here otherwise spacing is not even)
         fig.update_layout(
             xaxis=dict(title="m/z", ticktext=[str(x) for x in df.columns], tickvals=list(range(len(df.columns)))),
             yaxis=dict(title="Protein", ticktext=list(df.index.values), tickvals=list(range(len(df.index)))),
-            margin=dict(t=5, pad=2),
+            coloraxis_colorbar=dict(title="Relative Intensity"),    # Add text to color bar to indicate intensity
+            margin=dict(t=5, pad=0),
         )
         
-        # Add text to color bar to indicate intensity
-        fig.update_layout(coloraxis_colorbar=dict(title="Relative Intensity"))
+        fig.update_coloraxes(cmin=0.0, cmax=1.0, cmid=0.5)
         
         st.plotly_chart(fig)
         
@@ -235,7 +235,7 @@ def make_heatmap():
 st.subheader("Small Molecule Filters")
 # Add a slider for the relative intensity threshold
 st.slider("Relative Intensity Threshold", min_value=0.05, max_value=1.0, value=0.15, step=0.01, key="sm_relative_intensity_threshold")
-st.slider("Replicate Frequency Threshold", min_value=0.00, max_value=1.0, value=0.70, step=0.05, key="sm_replicate_frequency_threshold", help="Only show m/z values that are present in at least this percentage of replicates.")
+st.slider("Replicate Frequency Threshold", min_value=0.00, max_value=1.0, value=0.70, step=0.05, key="sm_replicate_frequency_threshold", help="Only show m/z values that occur in at least this percentage of replicates.")
 
 # Add text input to select certain m/z's (comma-seperated)
 mz_col1, mz_col2 = st.columns([3, 1])
