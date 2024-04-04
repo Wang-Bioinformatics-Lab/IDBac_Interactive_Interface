@@ -25,7 +25,7 @@ def write_job_params(param_url:str):
                 **Merge Replicates:** {yaml_content.get('merge_replicates', 'Unknown Parameter')}  
                 **Distance Measure:** {yaml_content.get('distance', 'Unkown Parameter')}  
                 **Database Search Threshold:** {yaml_content.get('database_search_threshold', 'Unkown Parameter')}  
-                **Protein Database Search Mass Range:** {protein_mass_range}
+                **Protein Database Search Mass Range:** {protein_mass_range}  
                 **Metadata File Provided:** {metadata_provided}
                 """)
 

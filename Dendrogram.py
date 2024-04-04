@@ -749,7 +749,7 @@ if metadata_df is None:
 else:
     columns_available = ["None"] + list(metadata_df.columns)
     # Remove filename and scan from the metadata
-    columns_available =[x for x in columns_available if x not in ['Filename', 'Scan/Coordinate']]
+    columns_available =[x for x in columns_available if x.lower().strip() not in ['filename', 'scan/coordinate', 'small molecule file name']]
     st.session_state["metadata_label"] = st.selectbox("Select a metadata category that will be displayed as text", columns_available)
 
 # Add Metadata dropdown for scatter plots
@@ -759,7 +759,7 @@ if metadata_df is None:
 else:
     columns_available = list(metadata_df.columns)
     # Remove forbidden columns
-    columns_available =[x for x in columns_available if x not in ['Filename', 'Scan/Coordinate', 'Genbank accession', 'NCBI taxid', 'MS Collected by', 'Isolate Collected by', 'Sample Collected by', 'PI ', 'PI']]
+    columns_available =[x for x in columns_available if x.lower().strip() not in ['filename', 'scan/coordinate', 'genbank accession', 'ncbi taxid', 'ms collected by', 'isolate collected by', 'sample collected by', 'pi', '16s sequence']]
     st.session_state["metadata_scatter"]  = st.multiselect("Select a metadata category that will be plotted", columns_available, default=[], max_selections=5)
 
 if db_search_results is None:
