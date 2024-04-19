@@ -112,12 +112,13 @@ def get_dist_function_wrapper(distfun):
         
         db_db_distance_matrix = np.ones((num_db_search_results, num_db_search_results))
         if 'database_id' in spectrum_data_df.columns: # Only included when there are database search results present
-            db_search_database_ids = spectrum_data_df.database_id[spectrum_data_df['db_search_result'] == True].tolist()
+            db_search_database_ids = spectrum_data_df.database_id[spectrum_data_df['db_search_result'] == True].tolist()     
             for i, db_id_1 in enumerate(db_search_database_ids):
                 db_dist_dict = db_distance_dict.get(db_id_1)
                 if db_dist_dict is None:
                     continue    # Should only happen for old jobs
-                for j, db_id_2 in enumerate(db_search_database_ids[i+1:]):
+                for j in range(i+1, len(db_search_database_ids)):
+                    db_id_2 = db_search_database_ids[j]
                     this_dist = db_dist_dict.get(db_id_2)
                     if this_dist is not None:
                         # Deal with numerical percision error due to subtractive cancellation
