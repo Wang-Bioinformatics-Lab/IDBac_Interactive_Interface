@@ -117,8 +117,8 @@ def get_dist_function_wrapper(distfun):
                 db_dist_dict = db_distance_dict.get(db_id_1)
                 if db_dist_dict is None:
                     continue    # Should only happen for old jobs
-                for j, db_id_2 in enumerate(db_search_database_ids[i+1:]):
-                    this_dist = db_dist_dict.get(db_id_2)
+                for j in range(i+1, len(db_search_database_ids)):
+                    db_id_2 = db_search_database_ids[j]
                     if this_dist is not None:
                         # Deal with numerical percision error due to subtractive cancellation
                         if this_dist > 0.999:
