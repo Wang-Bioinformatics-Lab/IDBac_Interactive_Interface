@@ -16,7 +16,7 @@ import plotly.graph_objects as go
 
 import numpy as np
 
-from utils import write_job_params
+from utils import write_job_params, write_warnings
 
 class np_data_wrapper():
     def __init__(self, data_np, spectrum_data_df, db_distance_dict):
@@ -612,15 +612,20 @@ task_id = st.session_state["task_id"]
 
 # Now we will get all the relevant data from GNPS2 for plotting
 if st.session_state["task_id"].startswith("DEV-"):
-    labels_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={st.session_state['task_id'][4:]}&file=nf_output/output_histogram_data_directory/labels_spectra.tsv"
-    numpy_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={st.session_state['task_id'][4:]}&file=nf_output/output_histogram_data_directory/numerical_spectra.npy"
-    params_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={st.session_state['task_id'][4:]}&file=job_parameters.yaml"
+    dev_task_id = st.session_state['task_id'][4:]
+    labels_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={dev_task_id}&file=nf_output/output_histogram_data_directory/labels_spectra.tsv"
+    numpy_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={dev_task_id}&file=nf_output/output_histogram_data_directory/numerical_spectra.npy"
+    params_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={dev_task_id}&file=job_parameters.yaml"
+    warnings_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={dev_task_id}&file=nf_output/errors.csv"
+    
 else:
     labels_url = f"https://gnps2.org/resultfile?task={st.session_state['task_id']}&file=nf_output/output_histogram_data_directory/labels_spectra.tsv"
     numpy_url = f"https://gnps2.org/resultfile?task={st.session_state['task_id']}&file=nf_output/output_histogram_data_directory/numerical_spectra.npy"
     params_url = f"https://gnps2.org/resultfile?task={st.session_state['task_id']}&file=job_parameters.yaml"
+    warnings_url = f"https://gnps2.org/resultfile?task={st.session_state['task_id']}&file=nf_output/errors.csv"
     
 workflow_params = write_job_params(params_url)
+write_warnings(warnings_url)
 
 # By request, no longer displaying labels url
 if False:
