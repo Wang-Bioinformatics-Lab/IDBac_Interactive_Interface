@@ -1,11 +1,15 @@
 import streamlit as st
 import streamlit.components.v1 as components
 from pyvis import network as net
+from pyvis import options as pyvis_options
 import pandas as pd
 import numpy as np
 import json
 import requests
 import plotly
+import networkx as nx
+import matplotlib.pyplot as plt
+from matplotlib import colors
 
 # Set Page Configuration
 st.set_page_config(page_title="IDBac - Small Molecule Association", page_icon=None, layout="wide", initial_sidebar_state="collapsed", menu_items=None)
@@ -136,7 +140,7 @@ def filter_small_molecule_dict(small_molecule_dict):
     return output
 
 def generate_network(height=1000, width=600):
-    # TODO: Right now we don't integrate all_spectra_df which means there could be nodes that aren't truely in the network
+    # TODO: Right now we don't integrate all_spectra_df which means there could be nodes that aren't truly in the network
     if st.session_state.get("metadata_df") is None:
         st.error("Please upload a metadata file first.")
         st.stop()
@@ -146,28 +150,79 @@ def generate_network(height=1000, width=600):
         st.error("Please upload a metadata file with a 'Small molecule file name' column.")
         st.stop()
     
-    graph = net.Network(height=f'{height}px', width='100%')
+    nx_G = nx.Graph()
+    cmap = plt.get_cmap(st.session_state.get("sm_node_color_map"))
     
     # Add nodes from df['Filename'] and df['Small molecule file name']
     all_filenames = df.loc[~ df['Filename'].isna()].Filename.tolist()
     all_small_molecule_filenames = df.loc[~ df['Small molecule file name'].isna()]['Small molecule file name'].tolist()
     for filename in all_filenames:
-        graph.add_node(filename, title=filename)
+        nx_G.add_node(filename, title=filename, color=colors.to_hex(cmap(0)), type="Protein")
     # for small_molecule_filename in all_small_molecule_filenames:
     #     graph.add_node(small_molecule_filename, title=small_molecule_filename)
-    
+        
     small_mol_dict = filter_small_molecule_dict(get_small_molecule_dict())
     all_mzs = [small_mol_dict.get('m/z array', []) for small_mol_dict in small_mol_dict.values()]
     all_mzs = [mz for sublist in all_mzs for mz in sublist] # Flatten
     all_mzs = np.unique(all_mzs)
     for mz in all_mzs:
-        graph.add_node(str(mz), title=f'{mz} m/z', color='#ff7f0e')
+        nx_G.add_node(str(mz), title=f'{mz} m/z', color=colors.to_hex(cmap(1)), type="Small Molecule")
     
     # Add edges from df['Filename] to m/z's associated with df['Small molecule file name']
     for index, row in df.iterrows():
         if not pd.isna(row['Filename']) and not pd.isna(row['Small molecule file name']):
             for mz in small_mol_dict[row['Small molecule file name']]['m/z array']:
-                graph.add_edge(row['Filename'], str(mz))
+                nx_G.add_edge(row['Filename'], str(mz))
+                
+    # Perform Coloring
+    if st.session_state.get("sm_node_coloring") == "Network Community Detection":
+        community_fn_mapping = {"Louvain": nx.algorithms.community.greedy_modularity_communities,
+                                "Greedy Modularity": nx.algorithms.community.greedy_modularity_communities}
+        communities = community_fn_mapping[st.session_state.get("sm_cluster_method")](nx_G)
+        
+        
+        # Assign colors to nodes
+        node_color_map = {}
+        for i, community in enumerate(communities):
+            
+            for node in community:
+                node_color_map[node] = colors.to_hex(cmap(i))
+        nx.set_node_attributes(nx_G, node_color_map, 'color')
+           
+    # Perform Layout
+    pos=None
+    pyvis_options.Layout(randomSeed=42)
+    if st.session_state.get("sm_network_layout") != 'Default':  # If default, we'll use the defauly pyvis layout
+        layout_fn_mapping = {"Spring": nx.drawing.layout.spring_layout,
+                             "Circular": nx.drawing.layout.circular_layout,
+                             "Spectral": nx.drawing.layout.spectral_layout,
+                             "Kamada-Kawai": nx.drawing.layout.kamada_kawai_layout,
+                             "Bipartite Layout": nx.drawing.layout.bipartite_layout}        
+        layout_default_params = {"Spring": {"k": 0.30, "seed":42},
+                                 "Circular": {},
+                                 "Spectral": {},
+                                 "Kamada-Kawai": {}}
+        # Apply layout
+        pos = layout_fn_mapping[st.session_state.get("sm_network_layout")](nx_G, **layout_default_params[st.session_state.get("sm_network_layout")])
+    
+    # Convery to PyVis Graph
+    graph = net.Network(height=f'{height}px', width='100%')
+    for node in nx_G.nodes:
+        if pos is not None:
+            x_pos = pos.get(node)[0] * width
+            y_pos = pos.get(node)[1] * height
+        else:
+            x_pos = None
+            y_pos = None
+        graph.add_node(node,
+                       title=nx_G.nodes[node].get('title', ''),
+                       color=nx_G.nodes[node].get('color', '#000000'),  # Black to spot errors
+                       x=x_pos,
+                       y=y_pos,
+                       physics=st.session_state.get("sm_physics", False) == "True"
+                       )
+    for edge in nx_G.edges:
+        graph.add_edge(edge[0], edge[1])
     
     # Generate HTML code for the graph
     html_graph = graph.generate_html()
@@ -239,7 +294,7 @@ st.slider("Replicate Frequency Threshold", min_value=0.00, max_value=1.0, value=
 
 # Add text input to select certain m/z's (comma-seperated)
 mz_col1, mz_col2 = st.columns([3, 1])
-mz_col1.text_input("Select Displayed m/z Values", key="sm_selected_mzs", help="Enter m/z values seperated by commas. Ranges can be entered as [127.0-], or [125.0-10]. No value will show all m/z values.")
+mz_col1.text_input("Filter m/z Values", key="sm_selected_mzs", help="Enter m/z values seperated by commas. Ranges can be entered as [127.0-], or [125.0-10]. No value will show all m/z values.")
 mz_col2.number_input("Tolerance (m/z)", key="sm_mz_tolerance", value=0.1, help="Tolerance for the selected m/z values. Does not apply to ranges.")
 try:
     if st.session_state.get("sm_selected_mzs"):
@@ -250,8 +305,33 @@ except:
     st.error("Please enter valid m/z values.")
     st.stop()
 
-# st.subheader("Network Display Options")
-# # TODO
+st.subheader("Network Display Options")
+st.selectbox("Network Layout", ["Default", "Spring", "Circular", "Spectral", "Kamada-Kawai"], key="sm_network_layout")
+if st.session_state.get("sm_network_layout") == 'Default':
+    # Enable physics by default because it helps with the layout
+    st.selectbox("Physics", ["True", "False"], key="sm_physics")
+else:
+    st.session_state["sm_physics"] = "False"
+st.selectbox("Node Coloring", ["Protein/Small Molecule", "Network Community Detection", "Spectral Similarity"], key="sm_node_coloring")
+if st.session_state.get("sm_node_coloring") == "Network Community Detection":
+    st.selectbox("Cluster Method", ["Louvain", "Greedy Modularity",], key="sm_cluster_method")
+    # Add citations
+    if st.session_state.get("sm_cluster_method") == "Louvain":
+        st.text("https://doi.org/10.1088/1742-5468/2008/10/P10008")
+    elif st.session_state.get("sm_cluster_method") == "Greedy Modularity":
+        st.text("https://doi.org/10.1103/PhysRevE.70.066111")
+elif st.session_state.get("sm_node_coloring") == "Spectral Similarity":
+    st.error("Spectral Similarity is not yet implemented.")
+    st.stop()
+    st.selectbox("Similarity Method", ["Jaccard", "Cosine", "Euclidean"])
+st.selectbox("Node Color Map", ['tab10', 'tab20', 'tab20b','tab20c',
+                                'Pastel1', 'Pastel2', 'Paired', 
+                                'Accent', 'Dark2', 'Set1', 'Set2', 'Set3'], 
+                                key="sm_node_color_map", help='See available color maps: \
+                                https://matplotlib.org/stable/users/explain/colors/colormaps.html#qualitative')
+# TODO: Coloring
+
+# TODO: Clustering (May only appear if coloring by cluster is selected)
 
 generate_network()
 

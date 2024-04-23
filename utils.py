@@ -38,7 +38,6 @@ def write_warnings(param_url:str)->None:
     if r.status_code == 500:
         st.warning(f"**Warning:** This is an old task and warnings are not available. Please re-run the task if you want to gather warnings.")
         return None
-    r.raise_for_status()
     
     warnings_df = pd.read_csv(io.StringIO(r.text), index_col=0)
     
