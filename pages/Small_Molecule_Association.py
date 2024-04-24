@@ -11,6 +11,12 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from matplotlib import colors
 
+#####
+# A note abote streamlit session states:
+# All session states related to this page begin with "sma_" to reduce the 
+# chance of collisions with other pages. 
+#####
+
 # Set Page Configuration
 st.set_page_config(page_title="IDBac - Small Molecule Association", page_icon=None, layout="wide", initial_sidebar_state="collapsed", menu_items=None)
 
@@ -112,15 +118,15 @@ def filter_small_molecule_dict(small_molecule_dict):
         frequency_array = d['frequency array']
         
         # Get indices where intensity is above threshold
-        indices = [i for i, (intensity, frequency) in enumerate(zip(intensity_array, frequency_array)) if intensity > st.session_state.get("sm_relative_intensity_threshold", 0.1) and frequency > st.session_state.get("sm_replicate_frequency_threshold", 0.7)]
+        indices = [i for i, (intensity, frequency) in enumerate(zip(intensity_array, frequency_array)) if intensity > st.session_state.get("sma_relative_intensity_threshold", 0.1) and frequency > st.session_state.get("sma_replicate_frequency_threshold", 0.7)]
         # Get indices where m/z is within tolerance
-        if len(st.session_state.get("sm_parsed_selected_mzs")) > 0:
+        if len(st.session_state.get("sma_parsed_selected_mzs")) > 0:
             mz_filtered_indices = set()
             
             for i, mz in enumerate(mz_array):
-                for filter in st.session_state.get("sm_parsed_selected_mzs"):
+                for filter in st.session_state.get("sma_parsed_selected_mzs"):
                     if isinstance(filter, float):
-                        if abs(mz - filter) <= st.session_state.get("sm_mz_tolerance", 0.1):
+                        if abs(mz - filter) <= st.session_state.get("sma_mz_tolerance", 0.1):
                             mz_filtered_indices.add(i)
                     else:
                         start, end = filter
@@ -151,7 +157,7 @@ def generate_network(height=1000, width=600):
         st.stop()
     
     nx_G = nx.Graph()
-    cmap = plt.get_cmap(st.session_state.get("sm_node_color_map"))
+    cmap = plt.get_cmap(st.session_state.get("sma_node_color_map"))
     
     # Add nodes from df['Filename'] and df['Small molecule file name']
     all_filenames = df.loc[~ df['Filename'].isna()].Filename.tolist()
@@ -175,10 +181,10 @@ def generate_network(height=1000, width=600):
                 nx_G.add_edge(row['Filename'], str(mz))
                 
     # Perform Coloring
-    if st.session_state.get("sm_node_coloring") == "Network Community Detection":
+    if st.session_state.get("sma_node_coloring") == "Network Community Detection":
         community_fn_mapping = {"Louvain": nx.algorithms.community.greedy_modularity_communities,
                                 "Greedy Modularity": nx.algorithms.community.greedy_modularity_communities}
-        communities = community_fn_mapping[st.session_state.get("sm_cluster_method")](nx_G)
+        communities = community_fn_mapping[st.session_state.get("sma_cluster_method")](nx_G)
         
         
         # Assign colors to nodes
@@ -192,7 +198,7 @@ def generate_network(height=1000, width=600):
     # Perform Layout
     pos=None
     pyvis_options.Layout(randomSeed=42)
-    if st.session_state.get("sm_network_layout") != 'Default':  # If default, we'll use the defauly pyvis layout
+    if st.session_state.get("sma_network_layout") != 'Default':  # If default, we'll use the defauly pyvis layout
         layout_fn_mapping = {"Spring": nx.drawing.layout.spring_layout,
                              "Circular": nx.drawing.layout.circular_layout,
                              "Spectral": nx.drawing.layout.spectral_layout,
@@ -203,7 +209,7 @@ def generate_network(height=1000, width=600):
                                  "Spectral": {},
                                  "Kamada-Kawai": {}}
         # Apply layout
-        pos = layout_fn_mapping[st.session_state.get("sm_network_layout")](nx_G, **layout_default_params[st.session_state.get("sm_network_layout")])
+        pos = layout_fn_mapping[st.session_state.get("sma_network_layout")](nx_G, **layout_default_params[st.session_state.get("sma_network_layout")])
     
     # Convery to PyVis Graph
     graph = net.Network(height=f'{height}px', width='100%')
@@ -219,7 +225,7 @@ def generate_network(height=1000, width=600):
                        color=nx_G.nodes[node].get('color', '#000000'),  # Black to spot errors
                        x=x_pos,
                        y=y_pos,
-                       physics=st.session_state.get("sm_physics", False) == "True"
+                       physics=st.session_state.get("sma_physics", False) == "True"
                        )
     for edge in nx_G.edges:
         graph.add_edge(edge[0], edge[1])
@@ -245,11 +251,11 @@ def make_heatmap():
     all_mzs = [mz for sublist in all_mzs for mz in sublist] # Flatten
     all_mzs = np.sort(np.unique(all_mzs))
        
-    heatmap = np.ones((len(st.session_state["sm_selected_proteins"]), len(all_mzs))) * np.nan
+    heatmap = np.ones((len(st.session_state["sma_selected_proteins"]), len(all_mzs))) * np.nan
     
-    df = pd.DataFrame(heatmap, columns=all_mzs, index=st.session_state["sm_selected_proteins"])
+    df = pd.DataFrame(heatmap, columns=all_mzs, index=st.session_state["sma_selected_proteins"])
     
-    for filename in st.session_state["sm_selected_proteins"]:
+    for filename in st.session_state["sma_selected_proteins"]:
         relevant_mapping = mapping[mapping['Filename'] == filename]
         all_small_molecule_filenames = relevant_mapping['Small molecule file name'].tolist()
         
@@ -258,7 +264,7 @@ def make_heatmap():
             intensity_array = small_mol_dict[small_molecule_filename]['intensity array']
             
             for mz, intensity in zip(mz_array, intensity_array):
-                if intensity > st.session_state.get("sm_relative_intensity_threshold", 0.1):
+                if intensity > st.session_state.get("sma_relative_intensity_threshold", 0.1):
                     df.at[filename, mz] = intensity
             
     # Remove cols with all nans
@@ -289,45 +295,50 @@ def make_heatmap():
 
 st.subheader("Small Molecule Filters")
 # Add a slider for the relative intensity threshold
-st.slider("Relative Intensity Threshold", min_value=0.05, max_value=1.0, value=0.15, step=0.01, key="sm_relative_intensity_threshold")
-st.slider("Replicate Frequency Threshold", min_value=0.00, max_value=1.0, value=0.70, step=0.05, key="sm_replicate_frequency_threshold", help="Only show m/z values that occur in at least this percentage of replicates.")
+st.slider("Relative Intensity Threshold", min_value=0.05, max_value=1.0, value=0.15, step=0.01, key="sma_relative_intensity_threshold")
+st.slider("Replicate Frequency Threshold", min_value=0.00, max_value=1.0, value=0.70, step=0.05, key="sma_replicate_frequency_threshold", help="Only show m/z values that occur in at least this percentage of replicates.")
 
 # Add text input to select certain m/z's (comma-seperated)
 mz_col1, mz_col2 = st.columns([3, 1])
-mz_col1.text_input("Filter m/z Values", key="sm_selected_mzs", help="Enter m/z values seperated by commas. Ranges can be entered as [127.0-], or [125.0-10]. No value will show all m/z values.")
-mz_col2.number_input("Tolerance (m/z)", key="sm_mz_tolerance", value=0.1, help="Tolerance for the selected m/z values. Does not apply to ranges.")
+mz_col1.text_input("Filter m/z Values", key="sma_selected_mzs", help="Enter m/z values seperated by commas. Ranges can be entered as [127.0-], or [125.0-10]. No value will show all m/z values.")
+mz_col2.number_input("Tolerance (m/z)", key="sma_mz_tolerance", value=0.1, help="Tolerance for the selected m/z values. Does not apply to ranges.")
 try:
-    if st.session_state.get("sm_selected_mzs"):
-        st.session_state["sm_parsed_selected_mzs"] = parse_numerical_input(st.session_state["sm_selected_mzs"])
+    if st.session_state.get("sma_selected_mzs"):
+        st.session_state["sma_parsed_selected_mzs"] = parse_numerical_input(st.session_state["sma_selected_mzs"])
     else:
-        st.session_state["sm_parsed_selected_mzs"] = []
+        st.session_state["sma_parsed_selected_mzs"] = []
 except:
     st.error("Please enter valid m/z values.")
     st.stop()
 
 st.subheader("Network Display Options")
-st.selectbox("Network Layout", ["Default", "Spring", "Circular", "Spectral", "Kamada-Kawai"], key="sm_network_layout")
-if st.session_state.get("sm_network_layout") == 'Default':
+st.selectbox("Network Layout", ["Default", "Spring", "Circular", "Spectral", "Kamada-Kawai"], key="sma_network_layout")
+if st.session_state.get("sma_network_layout") == 'Default':
     # Enable physics by default because it helps with the layout
-    st.selectbox("Physics", ["True", "False"], key="sm_physics")
+    st.selectbox("Physics", ["True", "False"], key="sma_physics")
 else:
-    st.session_state["sm_physics"] = "False"
-st.selectbox("Node Coloring", ["Protein/Small Molecule", "Network Community Detection", "Spectral Similarity"], key="sm_node_coloring")
-if st.session_state.get("sm_node_coloring") == "Network Community Detection":
-    st.selectbox("Cluster Method", ["Louvain", "Greedy Modularity",], key="sm_cluster_method")
+    st.session_state["sma_physics"] = "False"
+st.selectbox("Node Coloring", ["Protein/Small Molecule", "Network Community Detection", "Spectral Similarity"], key="sma_node_coloring")
+
+# Network Community Detection
+if st.session_state.get("sma_node_coloring") == "Network Community Detection" \
+    or st.session_state.get("sma_node_shapes") == "Network Community Detection":
+    st.selectbox("Cluster Method", ["Louvain", "Greedy Modularity",], key="sma_cluster_method")
     # Add citations
-    if st.session_state.get("sm_cluster_method") == "Louvain":
+    if st.session_state.get("sma_cluster_method") == "Louvain":
         st.text("https://doi.org/10.1088/1742-5468/2008/10/P10008")
-    elif st.session_state.get("sm_cluster_method") == "Greedy Modularity":
+    elif st.session_state.get("sma_cluster_method") == "Greedy Modularity":
         st.text("https://doi.org/10.1103/PhysRevE.70.066111")
-elif st.session_state.get("sm_node_coloring") == "Spectral Similarity":
+# Spectral Similarity
+elif st.session_state.get("sma_node_coloring") == "Spectral Similarity":
     st.error("Spectral Similarity is not yet implemented.")
     st.stop()
     st.selectbox("Similarity Method", ["Jaccard", "Cosine", "Euclidean"])
+# Network Coloring Option
 st.selectbox("Node Color Map", ['tab10', 'tab20', 'tab20b','tab20c',
                                 'Pastel1', 'Pastel2', 'Paired', 
                                 'Accent', 'Dark2', 'Set1', 'Set2', 'Set3'], 
-                                key="sm_node_color_map", help='See available color maps: \
+                                key="sma_node_color_map", help='See available color maps: \
                                 https://matplotlib.org/stable/users/explain/colors/colormaps.html#qualitative')
 # TODO: Coloring
 
@@ -336,6 +347,6 @@ st.selectbox("Node Color Map", ['tab10', 'tab20', 'tab20b','tab20c',
 generate_network()
 
 st.header("Small Molecule Heatmap")
-st.multiselect("Select Proteins", st.session_state["metadata_df"]['Filename'].unique(), key='sm_selected_proteins')
+st.multiselect("Select Proteins", st.session_state["metadata_df"]['Filename'].unique(), key='sma_selected_proteins')
 
 make_heatmap()
