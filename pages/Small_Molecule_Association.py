@@ -397,7 +397,7 @@ if st.session_state.get("sma_node_coloring") == "Network Community Detection" or
     elif st.session_state.get("sma_cluster_method") == "Greedy Modularity":
         st.text("https://doi.org/10.1103/PhysRevE.70.066111")
 # Options for Spectral Similarty Node Properties
-elif st.session_state.get("sma_node_coloring") == "Spectral Similarity" or \
+if st.session_state.get("sma_node_coloring") == "Spectral Similarity" or \
      st.session_state.get("sma_node_shapes") == "Spectral Similarity":
         st.subheader("Spectral Similarity Options")
         st.error("Spectral Similarity is not yet implemented.")
