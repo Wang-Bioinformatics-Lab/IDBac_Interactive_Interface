@@ -145,6 +145,33 @@ def filter_small_molecule_dict(small_molecule_dict):
         output[k] = d
     return output
 
+class ShapeMap():
+    def __init__(self):
+        self.shape_map = {0:'circle', 1:'box', 2:'ellipse', 3:'diamond', 4:'dot', 5:'star', 6:'triangle', 7:'triangleDown', 8:'square'}
+        
+    def get_shape(self, index):
+        """This function returns a shape for a node based on the index. If the index is less than zero, a ValueError is raised. If 
+        the index is greater than 8, the index is modded by 8 and a warning is returned.
+
+        Parameters:
+        index (int): The index of the shape to return
+        
+        Returns:
+        str: The shape of the node
+        bool: A warning if the index was out of bounds
+        
+        Raises:
+        ValueError: If the index is less than 0
+        """
+        warning = False # If the index is out of bounds, we'll reuse shapes and return an error
+        if index < 0:
+            raise ValueError("Index must be greater than 0")
+        if index > 8: 
+            warning = True
+            index = index % 8
+        return self.shape_map[index], warning
+    
+
 def generate_network(height=1000, width=600):
     # TODO: Right now we don't integrate all_spectra_df which means there could be nodes that aren't truly in the network
     if st.session_state.get("metadata_df") is None:
@@ -158,12 +185,16 @@ def generate_network(height=1000, width=600):
     
     nx_G = nx.Graph()
     cmap = plt.get_cmap(st.session_state.get("sma_node_color_map"))
+    shape_map = ShapeMap()
     
     # Add nodes from df['Filename'] and df['Small molecule file name']
     all_filenames = df.loc[~ df['Filename'].isna()].Filename.tolist()
     all_small_molecule_filenames = df.loc[~ df['Small molecule file name'].isna()]['Small molecule file name'].tolist()
     for filename in all_filenames:
-        nx_G.add_node(filename, title=filename, color=colors.to_hex(cmap(0)), type="Protein")
+        nx_G.add_node(filename, 
+                      title=filename, color=colors.to_hex(cmap(0)), 
+                      type="Protein",
+                      shape=shape_map.get_shape(0)[0])
     # for small_molecule_filename in all_small_molecule_filenames:
     #     graph.add_node(small_molecule_filename, title=small_molecule_filename)
         
@@ -172,7 +203,16 @@ def generate_network(height=1000, width=600):
     all_mzs = [mz for sublist in all_mzs for mz in sublist] # Flatten
     all_mzs = np.unique(all_mzs)
     for mz in all_mzs:
-        nx_G.add_node(str(mz), title=f'{mz} m/z', color=colors.to_hex(cmap(1)), type="Small Molecule")
+        small_molecule_shape = shape_map.get_shape(1)[0]
+        if st.session_state.get("sma_node_shapes") == "Circular":
+            small_molecule_shape = shape_map.get_shape(0)[0]
+            
+        
+        nx_G.add_node(str(mz), 
+                      title=f'{mz} m/z', 
+                      color=colors.to_hex(cmap(1)), 
+                      type="Small Molecule",
+                      shape=small_molecule_shape)
     
     # Add edges from df['Filename] to m/z's associated with df['Small molecule file name']
     for index, row in df.iterrows():
@@ -181,19 +221,35 @@ def generate_network(height=1000, width=600):
                 nx_G.add_edge(row['Filename'], str(mz))
                 
     # Perform Coloring
-    if st.session_state.get("sma_node_coloring") == "Network Community Detection":
+    if st.session_state.get("sma_node_coloring") == "Network Community Detection" or \
+        st.session_state.get("sma_node_shapes") == "Network Community Detection":
         community_fn_mapping = {"Louvain": nx.algorithms.community.greedy_modularity_communities,
                                 "Greedy Modularity": nx.algorithms.community.greedy_modularity_communities}
         communities = community_fn_mapping[st.session_state.get("sma_cluster_method")](nx_G)
         
+        if st.session_state.get("sma_node_coloring") == "Network Community Detection":
+            node_color_map = {}
+        if st.session_state.get("sma_node_shapes") == "Network Community Detection":
+            node_shape_map = {}
+            warning_flag_set = False
         
-        # Assign colors to nodes
-        node_color_map = {}
+        # Assign color/shape based on communty
         for i, community in enumerate(communities):
-            
             for node in community:
-                node_color_map[node] = colors.to_hex(cmap(i))
-        nx.set_node_attributes(nx_G, node_color_map, 'color')
+                if st.session_state.get("sma_node_coloring") == "Network Community Detection":
+                    node_color_map[node] = colors.to_hex(cmap(i))
+                if st.session_state.get("sma_node_shapes") == "Network Community Detection":
+                    color, warn = shape_map.get_shape(i)
+                    node_shape_map[node] = color
+                    if warn:
+                        warning_flag_set = True
+                        
+        if st.session_state.get("sma_node_coloring") == "Network Community Detection":
+            nx.set_node_attributes(nx_G, node_color_map, 'color')
+        if st.session_state.get("sma_node_shapes") == "Network Community Detection":
+            nx.set_node_attributes(nx_G, node_shape_map, 'shape')
+            if warning_flag_set:
+                st.warning("More than 8 communities detected. Some shapes will be reused.")
            
     # Perform Layout
     pos=None
@@ -225,6 +281,7 @@ def generate_network(height=1000, width=600):
                        color=nx_G.nodes[node].get('color', '#000000'),  # Black to spot errors
                        x=x_pos,
                        y=y_pos,
+                       shape=nx_G.nodes[node].get('shape'),
                        physics=st.session_state.get("sma_physics", False) == "True"
                        )
     for edge in nx_G.edges:
@@ -312,37 +369,40 @@ except:
     st.stop()
 
 st.subheader("Network Display Options")
+#### Network Layout Options
 st.selectbox("Network Layout", ["Default", "Spring", "Circular", "Spectral", "Kamada-Kawai"], key="sma_network_layout")
 if st.session_state.get("sma_network_layout") == 'Default':
     # Enable physics by default because it helps with the layout
     st.selectbox("Physics", ["True", "False"], key="sma_physics")
 else:
     st.session_state["sma_physics"] = "False"
-st.selectbox("Node Coloring", ["Protein/Small Molecule", "Network Community Detection", "Spectral Similarity"], key="sma_node_coloring")
 
-# Network Community Detection
-if st.session_state.get("sma_node_coloring") == "Network Community Detection" \
-    or st.session_state.get("sma_node_shapes") == "Network Community Detection":
-    st.selectbox("Cluster Method", ["Louvain", "Greedy Modularity",], key="sma_cluster_method")
-    # Add citations
-    if st.session_state.get("sma_cluster_method") == "Louvain":
-        st.text("https://doi.org/10.1088/1742-5468/2008/10/P10008")
-    elif st.session_state.get("sma_cluster_method") == "Greedy Modularity":
-        st.text("https://doi.org/10.1103/PhysRevE.70.066111")
-# Spectral Similarity
-elif st.session_state.get("sma_node_coloring") == "Spectral Similarity":
-    st.error("Spectral Similarity is not yet implemented.")
-    st.stop()
-    st.selectbox("Similarity Method", ["Jaccard", "Cosine", "Euclidean"])
-# Network Coloring Option
+#### Network Coloring Option 
+st.selectbox("Node Coloring", ["Protein/Small Molecule", "Network Community Detection", "Spectral Similarity"], key="sma_node_coloring")
 st.selectbox("Node Color Map", ['tab10', 'tab20', 'tab20b','tab20c',
                                 'Pastel1', 'Pastel2', 'Paired', 
                                 'Accent', 'Dark2', 'Set1', 'Set2', 'Set3'], 
                                 key="sma_node_color_map", help='See available color maps: \
                                 https://matplotlib.org/stable/users/explain/colors/colormaps.html#qualitative')
-# TODO: Coloring
+st.selectbox("Node Shapes", ["Circular","Protein/Small Molecule", "Network Community Detection", "Spectral Similarity"], key="sma_node_shapes")
 
-# TODO: Clustering (May only appear if coloring by cluster is selected)
+#### Network Community Detection Options
+# Options for Network Community Detection Node Properties
+if st.session_state.get("sma_node_coloring") == "Network Community Detection" or \
+   st.session_state.get("sma_node_shapes") == "Network Community Detection":
+    st.subheader("Network Community Detection Options")
+    st.selectbox("Cluster Method", ["Louvain", "Greedy Modularity",], key="sma_cluster_method")
+    if st.session_state.get("sma_cluster_method") == "Louvain":
+        st.text("https://doi.org/10.1088/1742-5468/2008/10/P10008")
+    elif st.session_state.get("sma_cluster_method") == "Greedy Modularity":
+        st.text("https://doi.org/10.1103/PhysRevE.70.066111")
+# Options for Spectral Similarty Node Properties
+elif st.session_state.get("sma_node_coloring") == "Spectral Similarity" or \
+     st.session_state.get("sma_node_shapes") == "Spectral Similarity":
+        st.subheader("Spectral Similarity Options")
+        st.error("Spectral Similarity is not yet implemented.")
+        st.stop()
+        st.selectbox("Similarity Method", ["Jaccard", "Cosine", "Euclidean"])
 
 generate_network()
 
