@@ -21,7 +21,7 @@ from matplotlib import colors
 st.set_page_config(page_title="IDBac - Small Molecule Association", page_icon=None, layout="wide", initial_sidebar_state="collapsed", menu_items=None)
 
 st.info("Welcome to IDBac's Small Molecule Association Page! This page is currently in development.")
-
+   
 def parse_numerical_input(string:str) -> list:
     initial_list = [entry.strip() for entry in string.split(",")]
     # Format ranges as tuples: '[10-20]' -> (10, 20), [10-] -> (10, np.inf)
@@ -323,7 +323,11 @@ def make_heatmap():
             for mz, intensity in zip(mz_array, intensity_array):
                 if intensity > st.session_state.get("sma_relative_intensity_threshold", 0.1):
                     df.at[filename, mz] = intensity
-            
+    
+    # Remove columns that don't meet the frequency threshold
+    if st.session_state.get("sma_min_mz_frequency") > 1:
+        df = df.loc[:, (df.count() >= st.session_state.get("sma_min_mz_frequency"))]
+        
     # Remove cols with all nans
     df = df.loc[:, (df.notna()).any(axis=0)]
     
@@ -409,4 +413,12 @@ generate_network()
 st.header("Small Molecule Heatmap")
 st.multiselect("Select Proteins", st.session_state["metadata_df"]['Filename'].unique(), key='sma_selected_proteins')
 
+# Option for minimum instance frequency
+curr_num_proteins = len(st.session_state.get("sma_selected_proteins", []))
+
+if curr_num_proteins > 1:
+    st.slider("Display m/z values that are associated with this many Proteins", min_value=1, max_value=curr_num_proteins, value=1, step=1, key="sma_min_mz_frequency")
+else:
+    # Display disabled
+    st.slider("Display m/z values that are associated with this many Proteins", min_value=0, max_value=1, value=1, step=1, key="sma_min_mz_frequency", disabled=True)
 make_heatmap()
