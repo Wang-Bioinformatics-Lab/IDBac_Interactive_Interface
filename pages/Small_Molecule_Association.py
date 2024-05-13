@@ -310,7 +310,7 @@ def generate_network(cluster_dict:dict=None, height=1000, width=600):
                         node_color_map[node] = "#ffffff"
                         color_warning_flag_set = True
                 if st.session_state.get("sma_node_shapes") == "Spectral Similarity":
-                    shape, warn = shape_map.get_shape(color)
+                    shape, warn = shape_map.get_shape(c_id)
                     node_shape_map[node] = shape
                     if warn:
                         warning_flag_set = True
