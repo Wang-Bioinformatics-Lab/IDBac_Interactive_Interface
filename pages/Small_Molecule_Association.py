@@ -10,6 +10,9 @@ import plotly
 import networkx as nx
 import matplotlib.pyplot as plt
 from matplotlib import colors
+import plotly.figure_factory as ff
+from scipy.cluster.hierarchy import linkage, dendrogram
+
 
 #####
 # A note abote streamlit session states:
@@ -21,6 +24,42 @@ from matplotlib import colors
 st.set_page_config(page_title="IDBac - Small Molecule Association", page_icon=None, layout="wide", initial_sidebar_state="collapsed", menu_items=None)
 
 st.info("Welcome to IDBac's Small Molecule Association Page! This page is currently in development.")
+
+def basic_dendrogram():
+    """
+    This function generates a basic dendrogram for the small molecule association page. 
+    """
+    st.slider("Coloring Threshold", min_value=0.0, max_value=1.0, value=0.7, step=0.01, key="sma_coloring_threshold")
+    clustering_options = ["ward", "single", "complete", "average", "weighted", "centroid", "median"]
+    st.selectbox("Clustering Method", clustering_options, key="sma_clustering_method")
+    ### DEBUG
+    print(st.session_state['query_spectra_numpy_data'], flush=True)
+    dendro = ff.create_dendrogram(st.session_state['query_spectra_numpy_data'],
+                                orientation='left',
+                                labels=st.session_state['query_only_spectra_df'].filename.values, # We will use the labels as a unique identifier
+                                distfun=st.session_state['distance_measure'],
+                                linkagefun=lambda x: linkage(x, method=st.session_state["sma_clustering_method"],),
+                                color_threshold=st.session_state["sma_coloring_threshold"])
+    
+    st.plotly_chart(dendro, use_container_width=True)
+    # Sadly the only way to get the actual clusters (to plot the graph) is to recompute the linkage with scipy
+    # (TODO: Just used scipy to plot it)
+    dist_matrix = st.session_state['distance_measure'](st.session_state['query_spectra_numpy_data'])
+    linkage_matrix = linkage(dist_matrix,
+                            method=st.session_state["sma_clustering_method"])
+    sch_dendro = dendrogram(linkage_matrix,
+                            labels=st.session_state['query_only_spectra_df'].filename.values,
+                            no_plot=True,
+                            color_threshold=st.session_state["sma_coloring_threshold"])
+    
+    # Note that C0 means unclustered here:
+    cluster_dict = {filename: color for filename, color in zip(sch_dendro['ivl'], sch_dendro['leaves_color_list'])}
+    # Replace C0, C1, C2 with integers 
+    cluster_dict = {filename: int(color[1:]) for filename, color in cluster_dict.items()}
+    # Add 1 if value >= 1 to reserve 1 for small molecules, 0 for unclustered
+    cluster_dict = {filename: color + 1 if color >= 1 else 0 for filename, color in cluster_dict.items()}
+    
+    return cluster_dict
 
 def parse_numerical_input(string:str) -> list:
     initial_list = [entry.strip() for entry in string.split(",")]
@@ -172,7 +211,7 @@ class ShapeMap():
         return self.shape_map[index], warning
     
 
-def generate_network(height=1000, width=600):
+def generate_network(cluster_dict:dict=None, height=1000, width=600):
     # TODO: Right now we don't integrate all_spectra_df which means there could be nodes that aren't truly in the network
     if st.session_state.get("metadata_df") is None:
         st.error("Please upload a metadata file first.")
@@ -218,9 +257,9 @@ def generate_network(height=1000, width=600):
     for index, row in df.iterrows():
         if not pd.isna(row['Filename']) and not pd.isna(row['Small molecule file name']):
             for mz in small_mol_dict[row['Small molecule file name']]['m/z array']:
-                nx_G.add_edge(row['Filename'], str(mz))
+                nx_G.add_edge(row['Filename'], str(mz), weight=6) # Weight modulates distnaces for some layouts
                 
-    # Perform Coloring
+    # Calculate Coloring
     if st.session_state.get("sma_node_coloring") == "Network Community Detection" or \
         st.session_state.get("sma_node_shapes") == "Network Community Detection":
         community_fn_mapping = {"Louvain": nx.algorithms.community.greedy_modularity_communities,
@@ -233,7 +272,7 @@ def generate_network(height=1000, width=600):
             node_shape_map = {}
             warning_flag_set = False
         
-        # Assign color/shape based on communty
+        # Assign color/shape based on community
         for i, community in enumerate(communities):
             for node in community:
                 if st.session_state.get("sma_node_coloring") == "Network Community Detection":
@@ -250,6 +289,41 @@ def generate_network(height=1000, width=600):
             nx.set_node_attributes(nx_G, node_shape_map, 'shape')
             if warning_flag_set:
                 st.warning("More than 8 communities detected. Some shapes will be reused.")
+                
+    if st.session_state.get("sma_node_coloring") == "Spectral Similarity" or \
+        st.session_state.get("sma_node_shapes") == "Spectral Similarity":
+            communities = cluster_dict
+            
+            if st.session_state.get("sma_node_coloring") == "Spectral Similarity":
+                node_color_map = {}
+                color_warning_flag_set = False
+            if st.session_state.get("sma_node_shapes") == "Spectral Similarity":
+                node_shape_map = {}
+                warning_flag_set = False
+                
+            # Assign color/shape based on community
+            for node, c_id in communities.items():
+                if st.session_state.get("sma_node_coloring") == "Spectral Similarity":
+                    if c_id != 0:
+                        node_color_map[node] = colors.to_hex(cmap(c_id))
+                    else:
+                        node_color_map[node] = "#ffffff"
+                        color_warning_flag_set = True
+                if st.session_state.get("sma_node_shapes") == "Spectral Similarity":
+                    shape, warn = shape_map.get_shape(color)
+                    node_shape_map[node] = shape
+                    if warn:
+                        warning_flag_set = True
+                        
+            if st.session_state.get("sma_node_coloring") == "Spectral Similarity":
+                nx.set_node_attributes(nx_G, node_color_map, 'color')
+            if st.session_state.get("sma_node_shapes") == "Spectral Similarity":
+                nx.set_node_attributes(nx_G, node_shape_map, 'shape')
+                if warning_flag_set:
+                    st.warning("More than 8 clusters detected. Some shapes will be reused.")
+                    
+            if color_warning_flag_set:
+                st.warning("Unclustered nodes are white.")
            
     # Perform Layout
     pos=None
@@ -260,14 +334,39 @@ def generate_network(height=1000, width=600):
                              "Spectral": nx.drawing.layout.spectral_layout,
                              "Kamada-Kawai": nx.drawing.layout.kamada_kawai_layout,
                              "Bipartite Layout": nx.drawing.layout.bipartite_layout}        
-        layout_default_params = {"Spring": {"k": 0.30, "seed":42},
+        layout_default_params = {"Spring": {"k": 0.75, "seed":42},
                                  "Circular": {},
                                  "Spectral": {},
                                  "Kamada-Kawai": {}}
+        if st.session_state['sma_spectral_similarity_layout'] == 'Yes':
+            # Add edges between protein nodes based on cluster
+            added_edges = []
+            # "Transpose Dict"
+            spectral_communities = {}
+            for node, cluster in cluster_dict.items():
+                if cluster != 0:
+                    if cluster in spectral_communities:
+                        spectral_communities[cluster].append(node)
+                    else:
+                        spectral_communities[cluster] = [node]
+                    
+            for cluster, nodes in spectral_communities.items():
+                for i, node1 in enumerate(nodes):
+                    for node2 in nodes[i+1:]:
+                        if (node1, node2) not in added_edges:
+                            print(f"Adding edge between {node1} and {node2}", flush=True)
+                            nx_G.add_edge(node1, node2, weight=3)
+                            added_edges.append((node1, node2))
+        
         # Apply layout
         pos = layout_fn_mapping[st.session_state.get("sma_network_layout")](nx_G, **layout_default_params[st.session_state.get("sma_network_layout")])
+        
+        if st.session_state['sma_spectral_similarity_layout'] == 'Yes':
+            # Remove edges between protein nodes, we don't want them displayed
+            for edge in added_edges:
+                nx_G.remove_edge(*edge)
     
-    # Convery to PyVis Graph
+    # Convert to PyVis Graph
     graph = net.Network(height=f'{height}px', width='100%')
     for node in nx_G.nodes:
         if pos is not None:
@@ -286,7 +385,7 @@ def generate_network(height=1000, width=600):
                        )
     for edge in nx_G.edges:
         graph.add_edge(edge[0], edge[1])
-    
+        
     # Generate HTML code for the graph
     html_graph = graph.generate_html()
     
@@ -323,7 +422,11 @@ def make_heatmap():
             for mz, intensity in zip(mz_array, intensity_array):
                 if intensity > st.session_state.get("sma_relative_intensity_threshold", 0.1):
                     df.at[filename, mz] = intensity
-            
+    
+    # Remove columns that don't meet the frequency threshold
+    if st.session_state.get("sma_min_mz_frequency") > 1:
+        df = df.loc[:, (df.count() >= st.session_state.get("sma_min_mz_frequency"))]
+        
     # Remove cols with all nans
     df = df.loc[:, (df.notna()).any(axis=0)]
     
@@ -376,6 +479,8 @@ if st.session_state.get("sma_network_layout") == 'Default':
     st.selectbox("Physics", ["True", "False"], key="sma_physics")
 else:
     st.session_state["sma_physics"] = "False"
+    # We can only do this using our custom layout, so we'll have to disable it for the Default layout
+    st.selectbox("Incorporate Spectral Similarity into Node Layout", ["Yes", "No"], key="sma_spectral_similarity_layout")
 
 #### Network Coloring Option 
 st.selectbox("Node Coloring", ["Protein/Small Molecule", "Network Community Detection", "Spectral Similarity"], key="sma_node_coloring")
@@ -397,16 +502,26 @@ if st.session_state.get("sma_node_coloring") == "Network Community Detection" or
     elif st.session_state.get("sma_cluster_method") == "Greedy Modularity":
         st.text("https://doi.org/10.1103/PhysRevE.70.066111")
 # Options for Spectral Similarty Node Properties
+cluster_dict = None
 if st.session_state.get("sma_node_coloring") == "Spectral Similarity" or \
-     st.session_state.get("sma_node_shapes") == "Spectral Similarity":
+     st.session_state.get("sma_node_shapes") == "Spectral Similarity" or \
+     st.session_state.get("sma_spectral_similarity_layout") == "Yes":
         st.subheader("Spectral Similarity Options")
-        st.error("Spectral Similarity is not yet implemented.")
-        st.stop()
-        st.selectbox("Similarity Method", ["Jaccard", "Cosine", "Euclidean"])
 
-generate_network()
+        with st.popover(label='Set Spectral Clustering Parameters'):
+            cluster_dict = basic_dendrogram()
+
+generate_network(cluster_dict)
 
 st.header("Small Molecule Heatmap")
 st.multiselect("Select Proteins", st.session_state["metadata_df"]['Filename'].unique(), key='sma_selected_proteins')
 
+# Option for minimum instance frequency
+curr_num_proteins = len(st.session_state.get("sma_selected_proteins", []))
+
+if curr_num_proteins > 1:
+    st.slider("Display m/z values that are associated with this many Proteins", min_value=1, max_value=curr_num_proteins, value=1, step=1, key="sma_min_mz_frequency")
+else:
+    # Display disabled
+    st.slider("Display m/z values that are associated with this many Proteins", min_value=0, max_value=1, value=1, step=1, key="sma_min_mz_frequency", disabled=True)
 make_heatmap()
