@@ -35,7 +35,7 @@ def basic_dendrogram():
     ### DEBUG
     print(st.session_state['query_spectra_numpy_data'], flush=True)
     dendro = ff.create_dendrogram(st.session_state['query_spectra_numpy_data'],
-                                orientation='left',
+                                orientation='bottom',
                                 labels=st.session_state['query_only_spectra_df'].filename.values, # We will use the labels as a unique identifier
                                 distfun=st.session_state['distance_measure'],
                                 linkagefun=lambda x: linkage(x, method=st.session_state["sma_clustering_method"],),
@@ -59,7 +59,7 @@ def basic_dendrogram():
     # Add 1 if value >= 1 to reserve 1 for small molecules, 0 for unclustered
     cluster_dict = {filename: color + 1 if color >= 1 else 0 for filename, color in cluster_dict.items()}
     
-    return cluster_dict
+    return cluster_dict, dendro
 
 def parse_numerical_input(string:str) -> list:
     initial_list = [entry.strip() for entry in string.split(",")]
@@ -381,7 +381,7 @@ def generate_network(cluster_dict:dict=None, height=1000, width=600):
                        x=x_pos,
                        y=y_pos,
                        shape=nx_G.nodes[node].get('shape'),
-                       physics=st.session_state.get("sma_physics", False) == "True"
+                       physics=st.session_state.get("sma_physics", False) == "Yes"
                        )
     for edge in nx_G.edges:
         graph.add_edge(edge[0], edge[1])
@@ -431,28 +431,89 @@ def make_heatmap():
     df = df.loc[:, (df.notna()).any(axis=0)]
     
     if len(df) != 0:
+        # Note: We transpose the dataframe so that the proteins are on the x-axis
         st.markdown("Common m/z values between selected proteins and their intensities. Note: The graph filters are applied here.")
         # Draw Heatmap
-        fig = plotly.express.imshow(df.values,
-                                    aspect ='equal', 
-                                    width=1500, 
-                                    # height=1600,
-                                    color_continuous_scale='Bluered')
+        dynamic_height = len(df.columns) * 24 # Dyanmic height based on number of m/z values
+        
+        # If we're suppled a dendrogram, use it to reorder the heatmap
+        x = None
+        if st.session_state['sma_show_dendrogram'] == 'Yes':
+            # Remove any rows where the filename is not currently selected
+            all_filenames = st.session_state['query_only_spectra_df'].filename.values
+            all_data      = st.session_state['query_spectra_numpy_data']
+            
+            # Get the indices of the selected proteins
+            selected_indices = [i for i, filename in enumerate(all_filenames) if filename in st.session_state["sma_selected_proteins"]]
+            # Get the data for the selected proteins
+            numpy_data = all_data[selected_indices]
+            
+            # Unfortunately, we have to recalculate the dendrogram, because things may cluster differently 
+            # depending on the selected proteins.
+            # Note though, that we share parameters with the above dendrogram.
+            dendro = ff.create_dendrogram(numpy_data,
+                                orientation='bottom',
+                                labels=st.session_state["sma_selected_proteins"],
+                                distfun=st.session_state['distance_measure'],
+                                linkagefun=lambda x: linkage(x, method=st.session_state["sma_clustering_method"],),
+                                color_threshold=st.session_state["sma_coloring_threshold"])
+            
+            # Reorder the dataframe based on the dendrogram
+            reordered_df = df.reindex(index=dendro.layout.xaxis.ticktext)
+            reordered_df = reordered_df.reindex(columns=dendro.layout.yaxis.ticktext)
+            df = reordered_df
+            # Also us the X values from the dendrogram
+            x = dendro.layout.xaxis.tickvals
+        
+        heatmap = plotly.express.imshow(df.values.T,
+                                        x=x,
+                                        aspect ='auto', 
+                                        width=1500, 
+                                        height=dynamic_height,
+                                        color_continuous_scale='Bluered',)
         # Update axis text (we do this here otherwise spacing is not even)
-        fig.update_layout(
-            xaxis=dict(title="m/z", ticktext=[str(x) for x in df.columns], tickvals=list(range(len(df.columns)))),
-            yaxis=dict(title="Protein", ticktext=list(df.index.values), tickvals=list(range(len(df.index)))),
-            coloraxis_colorbar=dict(title="Relative Intensity"),    # Add text to color bar to indicate intensity
+        heatmap.update_layout(
+            xaxis=dict(title="Protein", ticktext=list(df.index.values), tickvals=list(range(len(df.index))), side='top'),
+            yaxis=dict(title="m/z", ticktext=[str(x) for x in df.columns], tickvals=list(range(len(df.columns)))),
             margin=dict(t=5, pad=0),
         )
         
-        fig.update_coloraxes(cmin=0.0, cmax=1.0, cmid=0.5)
+        heatmap.update_coloraxes(cmin=0.0, cmax=1.0, cmid=0.5)
         
-        st.plotly_chart(fig)
+        if st.session_state['sma_show_dendrogram'] == 'Yes':
+            fig = plotly.subplots.make_subplots(rows=2, cols=1,
+                                                shared_xaxes=True,
+                                                vertical_spacing=0.02)
+            fig.update_layout(margin=dict(l=0, r=0, b=0, t=0, pad=0), width=1500, height=dynamic_height + 500)
         
-        # Draw Table
-        df
-
+            for trace in dendro.data:
+                fig.add_trace(trace, row=1, col=1)
+            
+            # Add x-axis labels from dendrogram
+            print(dendro.layout.xaxis.ticktext, flush=True)
+            fig.update_xaxes(ticktext=dendro.layout.xaxis.ticktext, tickvals=dendro.layout.xaxis.tickvals, row=1, col=1)
+            fig.update_xaxes(ticktext=dendro.layout.xaxis.ticktext, tickvals=dendro.layout.xaxis.tickvals, row=2, col=1)
+            # Add y labels to dendrogram
+            fig.update_yaxes(ticktext=dendro.layout.yaxis.ticktext, tickvals=dendro.layout.yaxis.tickvals, row=1, col=1, title="Dendrogram Distance")
+            # Add y labels to heatmap
+            fig.update_yaxes(ticktext=heatmap.layout.yaxis.ticktext, tickvals=heatmap.layout.yaxis.tickvals, row=2, col=1,title="m/z")
+            
+            for trace in heatmap.data:
+                fig.add_trace(trace, row=2, col=1)
+            
+        else:
+            fig = heatmap
+            
+        fig.update_layout(showlegend=False,
+                    coloraxis_colorbar=dict(title="Relative Intensity", 
+                                            len=min(500, dynamic_height), 
+                                            lenmode="pixels", 
+                                            y=0.75)
+                                        )
+        fig.update_coloraxes(cmin=0.0, cmax=1.0, cmid=0.5,colorscale='Bluered')
+        
+        st.plotly_chart(fig,use_container_width=True)
+        
 st.subheader("Small Molecule Filters")
 # Add a slider for the relative intensity threshold
 st.slider("Relative Intensity Threshold", min_value=0.05, max_value=1.0, value=0.15, step=0.01, key="sma_relative_intensity_threshold")
@@ -476,9 +537,9 @@ st.subheader("Network Display Options")
 st.selectbox("Network Layout", ["Default", "Spring", "Circular", "Spectral", "Kamada-Kawai"], key="sma_network_layout")
 if st.session_state.get("sma_network_layout") == 'Default':
     # Enable physics by default because it helps with the layout
-    st.selectbox("Physics", ["True", "False"], key="sma_physics")
+    st.selectbox("Physics", ["Yes", "No"], key="sma_physics")
 else:
-    st.session_state["sma_physics"] = "False"
+    st.session_state["sma_physics"] = "No"
     # We can only do this using our custom layout, so we'll have to disable it for the Default layout
     st.selectbox("Incorporate Spectral Similarity into Node Layout", ["Yes", "No"], key="sma_spectral_similarity_layout")
 
@@ -503,13 +564,18 @@ if st.session_state.get("sma_node_coloring") == "Network Community Detection" or
         st.text("https://doi.org/10.1103/PhysRevE.70.066111")
 # Options for Spectral Similarty Node Properties
 cluster_dict = None
+barebones_dendro = None
 if st.session_state.get("sma_node_coloring") == "Spectral Similarity" or \
      st.session_state.get("sma_node_shapes") == "Spectral Similarity" or \
-     st.session_state.get("sma_spectral_similarity_layout") == "Yes":
+     st.session_state.get("sma_spectral_similarity_layout") == "Yes" or \
+     st.session_state.get("sma_show_dendrogram") == "Yes":
         st.subheader("Spectral Similarity Options")
 
         with st.popover(label='Set Spectral Clustering Parameters'):
-            cluster_dict = basic_dendrogram()
+            cluster_dict, _ = basic_dendrogram()
+else:
+    with st.popover(label='Set Spectral Clustering Parameters', disabled=True):
+            cluster_dict, _ = basic_dendrogram()
 
 generate_network(cluster_dict)
 
@@ -520,8 +586,11 @@ st.multiselect("Select Proteins", st.session_state["metadata_df"]['Filename'].un
 curr_num_proteins = len(st.session_state.get("sma_selected_proteins", []))
 
 if curr_num_proteins > 1:
-    st.slider("Display m/z values that are associated with this many Proteins", min_value=1, max_value=curr_num_proteins, value=1, step=1, key="sma_min_mz_frequency")
+    st.slider("Display m/z values that are associated with this many proteins", min_value=1, max_value=curr_num_proteins, value=1, step=1, key="sma_min_mz_frequency")
 else:
     # Display disabled
-    st.slider("Display m/z values that are associated with this many Proteins", min_value=0, max_value=1, value=1, step=1, key="sma_min_mz_frequency", disabled=True)
+    st.slider("Display m/z values that are associated with this many proteins", min_value=0, max_value=1, value=1, step=1, key="sma_min_mz_frequency", disabled=True)
+
+st.selectbox("Overlay Dendrogram on Heatmap", ["Yes", "No"], key="sma_show_dendrogram")
+
 make_heatmap()
