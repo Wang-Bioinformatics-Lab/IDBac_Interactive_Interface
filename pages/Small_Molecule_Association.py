@@ -431,28 +431,27 @@ def make_heatmap():
     df = df.loc[:, (df.notna()).any(axis=0)]
     
     if len(df) != 0:
+        # Note: We transpose the dataframe so that the proteins are on the x-axis
         st.markdown("Common m/z values between selected proteins and their intensities. Note: The graph filters are applied here.")
         # Draw Heatmap
-        fig = plotly.express.imshow(df.values,
-                                    aspect ='equal', 
+        dynamic_height = len(df.columns) * 24 # Dyanmic height based on number of m/z values
+        fig = plotly.express.imshow(df.values.T,
+                                    aspect ='auto', 
                                     width=1500, 
-                                    # height=1600,
-                                    color_continuous_scale='Bluered')
+                                    height=dynamic_height,
+                                    color_continuous_scale='Bluered',)
         # Update axis text (we do this here otherwise spacing is not even)
         fig.update_layout(
-            xaxis=dict(title="m/z", ticktext=[str(x) for x in df.columns], tickvals=list(range(len(df.columns)))),
-            yaxis=dict(title="Protein", ticktext=list(df.index.values), tickvals=list(range(len(df.index)))),
-            coloraxis_colorbar=dict(title="Relative Intensity"),    # Add text to color bar to indicate intensity
+            xaxis=dict(title="Protein", ticktext=list(df.index.values), tickvals=list(range(len(df.index))), side='top'),
+            yaxis=dict(title="m/z", ticktext=[str(x) for x in df.columns], tickvals=list(range(len(df.columns)))),
+            coloraxis_colorbar=dict(title="Relative Intensity", len=min(500, dynamic_height), lenmode="pixels", y=0.75),    # Add text to color bar to indicate intensity
             margin=dict(t=5, pad=0),
         )
         
         fig.update_coloraxes(cmin=0.0, cmax=1.0, cmid=0.5)
         
-        st.plotly_chart(fig)
+        st.plotly_chart(fig,use_container_width=True)
         
-        # Draw Table
-        df
-
 st.subheader("Small Molecule Filters")
 # Add a slider for the relative intensity threshold
 st.slider("Relative Intensity Threshold", min_value=0.05, max_value=1.0, value=0.15, step=0.01, key="sma_relative_intensity_threshold")
@@ -520,8 +519,8 @@ st.multiselect("Select Proteins", st.session_state["metadata_df"]['Filename'].un
 curr_num_proteins = len(st.session_state.get("sma_selected_proteins", []))
 
 if curr_num_proteins > 1:
-    st.slider("Display m/z values that are associated with this many Proteins", min_value=1, max_value=curr_num_proteins, value=1, step=1, key="sma_min_mz_frequency")
+    st.slider("Display m/z values that are associated with this many proteins", min_value=1, max_value=curr_num_proteins, value=1, step=1, key="sma_min_mz_frequency")
 else:
     # Display disabled
-    st.slider("Display m/z values that are associated with this many Proteins", min_value=0, max_value=1, value=1, step=1, key="sma_min_mz_frequency", disabled=True)
+    st.slider("Display m/z values that are associated with this many proteins", min_value=0, max_value=1, value=1, step=1, key="sma_min_mz_frequency", disabled=True)
 make_heatmap()
