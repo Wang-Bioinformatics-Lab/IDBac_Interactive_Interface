@@ -96,6 +96,7 @@ def get_dist_function_wrapper(distfun):
         if num_db_search_results + num_inputs != spectrum_data_df.shape[0]:
             raise Exception("Error in creating distance matrix")
         
+        start_tile = time.time()
         db_distance_matrix = np.ones((num_inputs, num_db_search_results))
         for i, filename in enumerate(non_db_search_result_filenames):
             db_dist_dict = db_distance_dict.get(filename)
@@ -109,7 +110,9 @@ def get_dist_function_wrapper(distfun):
                         db_distance_matrix[i, j] = 1
                     else:
                         db_distance_matrix[i, j] = this_dist # 1-sim because we want distance
+        print("Time to compute db distances", time.time() - start_tile, flush=True)
         
+        start_time = time.time()
         db_db_distance_matrix = np.ones((num_db_search_results, num_db_search_results))
         if 'database_id' in spectrum_data_df.columns: # Only included when there are database search results present
             db_search_database_ids = spectrum_data_df.database_id[spectrum_data_df['db_search_result'] == True].tolist()     
@@ -130,6 +133,7 @@ def get_dist_function_wrapper(distfun):
                             db_db_distance_matrix[j, i] = this_dist
                     else:
                         raise ValueError("Missing", db_id_1, db_id_2, db_dist_dict, flush=True)
+        print("Time to compute db-db distances", time.time() - start_time, flush=True)
 
         # Create a single matrix to join everything together
         distance_matrix = np.ones((num_inputs + num_db_search_results, num_inputs + num_db_search_results)) * np.inf    # Multiply by inf to allow for a sanity check
@@ -151,7 +155,7 @@ def get_dist_function_wrapper(distfun):
 
     return dist_function_wrapper
 
-def create_dendrogram(data_np, all_spectra_df, db_distance_dict, selected_distance_fun=cosine_distances, 
+def create_dendrogram(data_np, all_spectra_df, db_distance_dict, 
                       plotted_metadata=[],
                       db_label_column=None,
                       metadata_df=None,
@@ -168,7 +172,6 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict, selected_distan
     - data_np (numpy.ndarray): The input data as a numpy array.
     - all_spectra_df (pandas.DataFrame): The dataframe containing all spectra data.
     - db_distance_dict (dict): The dictionary containing the database distance information.
-    - selected_distance_fun (function, optional): The distance function to be used for calculating distances between data points. Defaults to numpy.cosine_distances.
     - plotted_metadata (list of str, optional): The column name to be shown in the scatter plot. Defaults to "filename".
     - metadata_df (pandas.DataFrame, optional): The dataframe containing metadata information. Defaults to None.
     - db_search_columns (list, optional): The list of columns to be used for displaying database search result metadata. Defaults to None.
@@ -229,6 +232,9 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict, selected_distan
         all_spectra_input = all_spectra_df[['filename','db_search_result','database_id']]
     else:
         all_spectra_input = all_spectra_df[['filename','db_search_result']]
+        
+    selected_distance_fun = st.session_state['distance_measure']
+        
     # Creating Dendrogram  
     dendro = ff.create_dendrogram(np_data_wrapper(data_np, all_spectra_input, db_distance_dict),
                                   orientation='left',
@@ -627,6 +633,20 @@ else:
 workflow_params = write_job_params(params_url)
 write_warnings(warnings_url)
 
+# If workflow parameters specfiy a similarity function, use it. Otherwise, default to cosine
+if "similarity_function" in workflow_params and workflow_params is not None:
+    given_distance_measure = workflow_params.get('distance', 'cosine')
+    assert given_distance_measure in {'presence', 'cosine', 'euclidean'}
+    if given_distance_measure == 'cosine':
+        st.session_state['distance_measure'] = cosine_distances
+    elif given_distance_measure == 'euclidean':
+        st.session_state['distance_measure'] = euclidean_distances
+    elif given_distance_measure == 'presence':
+        st.session_state['distance_measure'] = cosine_distances # TODO: Ensure array is binary
+else:
+    st.warning("**Warning:** Unable to find a distance function in the workflow parameters. This may be an old task. Please rerun it. \
+               Defaulting to cosine similarity.")
+    st.session_state['distance_measure'] = cosine_distances
 # By request, no longer displaying labels url
 if False:
     st.write(labels_url)
@@ -635,6 +655,7 @@ if False:
 numpy_file = requests.get(numpy_url)
 numpy_file.raise_for_status()
 numpy_array = np.load(io.BytesIO(numpy_file.content))
+st.session_state['query_spectra_numpy_data'] = numpy_array
 
 # read pandas dataframe from url
 all_spectra_df = pd.read_csv(labels_url, sep="\t")
@@ -824,6 +845,8 @@ st.session_state["cutoff"] = st.number_input("Add Cutoff Line", min_value=0.0, m
 # Add option to show annotations
 st.session_state["show_annotations"] = st.checkbox("Display Dendrogram Distances", value=bool(st.session_state["show_annotations"]), help="The values listed represent dendrogram distance. \
                                                                                                        To obtain similarity scores, use the 'Database Search Summary' tab within the workflow output.")
+
+st.session_state['query_only_spectra_df'] = all_spectra_df
 
 # Process the db search results (it's done in this order to allow for db_search parameters)
 all_spectra_df, db_distance_dict = integrate_database_search_results(all_spectra_df, db_search_results, db_db_distance_table, st.session_state)
