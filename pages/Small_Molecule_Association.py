@@ -293,13 +293,14 @@ def generate_network(cluster_dict:dict=None, height=1000, width=600):
     if st.session_state.get("sma_node_coloring") == "Spectral Similarity" or \
         st.session_state.get("sma_node_shapes") == "Spectral Similarity":
             communities = cluster_dict
+            color_warning_flag_set = False
+            warning_flag_set = False
             
             if st.session_state.get("sma_node_coloring") == "Spectral Similarity":
                 node_color_map = {}
-                color_warning_flag_set = False
+                
             if st.session_state.get("sma_node_shapes") == "Spectral Similarity":
                 node_shape_map = {}
-                warning_flag_set = False
                 
             # Assign color/shape based on community
             for node, c_id in communities.items():
