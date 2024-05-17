@@ -634,7 +634,7 @@ workflow_params = write_job_params(params_url)
 write_warnings(warnings_url)
 
 # If workflow parameters specfiy a similarity function, use it. Otherwise, default to cosine
-if "similarity_function" in workflow_params and workflow_params is not None:
+if "distance" in workflow_params and workflow_params is not None:
     given_distance_measure = workflow_params.get('distance', 'cosine')
     assert given_distance_measure in {'presence', 'cosine', 'euclidean'}
     if given_distance_measure == 'cosine':

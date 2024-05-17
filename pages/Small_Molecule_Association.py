@@ -482,10 +482,14 @@ def make_heatmap():
         heatmap.update_coloraxes(cmin=0.0, cmax=1.0, cmid=0.5)
         
         if st.session_state['sma_show_dendrogram'] == 'Yes':
+            dendrogram_height = 200
+            dendrogram_height_as_percent = dendrogram_height / (dynamic_height + dendrogram_height)
+            
             fig = plotly.subplots.make_subplots(rows=2, cols=1,
                                                 shared_xaxes=True,
-                                                vertical_spacing=0.02)
-            fig.update_layout(margin=dict(l=0, r=0, b=0, t=0, pad=0), width=1500, height=dynamic_height + 500)
+                                                vertical_spacing=0.02,
+                                                row_heights=[dendrogram_height_as_percent, 1-dendrogram_height_as_percent])
+            fig.update_layout(margin=dict(l=0, r=0, b=0, t=0, pad=0), width=1500, height=dynamic_height + dendrogram_height)
         
             for trace in dendro.data:
                 fig.add_trace(trace, row=1, col=1)
