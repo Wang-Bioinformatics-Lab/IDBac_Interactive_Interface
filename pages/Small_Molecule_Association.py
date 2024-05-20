@@ -25,15 +25,17 @@ st.set_page_config(page_title="IDBac - Small Molecule Association", page_icon=No
 
 st.info("Welcome to IDBac's Small Molecule Association Page! This page is currently in development.")
 
-def basic_dendrogram():
+def basic_dendrogram(disabled=False):
     """
     This function generates a basic dendrogram for the small molecule association page. 
     """
     st.slider("Coloring Threshold", min_value=0.0, max_value=1.0, value=0.7, step=0.01, key="sma_coloring_threshold")
     clustering_options = ["ward", "single", "complete", "average", "weighted", "centroid", "median"]
     st.selectbox("Clustering Method", clustering_options, key="sma_clustering_method")
-    ### DEBUG
-    print(st.session_state['query_spectra_numpy_data'], flush=True)
+
+    if disabled:
+        return None, None, None
+
     dendro = ff.create_dendrogram(st.session_state['query_spectra_numpy_data'],
                                 orientation='bottom',
                                 labels=st.session_state['query_only_spectra_df'].filename.values, # We will use the labels as a unique identifier
@@ -325,6 +327,20 @@ def generate_network(cluster_dict:dict=None, height=1000, width=600):
                     
             if color_warning_flag_set:
                 st.warning("Unclustered nodes are white.")
+                     
+    # Remove anything that isn't in the selected clusters
+    # Must happen before layout
+    if st.session_state['sma_selected_proteins'] != []:
+        for node, node_type in list(nx_G.nodes.data('type')):
+            if node_type == "Protein":
+                if node not in st.session_state['sma_selected_proteins']:
+                    nx_G.remove_node(node)
+       
+        # Remove singleton m/z values
+        for node, node_type in list(nx_G.nodes.data('type')):
+            if node_type == "Small Molecule":
+                if nx_G.degree(node) == 0:
+                    nx_G.remove_node(node)
            
     # Perform Layout
     pos=None
@@ -355,7 +371,6 @@ def generate_network(cluster_dict:dict=None, height=1000, width=600):
                 for i, node1 in enumerate(nodes):
                     for node2 in nodes[i+1:]:
                         if (node1, node2) not in added_edges:
-                            print(f"Adding edge between {node1} and {node2}", flush=True)
                             nx_G.add_edge(node1, node2, weight=3)
                             added_edges.append((node1, node2))
         
@@ -365,7 +380,8 @@ def generate_network(cluster_dict:dict=None, height=1000, width=600):
         if st.session_state['sma_spectral_similarity_layout'] == 'Yes':
             # Remove edges between protein nodes, we don't want them displayed
             for edge in added_edges:
-                nx_G.remove_edge(*edge)
+                if edge in nx_G.edges:
+                    nx_G.remove_edge(*edge)
     
     # Convert to PyVis Graph
     graph = net.Network(height=f'{height}px', width='100%')
@@ -399,9 +415,9 @@ def make_heatmap():
     """
     Make a heatmap that shows which m/z values are associated with each protein file with which intensity
     """
-       
+    
     mapping = st.session_state["metadata_df"]
-       
+          
     small_mol_dict = filter_small_molecule_dict(get_small_molecule_dict())
     
     all_mzs = [small_mol_dict.get('m/z array', []) for small_mol_dict in small_mol_dict.values()]
@@ -431,11 +447,16 @@ def make_heatmap():
     # Remove cols with all nans
     df = df.loc[:, (df.notna()).any(axis=0)]
     
+    if len(df) > 1:
+        st.selectbox("Overlay Dendrogram on Heatmap", ["Yes", "No"], key="sma_show_dendrogram")
+    else:
+        st.selectbox("Overlay Dendrogram on Heatmap", ["No"], key="sma_show_dendrogram", disabled=True)
+    
     if len(df) != 0:
         # Note: We transpose the dataframe so that the proteins are on the x-axis
         st.markdown("Common m/z values between selected proteins and their intensities. Note: The graph filters are applied here.")
         # Draw Heatmap
-        dynamic_height = len(df.columns) * 24 # Dyanmic height based on number of m/z values
+        dynamic_height = max(500, len(df.columns) * 24) # Dyanmic height based on number of m/z values
         
         # If we're suppled a dendrogram, use it to reorder the heatmap
         x = None
@@ -495,7 +516,6 @@ def make_heatmap():
                 fig.add_trace(trace, row=1, col=1)
             
             # Add x-axis labels from dendrogram
-            print(dendro.layout.xaxis.ticktext, flush=True)
             fig.update_xaxes(ticktext=dendro.layout.xaxis.ticktext, tickvals=dendro.layout.xaxis.tickvals, row=1, col=1)
             fig.update_xaxes(ticktext=dendro.layout.xaxis.ticktext, tickvals=dendro.layout.xaxis.tickvals, row=2, col=1)
             # Add y labels to dendrogram
@@ -521,8 +541,10 @@ def make_heatmap():
         
 st.subheader("Small Molecule Filters")
 # Add a slider for the relative intensity threshold
-st.slider("Relative Intensity Threshold", min_value=0.05, max_value=1.0, value=0.15, step=0.01, key="sma_relative_intensity_threshold")
-st.slider("Replicate Frequency Threshold", min_value=0.00, max_value=1.0, value=0.70, step=0.05, key="sma_replicate_frequency_threshold", help="Only show m/z values that occur in at least this percentage of replicates.")
+st.slider("Relative Intensity Threshold", min_value=0.05, max_value=1.0, value=0.15, step=0.01, 
+          key="sma_relative_intensity_threshold")
+st.slider("Replicate Frequency Threshold", min_value=0.00, max_value=1.0, value=0.70, step=0.05, 
+          key="sma_replicate_frequency_threshold", help="Only show m/z values that occur in at least this percentage of replicates.")
 
 # Add text input to select certain m/z's (comma-seperated)
 mz_col1, mz_col2 = st.columns([3, 1])
@@ -570,22 +592,73 @@ if st.session_state.get("sma_node_coloring") == "Network Community Detection" or
 # Options for Spectral Similarty Node Properties
 cluster_dict = None
 barebones_dendro = None
-if st.session_state.get("sma_node_coloring") == "Spectral Similarity" or \
-     st.session_state.get("sma_node_shapes") == "Spectral Similarity" or \
-     st.session_state.get("sma_spectral_similarity_layout") == "Yes" or \
-     st.session_state.get("sma_show_dendrogram") == "Yes":
-        st.subheader("Spectral Similarity Options")
 
-        with st.popover(label='Set Spectral Clustering Parameters'):
-            cluster_dict, _ = basic_dendrogram()
-else:
-    with st.popover(label='Set Spectral Clustering Parameters', disabled=True):
-            cluster_dict, _ = basic_dendrogram()
+st.subheader("Spectral Similarity Options")
+with st.popover(label='Set Spectral Clustering Parameters'):
+    cluster_dict, _ = basic_dendrogram()
+            
+# Options to show only certain proteins/clusters
+st.subheader("Additional Filters")
+add_filters_1, add_filters_2, add_filters_3 = st.columns([0.3, 0.10, 0.4])
+    # First column is a selectbox of protein names
+    # Second is a selectbox of cluster names
+    # Third is an import button that adds the values of the clusters to the protein name selection
+
+with add_filters_1:
+    disabled=False
+    if cluster_dict is None:
+        cluster_dict = [None]
+        st.multiselect("Select Clusters to Add", [], disabled=True, key='sma_selected_clusters')
+        
+    else:
+        inverted_cluster_dict = {}
+        for filename, cluster_id in cluster_dict.items():
+            if inverted_cluster_dict.get(cluster_id) is None:
+                inverted_cluster_dict[cluster_id] = [filename]
+            else:
+                inverted_cluster_dict[cluster_id].append(filename)
+        cluster_display_dict = {tuple(set(filenames)): f"Cluster {cluster_id-1}: {tuple(set(filenames))}".replace(',','') for cluster_id, filenames in inverted_cluster_dict.items()}
+        unclustered_key = inverted_cluster_dict.get(0)
+        if unclustered_key is not None:
+            unclustered_key = tuple(set(unclustered_key))
+            cluster_display_dict[unclustered_key] = cluster_display_dict[unclustered_key].replace("Cluster -1", "Unclustered")
+        
+        st.multiselect("Select Clusters to Add", 
+                        list(set(cluster_display_dict.keys())),
+                        format_func=cluster_display_dict.get,
+                        key='sma_selected_clusters')
+
+if 'sma_selected_clusters' not in st.session_state:
+    st.session_state['sma_selected_clusters'] = []
+if 'sma_selected_proteins' not in st.session_state:
+    st.session_state['sma_selected_proteins'] = []
+        
+def _draw_selected_protein_multiselect():
+    st.session_state['sma_selected_proteins'] = st.multiselect(
+        "Select Proteins",
+        list(st.session_state["metadata_df"]['Filename']),
+        default=st.session_state['sma_selected_proteins']
+    )
+
+with add_filters_2:
+    st.write("Add Clusters")
+    add_button = st.button(":arrow_forward:", key="Add")
+
+with add_filters_3:
+    _draw_selected_protein_multiselect()
+
+# Handle add button click
+if add_button:
+    for cluster in st.session_state['sma_selected_clusters']:
+        to_add = set(cluster) - set(st.session_state['sma_selected_proteins'])
+        st.session_state['sma_selected_proteins'].extend(to_add)
+    st.session_state['sma_selected_clusters'].clear()
+    st.rerun()  # Refresh the UI to reflect the updated selection
 
 generate_network(cluster_dict)
 
 st.header("Small Molecule Heatmap")
-st.multiselect("Select Proteins", st.session_state["metadata_df"]['Filename'].unique(), key='sma_selected_proteins')
+# st.multiselect("Select Proteins", st.session_state["metadata_df"]['Filename'].unique(), key='sma_selected_proteins')
 
 # Option for minimum instance frequency
 curr_num_proteins = len(st.session_state.get("sma_selected_proteins", []))
@@ -595,7 +668,5 @@ if curr_num_proteins > 1:
 else:
     # Display disabled
     st.slider("Display m/z values that are associated with this many proteins", min_value=0, max_value=1, value=1, step=1, key="sma_min_mz_frequency", disabled=True)
-
-st.selectbox("Overlay Dendrogram on Heatmap", ["Yes", "No"], key="sma_show_dendrogram")
 
 make_heatmap()
