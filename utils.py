@@ -39,6 +39,10 @@ def write_warnings(param_url:str)->None:
         st.warning(f"**Warning:** This is an old task and warnings are not available. Please re-run the task if you want to gather warnings.")
         return None
     
+    # No warnings
+    if r.text == '':
+        return None
+    
     warnings_df = pd.read_csv(io.StringIO(r.text), index_col=0)
     
     if len(warnings_df) > 0:
