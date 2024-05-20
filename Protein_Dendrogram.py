@@ -17,6 +17,7 @@ import plotly.graph_objects as go
 import numpy as np
 
 from utils import write_job_params, write_warnings
+from Protein_Dendrogram_Components import draw_mirror_plot, draw_protein_heatmap
 
 class np_data_wrapper():
     def __init__(self, data_np, spectrum_data_df, db_distance_dict):
@@ -414,81 +415,6 @@ def collect_database_search_results(task):
 
     return database_search_results_df
 
-def build_database_result_USI(database_id:str, file_name:str):
-    """
-    Build a USI for a database search result given a database_id. Note, if the original
-    task is missing/deteleted from GNPS2, this will not work.
-    
-    Parameters:
-    - database_id (str): The database_id of the database search result.
-    
-    Returns:
-    - usi (str): The USI of the database search result.
-    """
-    
-    # User database id to get original task id
-    # Example URL: https://idbac.org/api/spectrum?database_id=01HHBSS17717HA7VN5C167FYHC
-    url = "https://idbac.org/api/spectrum?database_id={}".format(database_id)
-    r = requests.get(url)
-    retries = 3
-    while r.status_code != 200 and retries > 0:
-        r = requests.get(url)
-        retries -= 1
-    if r.status_code != 200:
-        # Throw an exception for this because the database ids are supplied internally
-        raise ValueError("Database ID not found")
-    result_dictionary = r.json()
-    task = result_dictionary["task"]
-    file_name = result_dictionary["Filename"]
-       
-    return_usi = f"mzspec:GNPS2:TASK-{task}-nf_output/merged/{file_name}:scan:1"
-    
-    # Test the USI, so we can return an error message on the page
-    r = requests.get(f"https://metabolomics-usi.gnps2.org/json/?usi1={return_usi}")
-    if r.status_code != 200:
-        # Return None, signifying an error if the USI is not valid, this would imply that the original task is missing/deleted
-        st.error("File Upload Task is Missing or Deleted from GNPS2")
-        return None
-    
-    return return_usi
-
-def get_USI(all_spectra_df: pd.DataFrame, filename: str, task:str):
-    """
-    Get the USI of a given filename.
-    
-    Parameters:
-    - all_spectra_df (pandas.DataFrame): The dataframe containing all spectra data.
-    - filename (str): The filename of the spectrum.
-    - task (str): The IDBAc_analysis task number
-    
-    Returns:
-    - usi (str): The USI of the spectrum.
-    """
-    if filename == 'None':
-        return None
-    
-    db_result = False
-    if filename.startswith("DB Result - "):
-        filename = filename.replace("DB Result - ", "")
-        db_result = True
-        
-    # Attempt to mitigate issues due to duplicate filenames
-    row = all_spectra_df.loc[(all_spectra_df["filename"] == filename) & (all_spectra_df["db_search_result"] == db_result)]
-
-    if db_result:
-        # If it's a database search result, use the database_id to get the USI
-        output_USI = build_database_result_USI(row["database_id"].iloc[0], row["filename"].iloc[0])
-    else:
-        # If it's a query, use the query job to get the USI
-        output_USI = f"mzspec:GNPS2:TASK-{task}-nf_output/merged/{row['filename'].iloc[0]}:scan:1"
-    return output_USI
-    
-def get_mirror_plot_url(usi1, usi2=None):
-    if usi2 is None:
-        url = f"https://metabolomics-usi.gnps2.org/dashinterface/?usi1={usi1}"
-    else:
-        url = f"https://metabolomics-usi.gnps2.org/dashinterface/?usi1={usi1}&usi2={usi2}"
-    return url
 
 
 def integrate_database_search_results(all_spectra_df:pd.DataFrame, database_search_results_df:pd.DataFrame, database_database_distances:pd.DataFrame, session_state, db_label_column="db_strain_name"):
@@ -857,7 +783,7 @@ if len(all_spectra_df) == 0:
     # If there are no spectra to display, then we will stop the script
     st.error("There are no spectra to display. Please select different options.")
     st.stop()
-
+    
 # Add any remaining variables to the session state if needed
 st.session_state["metadata_df"] = metadata_df
 
@@ -876,30 +802,11 @@ dendro = create_dendrogram(numpy_array,
 
 st.plotly_chart(dendro, use_container_width=True)
 
-# Add a dropdown allowing for mirror plots:
-st.header("Plot Spectra")
+# Mirror Plot Options
+draw_mirror_plot(all_spectra_df)
 
-def mirror_plot_format_function(df):
-    output = []
-    for row in df.to_dict(orient="records"):
-        if row['db_search_result']:
-            output.append(f"DB Result - {row['filename']}")
-        else:   
-            output.append(row['filename'])
-            
-    return output
-all_options = mirror_plot_format_function(all_spectra_df)
-
-# Select spectra one
-st.selectbox("Spectra One", all_options, key='mirror_spectra_one', help="Select the first spectra to be plotted. Database search results are denoted by 'DB Result -'.")
-# Select spectra two
-st.selectbox("Spectra Two", ['None'] + all_options, key='mirror_spectra_two', help="Select the second spectra to be plotted. Database search results are denoted by 'DB Result -'.")
-# Add a button to generate the mirror plot
-spectra_one_USI = get_USI(all_spectra_df, st.session_state['mirror_spectra_one'], task_id)
-spectra_two_USI = get_USI(all_spectra_df, st.session_state['mirror_spectra_two'], task_id)
-
-# If a user is able to get click the buttone before the USI is generated, they may get the page with an old option
-st.link_button(label="View Plot", url=get_mirror_plot_url(spectra_one_USI, spectra_two_USI))
+# Protein Heatmap
+draw_protein_heatmap(all_spectra_df)
 
 # Create a shareable link to this page
 st.write("Shareable Link: ")
