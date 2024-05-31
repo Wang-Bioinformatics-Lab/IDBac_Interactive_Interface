@@ -34,7 +34,7 @@ def basic_dendrogram(disabled=False):
     st.selectbox("Clustering Method", clustering_options, key="sma_clustering_method")
 
     if disabled:
-        return None, None, None
+        return None, None
 
     dendro = ff.create_dendrogram(st.session_state['query_spectra_numpy_data'],
                                 orientation='bottom',

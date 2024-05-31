@@ -3,6 +3,8 @@ import requests
 import yaml
 import pandas as pd
 import io
+from xml.etree import ElementTree
+import time
 
 def write_job_params(param_url:str):
     r = requests.get(param_url,timeout=(60,60))
@@ -57,3 +59,155 @@ def write_warnings(param_url:str)->None:
             st.write(warnings_df)
 
     return None
+
+import requests
+from xml.etree import ElementTree
+
+def get_genbank_metadata(genbank_accession: str) -> dict:
+    """
+    Fetches metadata and taxonomy for a given GenBank accession number using NCBI's E-utilities API.
+
+    Parameters:
+    genbank_accession (str): The GenBank accession number.
+
+    Returns:
+    dict: A dictionary containing metadata and taxonomy for the accession.
+    """
+    # Function to fetch metadata from NCBI
+    def _fetch_metadata(accession, db):
+        base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?"
+        params = {
+            "db": db,
+            "term": accession,
+            "retmode": "json"
+        }
+        response = requests.get(base_url, params=params)
+
+        if response.status_code != 200:
+            raise Exception(f"Error fetching data from NCBI: {response.status_code}")
+        return response.json()
+
+    # Function to fetch taxonomy from NCBI
+    def _fetch_taxonomy(taxid):
+        base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?"
+        params = {
+            "db": "taxonomy",
+            "id": taxid,
+            "retmode": "json"
+        }
+        response = requests.get(base_url, params=params)
+        if response.status_code != 200:
+            raise requests.exceptions.HTTPError(f"Error fetching taxonomy from NCBI: {response.status_code}")
+        return response.json()
+    
+    # Function to fetch assembly information from NCBI
+    def _fetch_assembly(assembly_id):
+        base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?"
+        params = {
+            "db": "assembly",
+            "id": assembly_id,
+            "retmode": "json"
+        }
+        response = requests.get(base_url, params=params)
+        if response.status_code != 200:
+            raise requests.exceptions.HTTPError(f"Error fetching taxonomy from NCBI: {response.status_code}")
+        return response.json()
+
+    # Fetch metadata
+    try:
+        genbank_id = None
+        metadata_json = _fetch_metadata(genbank_accession, 'assembly')  # Changed db to 'assembly'
+        metadata = {}
+        num_results = int(metadata_json['esearchresult'].get('count', 0))
+        if num_results > 1:
+            st.warning(f"Multiple results found for GenBank accession {genbank_accession}. Using the first one.")
+        elif num_results == 1:
+            idlist = metadata_json['esearchresult'].get('idlist', [])
+            if len(idlist) > 1:
+                st.warning(f"Multiple taxonomy ids found for GenBank accession {genbank_accession}. Using the first one.")
+            elif len(idlist) == 1:
+                genbank_id = idlist[0]
+        # at this point taxid will be None if it was not identified            
+            
+        # Fetch taxid if genbank_id is found
+        if genbank_id:
+            taxid = None
+            # Overwrite metadata_json with assembly information
+            metadata_json = _fetch_assembly(genbank_id)
+            if 'error' in metadata_json['result'][genbank_id]:
+                raise Exception(f"Error fetching assembly information for GenBank accession {genbank_accession}: {metadata_json['result'][genbank_id]['error']}")
+            taxid = metadata_json['result'][genbank_id].get('taxid', None)
+
+        # Fetch taxonomy if taxid is found
+        if taxid:
+            taxonomy_json = None
+            taxonomy_json = _fetch_taxonomy(taxid)
+            taxonomy_json = taxonomy_json['result'][taxid]
+            if 'error' in taxonomy_json:
+                st.warning(f"Error fetching taxonomy for GenBank accession {genbank_accession}: {taxonomy_json['error']}")
+                taxonomy_json = None
+
+        # Filter the metadata to only what we want to integrate:
+        if taxonomy_json:
+            output_dict =  {
+                'Genbank accession': genbank_accession,
+                'Genbank-Division': taxonomy_json.get('division', 'Unknown'),
+                'Genbank-Scientific Name': taxonomy_json.get('scientificname', 'Unknown'),
+                'Genbank-Genus': taxonomy_json.get('genus', 'Unknown'),
+                'Genbank-Species': taxonomy_json.get('species', 'Unknown'),
+                'Genbank-Subspecies': taxonomy_json.get('subsp', 'Unknown'),
+                'Genbank-GenBank Division': taxonomy_json.get('genbankdivision', 'Unknown'),
+            }
+            
+            for key in output_dict:
+                if output_dict[key] == '':
+                    output_dict[key] = 'None'
+            
+            return output_dict, 1
+    except Exception as e:
+        return {
+            'Genbank accession': genbank_accession,
+            'Genbank-Division': 'Unknown',
+            'Genbank-Scientific Name': 'Unknown',
+            'Genbank-Genus': 'Unknown',
+            'Genbank-Species': 'Unknown',
+            'Genbank-Subspecies': 'Unknown',
+            'Genbank-GenBank Division': 'Unknown',
+        }, 0
+        
+@st.cache_data(max_entries=1000)
+def enrich_genbank_metadata(df:pd.DataFrame)->pd.DataFrame:
+    """Enriches a DataFrame with metadata from GenBank accessions based on the 'Genbank accession' column.
+    returns a DataFrame with the metadata added as new columns. If no metadata was found for all accessions,
+    the original DataFrame is returned unchanged.
+    
+    Parameters:
+    df (pd.DataFrame): The DataFrame to enrich.
+    
+    Returns:
+    pd.DataFrame: The enriched DataFrame.
+    """
+    
+    # Get the unique genbank accessions
+    genbank_accessions = df['Genbank accession'].dropna().unique()
+    
+    # Get the metadata for each genbank accession
+    result = []
+    for accession in genbank_accessions:
+        result.append(get_genbank_metadata(accession))
+        time.sleep(0.1)    # To avoid rate limiting
+    
+    # Check that they are not all empty
+    metadata = [r[0] for r in result if r[1] == 1]
+    success  = [r[1] for r in result]
+    
+    if sum(success) == 0:
+        return df
+    
+    # Create a DataFrame from the metadata
+    metadata_df = pd.DataFrame(metadata)
+    
+    # Merge the metadata with the original DataFrame
+    df = df.merge(metadata_df, left_on='Genbank accession', right_on='Genbank accession')
+    
+    return df

@@ -16,7 +16,7 @@ import plotly.graph_objects as go
 
 import numpy as np
 
-from utils import write_job_params, write_warnings
+from utils import write_job_params, write_warnings, enrich_genbank_metadata
 from Protein_Dendrogram_Components import draw_mirror_plot, draw_protein_heatmap
 
 class np_data_wrapper():
@@ -694,12 +694,17 @@ st.slider("Coloring Threshold", 0.0, 1.0, step=0.05, key='coloring_threshold',
 
 st.subheader("Metadata")
 
+st.checkbox("Use GenBank IDs to Enrich Metadata", help="If checked, the metadata will be enriched with GenBank accession numbers.", key="enrich_with_genbank", value=False)
+
 # Add Metadata dropdown for text
 if metadata_df is None:
     # If there is no metadata, then we will disable the dropdown
-    # If there is no metadata, then we will disable the dropdown
     st.session_state["metadata_label"] = st.selectbox("Select a metadata category that will be displayed as text", ["No Metadata Available"], disabled=True)
 else:
+    # Enrich metadata with genebank accession
+    if st.session_state["enrich_with_genbank"]:
+        metadata_df = enrich_genbank_metadata(metadata_df)
+    
     columns_available = ["None"] + list(metadata_df.columns)
     # Remove filename and scan from the metadata
     columns_available =[x for x in columns_available if x.lower().strip() not in ['filename', 'scan/coordinate', 'small molecule file name']]
