@@ -211,3 +211,17 @@ def enrich_genbank_metadata(df:pd.DataFrame)->pd.DataFrame:
     df = df.merge(metadata_df, left_on='Genbank accession', right_on='Genbank accession')
     
     return df
+
+def custom_css():
+    # Some custom CSS to allow for markdown labels on buttons
+    st.markdown(
+        """
+        <style>
+        .button-label {
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
