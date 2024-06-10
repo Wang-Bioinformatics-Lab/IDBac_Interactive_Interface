@@ -539,6 +539,9 @@ def make_heatmap():
         
         st.plotly_chart(fig,use_container_width=True)
         
+        # Add a button to download the heatmap
+        st.download_button("Download Current Heatmap Data", df.T.to_csv(), "small_molecule_heatmap.csv", help="Download the data used to generate the heatmap.")
+        
 st.subheader("Small Molecule Filters")
 # Add a slider for the relative intensity threshold
 st.slider("Relative Intensity Threshold", min_value=0.05, max_value=1.0, value=0.15, step=0.01, 

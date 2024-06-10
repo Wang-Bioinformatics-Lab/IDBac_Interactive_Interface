@@ -243,3 +243,6 @@ def draw_protein_heatmap(all_spectra_df):
         fig.update_coloraxes(cmin=0.0, cmax=1.0, cmid=0.5,colorscale='Bluered')
         
         st.plotly_chart(fig,use_container_width=True)
+        
+        # Add a button to download the heatmap
+        st.download_button("Download Current Heatmap Data", all_spectra_df.T.to_csv(), "protein_heatmap.csv", help="Download the data used to generate the heatmap.")
