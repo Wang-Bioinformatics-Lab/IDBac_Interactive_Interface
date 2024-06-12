@@ -130,9 +130,9 @@ def get_small_molecule_dict():
             
             for mz, intensity in zip(mz_array, intensity_array):
                 if mz in mz_intensity_dict:
-                    mz_intensity_dict[mz].append(intensity)
+                    mz_intensity_dict[mz].append(float(intensity))
                 else:
-                    mz_intensity_dict[mz] = [intensity]
+                    mz_intensity_dict[mz] = [float(intensity)]
             
         for mz, intensities in mz_intensity_dict.items():
             mz_intensity_dict[mz] = sum(intensities) / len(intensities)
