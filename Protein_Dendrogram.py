@@ -16,7 +16,7 @@ import plotly.graph_objects as go
 
 import numpy as np
 
-from utils import write_job_params, write_warnings, enrich_genbank_metadata
+from utils import write_job_params, write_warnings, enrich_genbank_metadata, metadata_validation
 from Protein_Dendrogram_Components import draw_mirror_plot, draw_protein_heatmap
 
 class np_data_wrapper():
@@ -680,6 +680,11 @@ else:
         metadata_df = pd.read_csv(metadata_url, sep="\t", index_col=False)
     except:
         metadata_df = None 
+
+if metadata_df is not None:
+    # Drop anything with a nan filename
+    metadata_df = metadata_df.dropna(subset=["Filename"], axis=0)
+    metadata_validation = metadata_validation(metadata_df, all_spectra_df)
 
 ##### Add Display Parameters #####
 st.header("Dendrogram Display Options")
