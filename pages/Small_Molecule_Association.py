@@ -256,12 +256,27 @@ def generate_network(cluster_dict:dict=None, height=1000, width=600):
                       type="Small Molecule",
                       shape=small_molecule_shape)
     
+    missing_summaries = []
+
     # Add edges from df['Filename] to m/z's associated with df['Small molecule file name']
     for index, row in df.iterrows():
         if not pd.isna(row['Filename']) and not pd.isna(row['Small molecule file name']):
+            if row['Small molecule file name'] not in small_mol_dict:
+                # This happens because users may have uploaded a metadata file that 
+                # references small molecules that are not in the summary.json file
+                # (likely because it was not uploaded). These should raise a warning
+                # We'll just skip them here.
+                missing_summaries.append(row['Small molecule file name'])
+                continue
+            
             for mz in small_mol_dict[row['Small molecule file name']]['m/z array']:
                 nx_G.add_edge(row['Filename'], str(mz), weight=6) # Weight modulates distnaces for some layouts
                 
+    if len(missing_summaries) > 0:
+        st.warning(f"The following small molecules files were referenced in the metadata, but were not \
+                    found in the small molecule data. Please check and ensure that these files were included \
+                    in the workflow: {missing_summaries}")
+    
     # Calculate Coloring
     if st.session_state.get("sma_node_coloring") == "Network Community Detection" or \
         st.session_state.get("sma_node_shapes") == "Network Community Detection":
