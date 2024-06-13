@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 from matplotlib import colors
 import plotly.figure_factory as ff
 from scipy.cluster.hierarchy import linkage, dendrogram
-
+from utils import custom_css
 
 #####
 # A note abote streamlit session states:
@@ -22,6 +22,7 @@ from scipy.cluster.hierarchy import linkage, dendrogram
 
 # Set Page Configuration
 st.set_page_config(page_title="IDBac - Small Molecule Association", page_icon=None, layout="wide", initial_sidebar_state="collapsed", menu_items=None)
+custom_css()
 
 st.info("Welcome to IDBac's Small Molecule Association Page! This page is currently in development.")
 
@@ -129,9 +130,9 @@ def get_small_molecule_dict():
             
             for mz, intensity in zip(mz_array, intensity_array):
                 if mz in mz_intensity_dict:
-                    mz_intensity_dict[mz].append(intensity)
+                    mz_intensity_dict[mz].append(float(intensity))
                 else:
-                    mz_intensity_dict[mz] = [intensity]
+                    mz_intensity_dict[mz] = [float(intensity)]
             
         for mz, intensities in mz_intensity_dict.items():
             mz_intensity_dict[mz] = sum(intensities) / len(intensities)
@@ -255,12 +256,27 @@ def generate_network(cluster_dict:dict=None, height=1000, width=600):
                       type="Small Molecule",
                       shape=small_molecule_shape)
     
+    missing_summaries = []
+
     # Add edges from df['Filename] to m/z's associated with df['Small molecule file name']
     for index, row in df.iterrows():
         if not pd.isna(row['Filename']) and not pd.isna(row['Small molecule file name']):
+            if row['Small molecule file name'] not in small_mol_dict:
+                # This happens because users may have uploaded a metadata file that 
+                # references small molecules that are not in the summary.json file
+                # (likely because it was not uploaded). These should raise a warning
+                # We'll just skip them here.
+                missing_summaries.append(row['Small molecule file name'])
+                continue
+            
             for mz in small_mol_dict[row['Small molecule file name']]['m/z array']:
                 nx_G.add_edge(row['Filename'], str(mz), weight=6) # Weight modulates distnaces for some layouts
                 
+    if len(missing_summaries) > 0:
+        st.warning(f"The following small molecules files were referenced in the metadata, but were not \
+                    found in the small molecule data. Please check and ensure that these files were included \
+                    in the workflow: {missing_summaries}")
+    
     # Calculate Coloring
     if st.session_state.get("sma_node_coloring") == "Network Community Detection" or \
         st.session_state.get("sma_node_shapes") == "Network Community Detection":
@@ -539,6 +555,9 @@ def make_heatmap():
         
         st.plotly_chart(fig,use_container_width=True)
         
+        # Add a button to download the heatmap
+        st.download_button("Download Current Heatmap Data", df.T.to_csv(), "small_molecule_heatmap.csv", help="Download the data used to generate the heatmap.")
+        
 st.subheader("Small Molecule Filters")
 # Add a slider for the relative intensity threshold
 st.slider("Relative Intensity Threshold", min_value=0.05, max_value=1.0, value=0.15, step=0.01, 
@@ -599,16 +618,17 @@ with st.popover(label='Set Spectral Clustering Parameters'):
             
 # Options to show only certain proteins/clusters
 st.subheader("Additional Filters")
-add_filters_1, add_filters_2, add_filters_3 = st.columns([0.3, 0.10, 0.4])
+add_filters_1, add_filters_2, add_filters_3 = st.columns([0.46, 0.08, 0.46])
     # First column is a selectbox of protein names
     # Second is a selectbox of cluster names
     # Third is an import button that adds the values of the clusters to the protein name selection
 
-with add_filters_1:
+with st.form(key="sma_mz_filters", border=False):
+    # Protein Cluster Selection
     disabled=False
     if cluster_dict is None:
         cluster_dict = [None]
-        st.multiselect("Select Clusters to Add", [], disabled=True, key='sma_selected_clusters')
+        add_filters_1.multiselect("Select Clusters to Add", [], disabled=True, key='sma_selected_clusters')
         
     else:
         inverted_cluster_dict = {}
@@ -623,29 +643,32 @@ with add_filters_1:
             unclustered_key = tuple(set(unclustered_key))
             cluster_display_dict[unclustered_key] = cluster_display_dict[unclustered_key].replace("Cluster -1", "Unclustered")
         
-        st.multiselect("Select Clusters to Add", 
+        add_filters_1.multiselect("Select Clusters to Add", 
                         list(set(cluster_display_dict.keys())),
                         format_func=cluster_display_dict.get,
                         key='sma_selected_clusters')
+                
 
-if 'sma_selected_clusters' not in st.session_state:
-    st.session_state['sma_selected_clusters'] = []
-if 'sma_selected_proteins' not in st.session_state:
-    st.session_state['sma_selected_proteins'] = []
-        
-def _draw_selected_protein_multiselect():
-    st.session_state['sma_selected_proteins'] = st.multiselect(
+    if 'sma_selected_clusters' not in st.session_state:
+        st.session_state['sma_selected_clusters'] = []
+    if 'sma_selected_proteins' not in st.session_state:
+        st.session_state['sma_selected_proteins'] = []
+
+    # Button to Move Clusters to Individual Protein List
+    add_filters_2.markdown('<div class="button-label">Add Clusters</div>', unsafe_allow_html=True)
+    add_button = add_filters_2.button(":arrow_forward:", key="Add")
+
+    # Individual Protein Selection
+    sma_selected_proteins = add_filters_3.multiselect(
         "Select Proteins",
         list(st.session_state["metadata_df"]['Filename']),
         default=st.session_state['sma_selected_proteins']
     )
-
-with add_filters_2:
-    st.write("Add Clusters")
-    add_button = st.button(":arrow_forward:", key="Add")
-
-with add_filters_3:
-    _draw_selected_protein_multiselect()
+        
+    sma_selected_prot_submitted = st.form_submit_button("Apply Filters")
+    
+if sma_selected_prot_submitted:
+    st.session_state['sma_selected_proteins'] = sma_selected_proteins
 
 # Handle add button click
 if add_button:

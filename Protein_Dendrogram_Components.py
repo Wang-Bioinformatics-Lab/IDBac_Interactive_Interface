@@ -115,7 +115,7 @@ def draw_protein_heatmap(all_spectra_df):
     # Options
     all_options = format_protins_as_strings(all_spectra_df)
     selected_proteins = st.multiselect("Select proteins to display", all_options)
-    min_freq = st.slider("Minimum m/z Frequency", min_value=0.0, max_value=1.0, step=0.01, value=0.75,
+    min_count = st.slider("Minimum m/z Count", min_value=0, max_value=max(1,len(selected_proteins)), step=1, value=int(len(selected_proteins) * 0.75),
                          help="The minimum number of times an m/z value must be present \
                                in the selected proteins to be displayed.")
     min_intensity = st.slider("Minimum Relative Intensity", min_value=0.0, max_value=1.0, step=0.01, value=0.75,
@@ -138,8 +138,7 @@ def draw_protein_heatmap(all_spectra_df):
     all_spectra_df = all_spectra_df.replace(0, np.nan)
     # Set all values less than min_intensity to nan
     all_spectra_df = all_spectra_df.where(all_spectra_df > min_intensity)
-    # Filter bins by frequency
-    min_count = min_freq * len(selected_proteins)
+    # Filter bins by count
     bin_columns = [col for col in bin_columns if all_spectra_df[col].notna().sum() >= min_count]
     all_spectra_df = all_spectra_df.loc[:, bin_columns]
     
@@ -243,3 +242,12 @@ def draw_protein_heatmap(all_spectra_df):
         fig.update_coloraxes(cmin=0.0, cmax=1.0, cmid=0.5,colorscale='Bluered')
         
         st.plotly_chart(fig,use_container_width=True)
+        
+        print(all_spectra_df, flush=True)
+
+
+        # Rename the indices to be more human readable using _convert_bin_to_mz
+        all_spectra_df.columns = [_convert_bin_to_mz(x) for x in all_spectra_df.columns]
+
+        # Add a button to download the heatmap
+        st.download_button("Download Current Heatmap Data", all_spectra_df.T.to_csv(), "protein_heatmap.csv", help="Download the data used to generate the heatmap.")

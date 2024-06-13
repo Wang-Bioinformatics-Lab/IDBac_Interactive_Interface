@@ -211,3 +211,47 @@ def enrich_genbank_metadata(df:pd.DataFrame)->pd.DataFrame:
     df = df.merge(metadata_df, left_on='Genbank accession', right_on='Genbank accession')
     
     return df
+
+def custom_css():
+    # Some custom CSS to allow for markdown labels on buttons
+    st.markdown(
+        """
+        <style>
+        .button-label {
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+def metadata_validation(metadata_table:pd.DataFrame, spectrum_df:pd.DataFrame):
+    """Validates the metadata table against the spectrum file. This function checks the following:
+    1. There are no duplicate values in the "Filename" column. If there are, the fucntion will raise an error and halt execution.
+    2. That the values in the "Filename" column of the metadata_table and spectrum_df match. If they do not,
+        the function will display a warning.
+    Any changes to this function should also be reflected in the IDBac workflow code.
+    """
+
+    # Check for duplicates in the metadata table
+    duplicated_rows = metadata_table[metadata_table['Filename'].duplicated(keep=False)]
+    if not duplicated_rows.empty:
+        st.error("The metadata table contains duplicate values in the 'Filename' column. Please remove duplicates and try again.")
+        st.write("Duplicated Rows:", duplicated_rows)
+        st.stop()
+
+    # Check that the values in the metadata table and spectrum_df match
+    metadata_filenames = set(metadata_table['Filename'])
+    spectrum_filenames = set(spectrum_df['filename'])
+    
+    filenames_in_metadata_not_in_spectrum = list(metadata_filenames - spectrum_filenames)
+    filenames_in_spectrum_not_in_metadata = list(spectrum_filenames - metadata_filenames)
+    
+    if len(filenames_in_metadata_not_in_spectrum) > 0:
+        with st.expander(":warning: Filenames in metadata table not in spectrum file:"):
+            st.write(filenames_in_metadata_not_in_spectrum)
+    
+    if len(filenames_in_spectrum_not_in_metadata) > 0:
+        with st.expander(":warning: Filenames in spectrum file not in metadata table:"):
+            st.write(filenames_in_spectrum_not_in_metadata)
