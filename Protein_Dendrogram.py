@@ -234,6 +234,10 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict,
     else:
         all_spectra_input = all_spectra_df[['filename','db_search_result']]
         
+    if len(all_spectra_input) <= 1:
+        st.error("There are not enough spectra to create a dendrogram. Please check number of input spectra and database search results file.")
+        return None
+
     selected_distance_fun = st.session_state['distance_measure']
         
     # Creating Dendrogram  
@@ -809,8 +813,8 @@ dendro = create_dendrogram(numpy_array,
                            coloring_threshold=st.session_state["coloring_threshold"],
                            cutoff=st.session_state["cutoff"],
                            show_annotations=st.session_state["show_annotations"])
-
-st.plotly_chart(dendro, use_container_width=True)
+if dendro is not None:
+    st.plotly_chart(dendro, use_container_width=True)
 
 # Mirror Plot Options
 draw_mirror_plot(all_spectra_df)
