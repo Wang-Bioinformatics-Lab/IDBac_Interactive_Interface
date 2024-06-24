@@ -36,6 +36,10 @@ def basic_dendrogram(disabled=False):
 
     if disabled:
         return None, None
+    if st.session_state['query_spectra_numpy_data'].shape[0] <= 1:
+        st.warning("There are not enough spectra to create a dendrogram. \n \
+                   Please check number of input spectra and database search results file.")
+        return None, None
 
     dendro = ff.create_dendrogram(st.session_state['query_spectra_numpy_data'],
                                 orientation='bottom',
@@ -557,7 +561,11 @@ def make_heatmap():
         
         # Add a button to download the heatmap
         st.download_button("Download Current Heatmap Data", df.T.to_csv(), "small_molecule_heatmap.csv", help="Download the data used to generate the heatmap.")
-        
+
+if st.session_state["metadata_df"] is None:
+    st.error("Please upload a metadata file first.")
+    st.stop()
+
 st.subheader("Small Molecule Filters")
 # Add a slider for the relative intensity threshold
 st.slider("Relative Intensity Threshold", min_value=0.05, max_value=1.0, value=0.15, step=0.01, 
