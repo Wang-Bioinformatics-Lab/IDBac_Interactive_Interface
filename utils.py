@@ -46,6 +46,11 @@ def write_warnings(param_url:str)->None:
         return None
     
     warnings_df = pd.read_csv(io.StringIO(r.text), index_col=0)
+    if 'Error_Level' in warnings_df.columns:    # For backwards compatability
+        errors_df   = warnings_df.loc[warnings_df['Error_Level'] == 'critical']
+        warnings_df = warnings_df.loc[warnings_df['Error_Level'] != 'critical']
+    else:
+        errors_df = pd.DataFrame()
     
     if len(warnings_df) > 0:
         # For backwards compatability of tasks
@@ -57,6 +62,10 @@ def write_warnings(param_url:str)->None:
         with st.expander(f":warning: View {len(warnings_df)} Input File Warnings"):
             # Show the table
             st.write(warnings_df)
+
+    if len(errors_df) > 0:
+        with st.expander(f":exclamation: View {len(errors_df)} Input File Errors"):
+            st.write(errors_df)
 
     return None
 
