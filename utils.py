@@ -6,8 +6,15 @@ import io
 from xml.etree import ElementTree
 import time
 
-def write_job_params(param_url:str):
-    r = requests.get(param_url,timeout=(60,60))
+def write_job_params(task_id:str):
+    if task_id.startswith("DEV-"):
+        params_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={dev_task_id}&file=job_parameters.yaml"
+        merge_params_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={dev_task_id}&file=nf_output/merge_parameters.txt"
+    else:
+        params_url = f"https://gnps2.org/resultfile?task={task_id}&file=job_parameters.yaml"
+        merge_params_url = f"https://gnps2.org/resultfile?task={task_id}&file=nf_output/merge_parameters.txt"
+
+    r = requests.get(params_url,timeout=(60,60))
     r.raise_for_status()
     
     yaml_content = yaml.safe_load(r.text)
@@ -22,6 +29,20 @@ def write_job_params(param_url:str):
         protein_mass_range = f"({yaml_content.get('database_search_mass_range_lower')}, {yaml_content.get('database_search_mass_range_upper')})"
     else:
         protein_mass_range = 'Unknown Parameter'
+
+    # Get bin size from merge
+    r = requests.get(merge_params_url,timeout=(60,60))
+    if r.status_code == 500:
+        # This is an old file, the bin size is 10.0
+        bin_size = 10.0
+    else:
+        r.raise_for_status()
+        merge_params = yaml.safe_load(r.text)
+        bin_size = merge_params.get('bin_size', None)
+        if bin_size is None:
+            st.error("Bin size not found in merge parameters. Please re-run the task.")
+            st.stop()
+    yaml_content['bin_size'] = bin_size
     
     st.info(f"""
                 **Workflow Parameters:** \n
@@ -31,6 +52,7 @@ def write_job_params(param_url:str):
                 **Database Search Threshold:** {yaml_content.get('database_search_threshold', 'Unkown Parameter')}  
                 **Protein Database Search Mass Range:** {protein_mass_range}  
                 **Metadata File Provided:** {metadata_provided}
+                **Heatmap Bin Size:** {bin_size}
                 """)
 
     return yaml_content

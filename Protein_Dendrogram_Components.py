@@ -109,7 +109,7 @@ def draw_mirror_plot(all_spectra_df):
     # If a user is able to get click the buttone before the USI is generated, they may get the page with an old option
     st.link_button(label="View Plot", url=_get_mirror_plot_url(spectra_one_USI, spectra_two_USI))
 
-def draw_protein_heatmap(all_spectra_df):
+def draw_protein_heatmap(all_spectra_df, bin_size):
     st.subheader("Protein Spectra m/z Heatmap")
     
     # Options
@@ -144,7 +144,6 @@ def draw_protein_heatmap(all_spectra_df):
     
     def _convert_bin_to_mz(bin_name):
         bin = int(bin_name.split("_")[-1])
-        bin_size = 10.0
         
         return f"[{bin * bin_size}, {(bin + 1) * bin_size})"
     
