@@ -551,16 +551,14 @@ if st.session_state["task_id"].startswith("DEV-"):
     dev_task_id = st.session_state['task_id'][4:]
     labels_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={dev_task_id}&file=nf_output/output_histogram_data_directory/labels_spectra.tsv"
     numpy_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={dev_task_id}&file=nf_output/output_histogram_data_directory/numerical_spectra.npy"
-    params_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={dev_task_id}&file=job_parameters.yaml"
     warnings_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={dev_task_id}&file=nf_output/errors.csv"
     
 else:
     labels_url = f"https://gnps2.org/resultfile?task={st.session_state['task_id']}&file=nf_output/output_histogram_data_directory/labels_spectra.tsv"
     numpy_url = f"https://gnps2.org/resultfile?task={st.session_state['task_id']}&file=nf_output/output_histogram_data_directory/numerical_spectra.npy"
-    params_url = f"https://gnps2.org/resultfile?task={st.session_state['task_id']}&file=job_parameters.yaml"
     warnings_url = f"https://gnps2.org/resultfile?task={st.session_state['task_id']}&file=nf_output/errors.csv"
     
-workflow_params = write_job_params(params_url)
+workflow_params = write_job_params(task_id)
 write_warnings(warnings_url)
 
 # If workflow parameters specfiy a similarity function, use it. Otherwise, default to cosine
@@ -820,7 +818,7 @@ if dendro is not None:
 draw_mirror_plot(all_spectra_df)
 
 # Protein Heatmap
-draw_protein_heatmap(all_spectra_df)
+draw_protein_heatmap(all_spectra_df, workflow_params['bin_size'])
 
 # Create a shareable link to this page
 st.write("Shareable Link: ")
