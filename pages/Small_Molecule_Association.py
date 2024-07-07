@@ -41,17 +41,20 @@ def basic_dendrogram(disabled=False):
                    Please check number of input spectra and database search results file.")
         return None, None
 
+    def _dist_fun(x):
+        return squareform(st.session_state['distance_measure'](x))
+
     dendro = ff.create_dendrogram(st.session_state['query_spectra_numpy_data'],
                                 orientation='bottom',
                                 labels=st.session_state['query_only_spectra_df'].filename.values, # We will use the labels as a unique identifier
-                                distfun=st.session_state['distance_measure'],
+                                distfun=_dist_fun,
                                 linkagefun=lambda x: linkage(x, method=st.session_state["sma_clustering_method"],),
                                 color_threshold=st.session_state["sma_coloring_threshold"])
-    
+       
     st.plotly_chart(dendro, use_container_width=True)
     # Sadly the only way to get the actual clusters (to plot the graph) is to recompute the linkage with scipy
     # (TODO: Just used scipy to plot it)
-    dist_matrix = st.session_state['distance_measure'](st.session_state['query_spectra_numpy_data'])
+    dist_matrix = _dist_fun(st.session_state['query_spectra_numpy_data'])
     linkage_matrix = linkage(dist_matrix,
                             method=st.session_state["sma_clustering_method"])
     sch_dendro = dendrogram(linkage_matrix,
