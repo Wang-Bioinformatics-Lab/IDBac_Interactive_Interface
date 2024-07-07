@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 from matplotlib import colors
 import plotly.figure_factory as ff
 from scipy.cluster.hierarchy import linkage, dendrogram
+from scipy.spatial.distance import squareform
 from utils import custom_css
 
 #####
