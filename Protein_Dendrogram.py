@@ -818,9 +818,6 @@ if dendro is not None:
 # Mirror Plot Options
 draw_mirror_plot(all_spectra_df)
 
-# Protein Heatmap
-draw_protein_heatmap(all_spectra_df, st.session_state['workflow_params']['bin_size'])
-
 # Create a shareable link to this page
 st.write("Shareable Link: ")
 link = f"https://analysis.idbac.org/?task={st.session_state['task_id']}&\
