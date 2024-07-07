@@ -85,7 +85,7 @@ def basic_dendrogram(disabled=False):
 
 def draw_protein_heatmap(all_spectra_df, bin_size, cluster_dict=None):
     st.subheader("Protein Spectra m/z Heatmap")
-    add_filters_1, add_filters_2, add_filters_3 = st.columns([0.46, 0.08, 0.46])
+    add_filters_1, add_filters_2, add_filters_3 = st.columns([0.45, 0.10, 0.45])
     # Options
     all_options = format_proteins_as_strings(all_spectra_df)
 
@@ -114,16 +114,42 @@ def draw_protein_heatmap(all_spectra_df, bin_size, cluster_dict=None):
                             list(set(cluster_display_dict.keys())),
                             format_func=cluster_display_dict.get,
                             key='phm_selected_clusters')
+            
+        # Metadata Selection Options
+        metadata_selection_col1, metadata_selection_col2 = add_filters_1.columns([0.5, 0.5])
+        if st.session_state.get('metadata_df') is None:
+            metadata_selection_col1.selectbox("Metadata Criteria",
+                                              ["No Metadata Available"],
+                                              key="phm_metadata_criteria",
+                                              disabled=True)
+            metadata_selection_col2.multiselect("Metadata Values",
+                                                [],
+                                                key="phm_metadata_values",
+                                                disabled=True)
+            
+        else:
+            metadata_selection_col1.selectbox("Metadata Criteria",
+                                                st.session_state["metadata_df"].columns,
+                                                key="phm_metadata_criteria")
+            metadata_selection_col2.multiselect("Metadata Values",
+                                                st.session_state["metadata_df"][st.session_state["phm_metadata_criteria"]].unique(),
+                                                key="phm_metadata_values")
                     
-
+        # Initialize selected proteins and clusters states if not initialized
         if 'phm_selected_clusters' not in st.session_state:
             st.session_state['phm_selected_clusters'] = []
         if 'phm_selected_proteins' not in st.session_state:
             st.session_state['phm_selected_proteins'] = []
+        if 'phm_metadata_criteria' not in st.session_state:
+            st.session_state['phm_metadata_criteria'] = None
+        if 'phm_metadata_values' not in st.session_state:
+            st.session_state['phm_metadata_values'] = []
 
         # Button to Move Clusters to Individual Protein List
-        add_filters_2.markdown('<div class="button-label">Add Clusters</div>', unsafe_allow_html=True)
-        add_button = add_filters_2.button(":arrow_forward:", key="Add")
+        with st.container():
+            (_, ab, _) =  add_filters_2.columns([1,1,1])    # Allows the arrow button to stay centered
+            ab.markdown('<div class="button-label centered">Add Selection</div>', unsafe_allow_html=True)
+            add_button = ab.button(":arrow_forward:", key="Add")
 
         # Individual Protein Selection
         try:
@@ -150,10 +176,18 @@ def draw_protein_heatmap(all_spectra_df, bin_size, cluster_dict=None):
 
     # Handle add button click
     if add_button:
+        # Add from clusters
         for cluster in st.session_state['phm_selected_clusters']:
             to_add = set(cluster) - set(st.session_state['phm_selected_proteins'])
             st.session_state['phm_selected_proteins'].extend(to_add)
         st.session_state['phm_selected_clusters'].clear()
+        # Add from metadata
+        if st.session_state['phm_metadata_criteria'] is not None:
+            relevant_ids = st.session_state['metadata_df'][st.session_state['metadata_df'][st.session_state['phm_metadata_criteria']].isin(st.session_state['phm_metadata_values'])].Filename
+            to_add = set(relevant_ids) - set(st.session_state['phm_selected_proteins'])
+            st.session_state['phm_selected_proteins'].extend(to_add)
+        st.session_state['phm_metadata_values'].clear()
+
         st.rerun()  # Refresh the UI to reflect the updated selection
     #########################
     
