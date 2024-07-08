@@ -252,6 +252,10 @@ def custom_css():
             margin-bottom: 5px;
             font-size: 14px;
         }
+        .button-label.centered {
+            padding-top: 25px;
+            text-align: center;
+        }
         </style>
         """,
         unsafe_allow_html=True

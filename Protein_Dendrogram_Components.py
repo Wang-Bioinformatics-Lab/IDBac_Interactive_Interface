@@ -74,7 +74,7 @@ def get_USI(all_spectra_df: pd.DataFrame, filename: str, task:str):
         output_USI = f"mzspec:GNPS2:TASK-{task}-nf_output/merged/{row['filename'].iloc[0]}:scan:1"
     return output_USI
 
-def format_protins_as_strings(df):
+def format_proteins_as_strings(df):
     output = []
     for row in df.to_dict(orient="records"):
         if row['db_search_result']:
@@ -88,7 +88,7 @@ def draw_mirror_plot(all_spectra_df):
     # Add a dropdown allowing for mirror plots:
     st.header("Plot Spectra")
 
-    all_options = format_protins_as_strings(all_spectra_df)
+    all_options = format_proteins_as_strings(all_spectra_df)
 
     # Select spectra one
     st.selectbox("Spectra One", all_options, key='mirror_spectra_one', help="Select the first spectra to be plotted. Database search results are denoted by 'DB Result -'.")
@@ -113,7 +113,7 @@ def draw_protein_heatmap(all_spectra_df, bin_size):
     st.subheader("Protein Spectra m/z Heatmap")
     
     # Options
-    all_options = format_protins_as_strings(all_spectra_df)
+    all_options = format_proteins_as_strings(all_spectra_df)
     selected_proteins = st.multiselect("Select proteins to display", all_options)
     min_count = st.slider("Minimum m/z Count", min_value=0, max_value=max(1,len(selected_proteins)), step=1, value=int(len(selected_proteins) * 0.75),
                          help="The minimum number of times an m/z value must be present \

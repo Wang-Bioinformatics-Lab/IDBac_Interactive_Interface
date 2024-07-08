@@ -558,12 +558,12 @@ else:
     numpy_url = f"https://gnps2.org/resultfile?task={st.session_state['task_id']}&file=nf_output/output_histogram_data_directory/numerical_spectra.npy"
     warnings_url = f"https://gnps2.org/resultfile?task={st.session_state['task_id']}&file=nf_output/errors.csv"
     
-workflow_params = write_job_params(task_id)
+st.session_state['workflow_params'] = write_job_params(task_id)
 write_warnings(warnings_url)
 
 # If workflow parameters specfiy a similarity function, use it. Otherwise, default to cosine
-if "distance" in workflow_params and workflow_params is not None:
-    given_distance_measure = workflow_params.get('distance', 'cosine')
+if "distance" in st.session_state['workflow_params'] and st.session_state['workflow_params'] is not None:
+    given_distance_measure = st.session_state['workflow_params'].get('distance', 'cosine')
     assert given_distance_measure in {'presence', 'cosine', 'euclidean'}
     if given_distance_measure == 'cosine':
         st.session_state['distance_measure'] = cosine_distances
@@ -635,8 +635,8 @@ elif "db_search_result_label" not in st.session_state and db_search_results is N
 if "db_distance_threshold" not in st.session_state:
     st.session_state["db_distance_threshold"] = 0.30
 # Check if db_distance_threshold is greater than the workflow threshold
-if float(st.session_state["db_distance_threshold"]) > float(workflow_params["database_search_threshold"]):
-    st.session_state["db_distance_threshold"] = float(workflow_params["database_search_threshold"])
+if float(st.session_state["db_distance_threshold"]) > float(st.session_state['workflow_params']["database_search_threshold"]):
+    st.session_state["db_distance_threshold"] = float(st.session_state['workflow_params']["database_search_threshold"])
 # Create a session state for the maximum number of database results shown
 if "max_db_results" not in st.session_state:
     st.session_state["max_db_results"] = 1
@@ -686,7 +686,7 @@ else:
 if metadata_df is not None:
     # Drop anything with a nan filename
     metadata_df = metadata_df.dropna(subset=["Filename"], axis=0)
-    metadata_validation = metadata_validation(metadata_df, all_spectra_df)
+    metadata_validation(metadata_df, all_spectra_df)
 
 ##### Add Display Parameters #####
 st.header("Dendrogram Display Options")
@@ -741,7 +741,7 @@ else:
     
     
     # Add DB distance threshold slider
-    st.session_state["db_distance_threshold"] = st.slider("Maximum Database Distance Threshold", 0.0, float(workflow_params.get("database_search_threshold", 1.0)), st.session_state["db_distance_threshold"], 0.05)
+    st.session_state["db_distance_threshold"] = st.slider("Maximum Database Distance Threshold", 0.0, float(st.session_state['workflow_params'].get("database_search_threshold", 1.0)), st.session_state["db_distance_threshold"], 0.05)
     # Create a box for the maximum number of database results shown
     st.session_state["max_db_results"] = st.number_input("Maximum Number of Database Results Shown", min_value=-1, max_value=None, value=st.session_state["max_db_results"], help="The maximum number of unique database isolates shown, highest distance is prefered. Enter -1 to show all database results.")  
     # Create a 'select all' box for the db taxonomy filter
@@ -788,6 +788,7 @@ st.session_state['query_only_spectra_df'] = all_spectra_df
 
 # Process the db search results (it's done in this order to allow for db_search parameters)
 all_spectra_df, db_distance_dict = integrate_database_search_results(all_spectra_df, db_search_results, db_db_distance_table, st.session_state)
+st.session_state['spectra_df'] = all_spectra_df
 
 # Remove selected ones from all_spectra_df (believe it or not, we want to remove this after integrating the database search results. This will allow users to hide the queries)
 all_spectra_df = all_spectra_df[~all_spectra_df["filename"].isin(st.session_state["hidden_isolates"])]
@@ -816,9 +817,6 @@ if dendro is not None:
 
 # Mirror Plot Options
 draw_mirror_plot(all_spectra_df)
-
-# Protein Heatmap
-draw_protein_heatmap(all_spectra_df, workflow_params['bin_size'])
 
 # Create a shareable link to this page
 st.write("Shareable Link: ")
