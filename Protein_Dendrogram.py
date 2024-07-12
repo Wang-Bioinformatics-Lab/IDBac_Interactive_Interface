@@ -815,9 +815,6 @@ dendro = create_dendrogram(numpy_array,
 if dendro is not None:
     st.plotly_chart(dendro, use_container_width=True)
 
-# Mirror Plot Options
-draw_mirror_plot(all_spectra_df)
-
 # Create a shareable link to this page
 st.write("Shareable Link: ")
 link = f"https://analysis.idbac.org/?task={st.session_state['task_id']}&\
