@@ -290,3 +290,13 @@ def metadata_validation(metadata_table:pd.DataFrame, spectrum_df:pd.DataFrame):
     if len(filenames_in_spectrum_not_in_metadata) > 0:
         with st.expander(":warning: Filenames in spectrum file not in metadata table:"):
             st.write(filenames_in_spectrum_not_in_metadata)
+
+def format_proteins_as_strings(df):
+    output = []
+    for row in df.to_dict(orient="records"):
+        if row['db_search_result']:
+            output.append(f"DB Result - {row['filename']}")
+        else:   
+            output.append(row['filename'])
+            
+    return output
