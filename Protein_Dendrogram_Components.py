@@ -84,31 +84,6 @@ def format_proteins_as_strings(df):
             
     return output
 
-def draw_mirror_plot(all_spectra_df):
-    # Add a dropdown allowing for mirror plots:
-    st.header("Plot Spectra")
-
-    all_options = format_proteins_as_strings(all_spectra_df)
-
-    # Select spectra one
-    st.selectbox("Spectra One", all_options, key='mirror_spectra_one', help="Select the first spectra to be plotted. Database search results are denoted by 'DB Result -'.")
-    # Select spectra two
-    st.selectbox("Spectra Two", ['None'] + all_options, key='mirror_spectra_two', help="Select the second spectra to be plotted. Database search results are denoted by 'DB Result -'.")
-    # Add a button to generate the mirror plot
-    spectra_one_USI = get_USI(all_spectra_df, st.session_state['mirror_spectra_one'], st.session_state["task_id"])
-    spectra_two_USI = get_USI(all_spectra_df, st.session_state['mirror_spectra_two'], st.session_state["task_id"])
-    
-    
-    def _get_mirror_plot_url(usi1, usi2=None):
-        if usi2 is None:
-            url = f"https://metabolomics-usi.gnps2.org/dashinterface/?usi1={usi1}"
-        else:
-            url = f"https://metabolomics-usi.gnps2.org/dashinterface/?usi1={usi1}&usi2={usi2}"
-        return url
-
-    # If a user is able to get click the buttone before the USI is generated, they may get the page with an old option
-    st.link_button(label="View Plot", url=_get_mirror_plot_url(spectra_one_USI, spectra_two_USI))
-
 def draw_protein_heatmap(all_spectra_df, bin_size):
     st.subheader("Protein Spectra m/z Heatmap")
     
