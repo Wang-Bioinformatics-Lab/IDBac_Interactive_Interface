@@ -89,7 +89,7 @@ def draw_protein_heatmap(all_spectra_df, bin_size, cluster_dict=None):
     # Options
     all_options = format_proteins_as_strings(all_spectra_df)
 
-    #### Select Proteins ####
+    #### Select Strains ####
     with st.form(key="phm_mz_filters", border=False):
         # Protein Cluster Selection
         disabled=False
@@ -154,7 +154,7 @@ def draw_protein_heatmap(all_spectra_df, bin_size, cluster_dict=None):
         # Individual Protein Selection
         try:
             phm_selected_proteins = add_filters_3.multiselect(
-                "Select Proteins",
+                "Select Strains",
                 all_options,
                 default=st.session_state['phm_selected_proteins']
             )
@@ -163,7 +163,7 @@ def draw_protein_heatmap(all_spectra_df, bin_size, cluster_dict=None):
             phm_selected_proteins = []
             st.session_state['phm_selected_proteins'] = []
             phm_selected_proteins = add_filters_3.multiselect(
-                "Select Proteins",
+                "Select Strains",
                 all_options,
                 default=st.session_state['phm_selected_proteins']
             )
