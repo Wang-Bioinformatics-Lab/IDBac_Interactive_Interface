@@ -17,7 +17,7 @@ import plotly.graph_objects as go
 import numpy as np
 
 from utils import write_job_params, write_warnings, enrich_genbank_metadata, metadata_validation
-from Protein_Dendrogram_Components import draw_mirror_plot, draw_protein_heatmap
+from Protein_Dendrogram_Components import draw_protein_heatmap
 
 class np_data_wrapper():
     def __init__(self, data_np, spectrum_data_df, db_distance_dict):
