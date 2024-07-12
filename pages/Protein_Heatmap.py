@@ -89,6 +89,9 @@ def draw_protein_heatmap(all_spectra_df, bin_size, cluster_dict=None):
     # Options
     all_options = format_proteins_as_strings(all_spectra_df)
 
+    # Initialze all protins as selected
+    st.session_state['phm_selected_proteins'] = all_options
+
     #### Select Strains ####
     with st.form(key="phm_mz_filters", border=False):
         # Protein Cluster Selection
@@ -169,7 +172,7 @@ def draw_protein_heatmap(all_spectra_df, bin_size, cluster_dict=None):
             )
 
             
-        phm_selected_prot_submitted = st.form_submit_button("Apply Filters")
+        phm_selected_prot_submitted = st.form_submit_button("Apply/Update Filters")
         
     if phm_selected_prot_submitted:
         st.session_state['phm_selected_proteins'] = phm_selected_proteins
