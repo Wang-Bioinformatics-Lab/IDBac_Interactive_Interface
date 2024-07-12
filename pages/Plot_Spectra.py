@@ -250,7 +250,7 @@ def stick_plot(peaks_a, peaks_b=None):
     tickvals = np.arange(0, 1.1, 0.1)
     # Add negative values if needed
     if peaks_b is not None:
-        tickvals = np.concatenate([np.arange(-1.1, 0.0, 0.1), tickvals])
+        tickvals = np.concatenate([np.arange(-1.0, 0.0, 0.1), tickvals])
     updated_ticktext = [f'{abs(val):.1f}' for val in tickvals]
 
 
