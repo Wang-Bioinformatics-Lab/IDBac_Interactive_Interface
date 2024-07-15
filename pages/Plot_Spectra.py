@@ -18,6 +18,9 @@ from utils import custom_css, format_proteins_as_strings
 # import StreamlitAPIException
 from streamlit.errors import StreamlitAPIException
 
+# Set the number of decimal places to round to
+DECIMAL_PLACES=2
+
 #####
 # A note abote streamlit session states:
 # All session states related to this page begin with "mp_" to reduce the 
@@ -160,7 +163,7 @@ def get_peaks(all_spectra_df: pd.DataFrame, filename: str, task:str):
     # Discretize peaks to two decimal points and add intensities for the same m/z
     peaks_dict = {}
     for peak in peaks:
-        mz = round(peak[0], 2)
+        mz = round(peak[0], DECIMAL_PLACES)
         if mz not in peaks_dict:
             peaks_dict[mz] = peak[1]
         else:
@@ -200,7 +203,7 @@ def get_peaks_from_db_result(database_id:str):
 
 import plotly.graph_objects as go
 
-def stick_plot(peaks_a, peaks_b=None):
+def stick_plot(peaks_a, peaks_b=None, title=None):
     """Create a stick plot for two spectra with the bottom spectra mirrored, if specified.
     
     Parameters:
@@ -213,7 +216,7 @@ def stick_plot(peaks_a, peaks_b=None):
                 title="m/z"
             ),
             yaxis=dict(
-                title="Intensity"
+                title="Normalized Intensity"
             ),
             # Set width, height
             width=650,
@@ -221,12 +224,22 @@ def stick_plot(peaks_a, peaks_b=None):
         )
     )
     
+    color_dict = {}
+    if peaks_b is not None:
+        # Color peaks green if they match, blue if not
+        # Get intersection
+        peaks_a_mz = set([peak[0] for peak in peaks_a])
+        peaks_b_mz = set([peak[0] for peak in peaks_b])
+        intersection = peaks_a_mz.intersection(peaks_b_mz)
+        for mz in intersection:
+            color_dict[mz] = "green"
+    
     for peak in peaks_a:
         fig.add_trace(go.Scatter(
             x=[peak[0], peak[0]],
             y=[0, peak[1]],
             mode='lines',
-            line=dict(color='blue'),
+            line=dict(color=color_dict.get(peak[0], 'blue')),
 			name="" # Hide "Trace 0"
         ))
     if peaks_b is not None:
@@ -236,7 +249,7 @@ def stick_plot(peaks_a, peaks_b=None):
                 x=[peak[0], peak[0]],
                 y=[0, -peak[1]],
                 mode='lines',
-                line=dict(color='blue'),
+                line=dict(color=color_dict.get(peak[0], 'blue')),
 			name="" # Hide "Trace 0"
             ))
     
@@ -264,11 +277,20 @@ def stick_plot(peaks_a, peaks_b=None):
     if peaks_b is not None:
         tickvals = np.concatenate([np.arange(-1.0, 0.0, 0.1), tickvals])
     updated_ticktext = [f'{abs(val):.1f}' for val in tickvals]
-
-
     
+    # Compute lower and upper bound for range
+    lower_range = max(min([peak[0] for peak in peaks_a]) - 100,0)
+    upper_range = max([peak[0] for peak in peaks_a]) + 100
+
     # Update the y-axis with new tick text
     fig.update_layout(
+        title=dict(
+        text=title,
+        x=0.5,  # Center the title
+        xanchor='center',
+        font=dict(color='black')  # Set the title color to black
+        ),
+        margin=dict(l=5, r=5, t=50, b=5),
         yaxis=dict(
             tickvals=tickvals,
             ticktext=updated_ticktext,
@@ -283,7 +305,8 @@ def stick_plot(peaks_a, peaks_b=None):
                    title_font_color='black',
                    tickfont=dict(
                           color='black'
-                   )),
+                   ),
+                   range=[lower_range, upper_range]),
         plot_bgcolor='white',
         paper_bgcolor='white',
     )
@@ -306,13 +329,18 @@ def draw_mirror_plot(all_spectra_df):
     
     
     # For Local Plot
+    if spectra_two_USI is None:
+        default_title = f"{st.session_state['mirror_spectra_one']}"
+    else:
+        default_title = f"{st.session_state['mirror_spectra_one']} vs {st.session_state['mirror_spectra_two']}"
+    plot_title = st.text_input("Set Title:", value=default_title)
+
     peaks_a = get_peaks(all_spectra_df, st.session_state['mirror_spectra_one'], st.session_state["task_id"])
     peaks_b = None
     if st.session_state['mirror_spectra_two'] != 'None':
         peaks_b = get_peaks(all_spectra_df, st.session_state['mirror_spectra_two'], st.session_state["task_id"])
 
-    # Test stick plot
-    stick_plot(peaks_a, peaks_b)
+    stick_plot(peaks_a, peaks_b, title=plot_title)
 
     # For Metabolomics Resolver
     def _get_mirror_plot_url(usi1, usi2=None):
