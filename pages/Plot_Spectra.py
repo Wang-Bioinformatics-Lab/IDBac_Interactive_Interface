@@ -157,9 +157,19 @@ def get_peaks(all_spectra_df: pd.DataFrame, filename: str, task:str):
 
         peaks = get_peaks_from_USI(USI)
 
+    # Discretize peaks to two decimal points and add intensities for the same m/z
+    peaks_dict = {}
+    for peak in peaks:
+        mz = round(peak[0], 2)
+        if mz not in peaks_dict:
+            peaks_dict[mz] = peak[1]
+        else:
+            peaks_dict[mz] += peak[1]
+    peaks = [[mz, intensity] for mz, intensity in peaks_dict.items()]
+
     # Normalize intensities
     max_intensity = max([peak[1] for peak in peaks])
-    peaks = [[peak[0], peak[1] / max_intensity] for peak in peaks]
+    peaks = [[peak[0], peak[1] / max_intensity] for peak in sorted(peaks)]
 
     return peaks
 
@@ -216,7 +226,8 @@ def stick_plot(peaks_a, peaks_b=None):
             x=[peak[0], peak[0]],
             y=[0, peak[1]],
             mode='lines',
-            line=dict(color='blue')
+            line=dict(color='blue'),
+			name="" # Hide "Trace 0"
         ))
     if peaks_b is not None:
         # If peaks_b is provided, plot two stick plots
@@ -225,7 +236,8 @@ def stick_plot(peaks_a, peaks_b=None):
                 x=[peak[0], peak[0]],
                 y=[0, -peak[1]],
                 mode='lines',
-                line=dict(color='blue')
+                line=dict(color='blue'),
+			name="" # Hide "Trace 0"
             ))
     
     # Get the current y-axis tick values and tick text
