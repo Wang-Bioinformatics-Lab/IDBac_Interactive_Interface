@@ -14,12 +14,10 @@ import plotly.figure_factory as ff
 from scipy.cluster.hierarchy import linkage, dendrogram
 from scipy.spatial.distance import squareform
 from utils import custom_css, format_proteins_as_strings
-
-# import StreamlitAPIException
 from streamlit.errors import StreamlitAPIException
 
-# Set the number of decimal places to round to
-DECIMAL_PLACES=2
+# Set the number of decimal places to round to. Should be congruent with binning setting in workflow
+DECIMAL_PLACES=0
 
 #####
 # A note abote streamlit session states:
@@ -28,11 +26,8 @@ DECIMAL_PLACES=2
 #####
 
 # Set Page Configuration
-st.set_page_config(page_title="IDBac - Plot Spectra", page_icon=None, layout="centered", initial_sidebar_state="auto", menu_items=None)
+st.set_page_config(page_title="IDBac - Plot Spectra", page_icon="assets/idbac_logo_square.png", layout="centered", initial_sidebar_state="auto", menu_items=None)
 custom_css()
-
-st.info("Welcome to the IDBac Plot Spectra Page! Here you can view and compare spectra from your IDBac analysis. \
-        For the time being, database spectra have exact peaks, workflow spectra have binned peaks.")
 
 def get_USI(all_spectra_df: pd.DataFrame, filename: str, task:str):
     """
