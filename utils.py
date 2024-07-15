@@ -51,7 +51,7 @@ def write_job_params(task_id:str):
                 **Distance Measure:** {yaml_content.get('distance', 'Unkown Parameter')}  
                 **Database Search Threshold:** {yaml_content.get('database_search_threshold', 'Unkown Parameter')}  
                 **Protein Database Search Mass Range:** {protein_mass_range}  
-                **Metadata File Provided:** {metadata_provided}
+                **Metadata File Provided:** {metadata_provided}  
                 **Heatmap Bin Size:** {bin_size}
                 """)
 
