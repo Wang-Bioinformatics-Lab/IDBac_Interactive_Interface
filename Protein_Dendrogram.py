@@ -501,7 +501,7 @@ def integrate_database_search_results(all_spectra_df:pd.DataFrame, database_sear
     return all_spectra_df, database_distance_dict
 
 # Set Page Configuration
-st.set_page_config(page_title="IDBac - Dendrogram", page_icon=None, layout="centered", initial_sidebar_state="auto", menu_items=None)
+st.set_page_config(page_title="IDBac - Dendrogram", page_icon="assets/idbac_logo_square.png", layout="centered", initial_sidebar_state="auto", menu_items=None)
 
 # Here we will add an input field for the GNPS2 task ID
 url_parameters = st.query_params

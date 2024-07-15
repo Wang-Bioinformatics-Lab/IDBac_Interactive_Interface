@@ -25,7 +25,7 @@ from streamlit.errors import StreamlitAPIException
 #####
 
 # Set Page Configuration
-st.set_page_config(page_title="IDBac - Protein Heatmap", page_icon=None, layout="wide", initial_sidebar_state="collapsed", menu_items=None)
+st.set_page_config(page_title="IDBac - Protein Heatmap", page_icon="assets/idbac_logo_square.png", layout="wide", initial_sidebar_state="collapsed", menu_items=None)
 custom_css()
 
 def format_proteins_as_strings(df):
