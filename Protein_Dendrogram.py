@@ -17,7 +17,7 @@ import plotly.graph_objects as go
 import numpy as np
 
 from utils import write_job_params, write_warnings, enrich_genbank_metadata, metadata_validation
-from Protein_Dendrogram_Components import draw_mirror_plot, draw_protein_heatmap
+from Protein_Dendrogram_Components import draw_protein_heatmap
 
 class np_data_wrapper():
     def __init__(self, data_np, spectrum_data_df, db_distance_dict):
@@ -501,7 +501,7 @@ def integrate_database_search_results(all_spectra_df:pd.DataFrame, database_sear
     return all_spectra_df, database_distance_dict
 
 # Set Page Configuration
-st.set_page_config(page_title="IDBac - Dendrogram", page_icon=None, layout="centered", initial_sidebar_state="auto", menu_items=None)
+st.set_page_config(page_title="IDBac - Dendrogram", page_icon="assets/idbac_logo_square.png", layout="centered", initial_sidebar_state="auto", menu_items=None)
 
 # Here we will add an input field for the GNPS2 task ID
 url_parameters = st.query_params
@@ -814,9 +814,6 @@ dendro = create_dendrogram(numpy_array,
                            show_annotations=st.session_state["show_annotations"])
 if dendro is not None:
     st.plotly_chart(dendro, use_container_width=True)
-
-# Mirror Plot Options
-draw_mirror_plot(all_spectra_df)
 
 # Create a shareable link to this page
 st.write("Shareable Link: ")

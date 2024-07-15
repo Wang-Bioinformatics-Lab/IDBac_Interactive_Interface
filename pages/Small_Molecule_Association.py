@@ -22,7 +22,7 @@ from utils import custom_css
 #####
 
 # Set Page Configuration
-st.set_page_config(page_title="IDBac - Small Molecule Association", page_icon=None, layout="wide", initial_sidebar_state="collapsed", menu_items=None)
+st.set_page_config(page_title="IDBac - Small Molecule Association", page_icon="assets/idbac_logo_square.png", layout="wide", initial_sidebar_state="collapsed", menu_items=None)
 custom_css()
 
 st.info("Welcome to IDBac's Small Molecule Association Page! This page is currently in development.")

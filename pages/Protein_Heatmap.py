@@ -25,7 +25,7 @@ from streamlit.errors import StreamlitAPIException
 #####
 
 # Set Page Configuration
-st.set_page_config(page_title="IDBac - Protein Heatmap", page_icon=None, layout="wide", initial_sidebar_state="collapsed", menu_items=None)
+st.set_page_config(page_title="IDBac - Protein Heatmap", page_icon="assets/idbac_logo_square.png", layout="wide", initial_sidebar_state="collapsed", menu_items=None)
 custom_css()
 
 def format_proteins_as_strings(df):
@@ -89,7 +89,10 @@ def draw_protein_heatmap(all_spectra_df, bin_size, cluster_dict=None):
     # Options
     all_options = format_proteins_as_strings(all_spectra_df)
 
-    #### Select Proteins ####
+    # Initialze all protins as selected
+    st.session_state['phm_selected_proteins'] = all_options
+
+    #### Select Strains ####
     with st.form(key="phm_mz_filters", border=False):
         # Protein Cluster Selection
         disabled=False
@@ -154,7 +157,7 @@ def draw_protein_heatmap(all_spectra_df, bin_size, cluster_dict=None):
         # Individual Protein Selection
         try:
             phm_selected_proteins = add_filters_3.multiselect(
-                "Select Proteins",
+                "Select Strains",
                 all_options,
                 default=st.session_state['phm_selected_proteins']
             )
@@ -163,13 +166,13 @@ def draw_protein_heatmap(all_spectra_df, bin_size, cluster_dict=None):
             phm_selected_proteins = []
             st.session_state['phm_selected_proteins'] = []
             phm_selected_proteins = add_filters_3.multiselect(
-                "Select Proteins",
+                "Select Strains",
                 all_options,
                 default=st.session_state['phm_selected_proteins']
             )
 
             
-        phm_selected_prot_submitted = st.form_submit_button("Apply Filters")
+        phm_selected_prot_submitted = st.form_submit_button("Apply/Update Filters")
         
     if phm_selected_prot_submitted:
         st.session_state['phm_selected_proteins'] = phm_selected_proteins
