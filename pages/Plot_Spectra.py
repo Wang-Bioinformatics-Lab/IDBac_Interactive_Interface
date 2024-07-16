@@ -16,7 +16,10 @@ from scipy.spatial.distance import squareform
 from utils import custom_css, format_proteins_as_strings
 from streamlit.errors import StreamlitAPIException
 
-# Set the number of decimal places to round to. Should be congruent with binning setting in workflow
+# TODO:
+# [ ] Get processed spectra from DB, rather than raw
+
+# Set the number of decimal places to round to. Should be consistent with binning setting in workflow
 DECIMAL_PLACES=0
 
 #####
@@ -192,7 +195,9 @@ def get_peaks_from_db_result(database_id:str):
         raise ValueError("Database ID not found")
 
     result_dictionary = r.json()
-    peaks = result_dictionary["spectrum"]
+    peaks = result_dictionary["spectrum"]   # Gives unbinned, unnormalized peaks unmerged by scan
+    # Flatten (unmerged peaks from different scans will be delt with in discretization)
+    peaks = [[peak[0], peak[1]] for scan_peaks in peaks for peak in scan_peaks]
 
     return peaks
 

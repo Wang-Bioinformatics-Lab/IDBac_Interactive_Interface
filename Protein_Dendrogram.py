@@ -668,6 +668,9 @@ if st.checkbox("Upload Metadata", help="If left unchecked, the metadata associat
             metadata_df = pd.read_csv(metadata_file, sep="\t", index_col=False)
         elif metadata_file.name.endswith(".xlsx"):
             metadata_df = pd.read_excel(metadata_file, index_col=False)
+            # If it contains multiple tables, get the one named "Metadata sheet"
+            if isinstance(metadata_df, dict):
+                metadata_df = metadata_df["Metadata sheet"]
         else:
             st.error("Please upload a .csv, .tsv, or .txt file")
     else:
@@ -685,6 +688,8 @@ else:
 
 if metadata_df is not None:
     # Drop anything with a nan filename
+    print(metadata_df, flush=True)
+    print(metadata_df.columns, flush=True)
     metadata_df = metadata_df.dropna(subset=["Filename"], axis=0)
     metadata_validation(metadata_df, all_spectra_df)
 
