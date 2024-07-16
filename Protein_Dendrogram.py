@@ -667,10 +667,11 @@ if st.checkbox("Upload Metadata", help="If left unchecked, the metadata associat
         elif metadata_file.name.endswith(".tsv"):
             metadata_df = pd.read_csv(metadata_file, sep="\t", index_col=False)
         elif metadata_file.name.endswith(".xlsx"):
-            metadata_df = pd.read_excel(metadata_file, index_col=False)
-            # If it contains multiple tables, get the one named "Metadata sheet"
-            if isinstance(metadata_df, dict):
+            metadata_df =  pd.read_excel(metadata_file, sheet_name=None)
+            if "Metadata sheet" in metadata_df:
                 metadata_df = metadata_df["Metadata sheet"]
+            else:
+                metadata_df = metadata_df[list(metadata_df.keys())[0]]
         else:
             st.error("Please upload a .csv, .tsv, or .txt file")
     else:
