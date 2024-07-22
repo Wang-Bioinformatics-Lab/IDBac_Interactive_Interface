@@ -175,7 +175,8 @@ def get_peaks(all_spectra_df: pd.DataFrame, filename: str, task:str):
     return peaks
 
 def get_peaks_from_db_result(database_id:str):
-    """ Get the peaks from a database search result.
+    """ Get the peaks from a database search result. This function will return the peaks 
+    after processing (e.g., baseline correction, merging, and binning). 
 
     Parameters:
     - database_id (str): The database_id of the database search result.
@@ -183,7 +184,7 @@ def get_peaks_from_db_result(database_id:str):
     Returns:
     - peaks (list): The peaks of the database search result.
     """
-    url = f"https://idbac.org/api/spectrum?database_id={database_id}"
+    url = f"https://idbac.org/api/spectrum/filtered?database_id={database_id}"
 
     r = requests.get(url, timeout=60)
     retries = 3
@@ -195,9 +196,8 @@ def get_peaks_from_db_result(database_id:str):
         raise ValueError("Database ID not found")
 
     result_dictionary = r.json()
-    peaks = result_dictionary["spectrum"]   # Gives unbinned, unnormalized peaks unmerged by scan
-    # Flatten (unmerged peaks from different scans will be delt with in discretization)
-    peaks = [[peak[0], peak[1]] for scan_peaks in peaks for peak in scan_peaks]
+    peaks = result_dictionary["peaks"]   # Gives unbinned, unnormalized peaks unmerged by scan
+    peaks = [[p['mz'], p['i']] for p in peaks]
 
     return peaks
 
