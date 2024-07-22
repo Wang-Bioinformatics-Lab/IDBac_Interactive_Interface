@@ -257,7 +257,7 @@ def draw_protein_heatmap(all_spectra_df, bin_size, cluster_dict=None, dendro_ord
         if st.session_state["phm_display_metadata"] == "Dendrogram Cluster":
             # Subtract 1 from cluster number to match the cluster_dict
             index = [f"Cluster {cluster_dict[filename]-1} - {filename}" for filename in index]
-            index = [x.replace("Cluster 0", "Unclustered") for x in index]
+            index = [x.replace("Cluster -1", "Unclustered") for x in index]
         else:
             # Append metadata to names if not nan
             index[all_spectra_df["_metadata"].notna().values] = all_spectra_df["_metadata"][all_spectra_df["_metadata"].notna()].values + \
