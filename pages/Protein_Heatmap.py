@@ -83,7 +83,7 @@ def basic_dendrogram(disabled=False):
     
     return cluster_dict, dendro
 
-def draw_protein_heatmap(all_spectra_df, bin_size, cluster_dict=None):
+def draw_protein_heatmap(all_spectra_df, bin_size, cluster_dict=None, dendro_ordering=None):
     st.subheader("Protein Spectra m/z Heatmap")
     add_filters_1, add_filters_2, add_filters_3 = st.columns([0.45, 0.10, 0.45])
     # Options
@@ -213,13 +213,56 @@ def draw_protein_heatmap(all_spectra_df, bin_size, cluster_dict=None):
     min_intensity = st.slider("Minimum Relative Intensity", min_value=0.0, max_value=1.0, step=0.01, value=0.40,
                               help="The minimum relative intensity value to display.")
     
-    
-    # Remove "DB Result - " from the selected proteins
+    metadata_options = ["None", "Dendrogram Cluster"] + list(st.session_state.get("metadata_df").columns)
+    st.selectbox("Display Metadata", metadata_options, key="phm_display_metadata")
+
+    st.selectbox("Sort Proteins By", ["Protein Name", "Dendrogram Clustering", "Metadata"], key="phm_sort_proteins_by")
+
+    # Remove "DB Result - " from the selected proteins -- DB Results are currently deprecated
     selected_proteins = [x.replace("DB Result - ", "") for x in st.session_state['phm_selected_proteins']]
-       
+
     # Set index to filename
     all_spectra_df = all_spectra_df.set_index("filename")
+
+    if st.session_state["phm_display_metadata"] != "None" and\
+        st.session_state["phm_display_metadata"] != "Dendrogram Cluster":
+        # Map filenames to metadata
+        metadata_df = st.session_state["metadata_df"]
+        metadata_df = metadata_df.set_index("Filename")
+        all_spectra_df["_metadata"] = metadata_df.loc[all_spectra_df.index, st.session_state["phm_display_metadata"]]
+
+    if st.session_state["phm_sort_proteins_by"] == "Dendrogram Clustering":
+        if dendro_ordering is None:
+            st.error("Unable to order the proteins by dendrogram clustering, please see dendrogram.")
+
+        selected_proteins = dendro_ordering
+
+    elif st.session_state["phm_sort_proteins_by"] == "Metadata":
+        if st.session_state["phm_display_metadata"] == "None":
+            st.error("Please select a displayed metadata value to sort proteins by.")
+            st.stop()
+        
+        selected_proteins = all_spectra_df["_metadata"].sort_values().index
+
+    elif st.session_state["phm_sort_proteins_by"] == "Protein Name":
+        selected_proteins = sorted(selected_proteins)
+
+
+    # Select and order relevant columns
     all_spectra_df = all_spectra_df.loc[selected_proteins, :]
+
+    # Add metadata to name if selected
+    if st.session_state["phm_display_metadata"] != "None":
+        index = all_spectra_df.index.values
+        if st.session_state["phm_display_metadata"] == "Dendrogram Cluster":
+            # Subtract 1 from cluster number to match the cluster_dict
+            index = [f"Cluster {cluster_dict[filename]-1} - {filename}" for filename in index]
+            index = [x.replace("Cluster 0", "Unclustered") for x in index]
+        else:
+            # Append metadata to names if not nan
+            index[all_spectra_df["_metadata"].notna().values] = all_spectra_df["_metadata"][all_spectra_df["_metadata"].notna()].values + \
+                                                                " - " + index[all_spectra_df["_metadata"].notna().values]
+        all_spectra_df.index = index
     
     bin_columns = [col for col in all_spectra_df.columns if col.startswith("BIN_")]
     bin_columns = sorted(bin_columns, key=lambda x: int(x.split("_")[-1]))
@@ -376,7 +419,10 @@ def draw_protein_heatmap(all_spectra_df, bin_size, cluster_dict=None):
 cluster_dict = None
 st.subheader("Spectral Similarity Options")
 with st.popover(label='Set Spectral Clustering Parameters'):
-    cluster_dict, _ = basic_dendrogram()
+    cluster_dict, dendro = basic_dendrogram()
+
+# Get ordering of x-ticks from dendrogram to pass to heatmap for ordering
+dendro_ordering = dendro.layout.xaxis.ticktext
 
 # Use "query_only_spectra_df" because database spectra may be binned to a different size
-draw_protein_heatmap(st.session_state['query_only_spectra_df'], st.session_state['workflow_params']['bin_size'], cluster_dict)
+draw_protein_heatmap(st.session_state['query_only_spectra_df'], st.session_state['workflow_params']['bin_size'], cluster_dict, dendro_ordering=dendro_ordering)
