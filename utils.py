@@ -5,6 +5,7 @@ import pandas as pd
 import io
 from xml.etree import ElementTree
 import time
+import numpy as np
 
 def write_job_params(task_id:str):
     if task_id.startswith("DEV-"):
@@ -300,3 +301,36 @@ def format_proteins_as_strings(df):
             output.append(row['filename'])
             
     return output
+
+def parse_numerical_input(string:str) -> list:
+    initial_list = [entry.strip() for entry in string.split(",")]
+    # Format ranges as tuples: '[10-20]' -> (10, 20), [10-] -> (10, np.inf)
+    output_list = []
+    for entry in initial_list:
+        try:
+            entry_as_float = float(entry)
+            if entry_as_float < 0:
+                st.error(f"Negative values are not allowed: {entry}")
+                return []
+            output_list.append(entry_as_float)
+            continue
+        except Exception as e:
+            pass
+        try:
+            if "-" in entry:
+                entry = entry.replace("[", "").replace("]", "")
+                start, end = entry.split("-")
+                if start == "":
+                    start = 0
+                if end == "":
+                    end = np.inf
+                if start != "" and end != "":
+                    if float(end) - float(start) < 0:
+                        st.error(f"Invalid range: {entry}. The start value must be less than the end value.")
+                output_list.append((float(start), float(end)))
+            else:
+                output_list.append(float(entry))
+        except Exception as e:
+            st.error(f"Could not parse entry: {entry} " + str(e))
+            return []
+    return output_list

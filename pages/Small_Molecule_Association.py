@@ -13,7 +13,7 @@ from matplotlib import colors
 import plotly.figure_factory as ff
 from scipy.cluster.hierarchy import linkage, dendrogram
 from scipy.spatial.distance import squareform
-from utils import custom_css
+from utils import custom_css, parse_numerical_input
 
 #####
 # A note abote streamlit session states:
@@ -71,38 +71,6 @@ def basic_dendrogram(disabled=False):
     cluster_dict = {filename: color + 1 if color >= 1 else 0 for filename, color in cluster_dict.items()}
     
     return cluster_dict, dendro
-
-def parse_numerical_input(string:str) -> list:
-    initial_list = [entry.strip() for entry in string.split(",")]
-    # Format ranges as tuples: '[10-20]' -> (10, 20), [10-] -> (10, np.inf)
-    output_list = []
-    for entry in initial_list:
-        try:
-            entry_as_float = float(entry)
-            if entry_as_float < 0:
-                st.error(f"Negative values are not allowed: {entry}")
-                return []
-            output_list.append(entry_as_float)
-            continue
-        except Exception as e:
-            pass
-        try:
-            if "-" in entry:
-                entry = entry.replace("[", "").replace("]", "")
-                start, end = entry.split("-")
-                if start == "":
-                    start = 0
-                if end == "":
-                    end = np.inf
-                output_list.append((float(start), float(end)))
-            else:
-                output_list.append(float(entry))
-        except Exception as e:
-            st.error(f"Could not parse entry: {entry}")
-            return []
-    return output_list
-        
-    
 
 def get_small_molecule_dict():
     if st.session_state['task_id'].startswith("DEV-"):
@@ -579,7 +547,7 @@ st.slider("Replicate Frequency Threshold", min_value=0.00, max_value=1.0, value=
 
 # Add text input to select certain m/z's (comma-seperated)
 mz_col1, mz_col2 = st.columns([3, 1])
-mz_col1.text_input("Filter m/z Values", key="sma_selected_mzs", help="Enter m/z values seperated by commas. Ranges can be entered as [127.0-], or [125.0-10]. No value will show all m/z values.")
+mz_col1.text_input("Filter m/z Values", key="sma_selected_mzs", help="Enter m/z values seperated by commas. Ranges can be entered as [125.0-130.0] or as open ended (e.g., [127.0-]). No value will show all m/z values.")
 mz_col2.number_input("Tolerance (m/z)", key="sma_mz_tolerance", value=0.1, help="Tolerance for the selected m/z values. Does not apply to ranges.")
 try:
     if st.session_state.get("sma_selected_mzs"):

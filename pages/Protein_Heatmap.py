@@ -13,7 +13,7 @@ from matplotlib import colors
 import plotly.figure_factory as ff
 from scipy.cluster.hierarchy import linkage, dendrogram
 from scipy.spatial.distance import squareform
-from utils import custom_css
+from utils import custom_css, parse_numerical_input
 
 # import StreamlitAPIException
 from streamlit.errors import StreamlitAPIException
@@ -194,6 +194,19 @@ def draw_protein_heatmap(all_spectra_df, bin_size, cluster_dict=None):
         st.rerun()  # Refresh the UI to reflect the updated selection
     #########################
     
+    # m/z range slection
+    st.text_input("Filter m/z Values", key="phm_selected_mzs", help="Enter m/z values seperated by commas. Ranges can be entered as [125.0-130.0] or as open ended (e.g., [127.0-]). \n \
+                                                                If either end of the range falls within the heatmap bin, the bin will be displayed. \n \
+                                                                No value will show all m/z values.")
+    try:
+        if st.session_state.get("phm_selected_mzs"):
+            st.session_state["phm_parsed_selected_mzs"] = parse_numerical_input(st.session_state["phm_selected_mzs"])
+        else:
+            st.session_state["phm_parsed_selected_mzs"] = []
+    except Exception as e:
+        st.error("Please enter valid m/z values." + str(e))
+        st.stop()
+
     min_count = st.slider("Minimum m/z Count", min_value=0, max_value=max(1,len(st.session_state['phm_selected_proteins'])), step=1, value=1,
                          help="The minimum number of times an m/z value must be present \
                                in the selected proteins to be displayed.")
@@ -226,8 +239,45 @@ def draw_protein_heatmap(all_spectra_df, bin_size, cluster_dict=None):
         
         return f"[{bin * bin_size}, {(bin + 1) * bin_size})"
     
-    # Remove rows with all nan
+    # Remove mzs with all nan
     all_spectra_df = all_spectra_df.dropna(how='all', axis='columns')
+    all_spectra_df.columns = [_convert_bin_to_mz(x) for x in all_spectra_df.columns]
+
+    # Remove all mzs not in the selected m/z range
+    if st.session_state.get("phm_parsed_selected_mzs"):
+        if len(st.session_state["phm_parsed_selected_mzs"]) > 0:
+            # Query columns that are included in the selected m/z values
+            all_mz_bins = all_spectra_df.columns
+            mz_filtered_indices = set()
+            for mz_bin in all_mz_bins:
+                lower_bin, upper_bin = mz_bin[1:-1].split(", ")
+                lower_bin = float(lower_bin)
+                upper_bin = float(upper_bin)
+                for filter in st.session_state["phm_parsed_selected_mzs"]:
+                    if isinstance(filter, float):
+                        if lower_bin <= filter < upper_bin:
+                            mz_filtered_indices.add(mz_bin)
+                    elif isinstance(filter, tuple):
+                        start, end = filter
+                        # If the ranges overlap at all, add the bin
+                        if start > upper_bin or end < lower_bin:
+                            continue
+                        start_in_bin = start >= lower_bin and start < upper_bin
+                        end_in_bin = end >= lower_bin and end < upper_bin
+                        
+                        # Case 1: start is lower than bin, end falls within bin
+                        if start_in_bin:
+                            mz_filtered_indices.add(mz_bin)
+                        # Case 2: start falls within bin, end is higher than bin
+                        elif end_in_bin:
+                            mz_filtered_indices.add(mz_bin)
+                        # Case 3: start is lower than bin, end is higher than bin
+                        if start <= lower_bin and end >= upper_bin:
+                            mz_filtered_indices.add(mz_bin)
+
+            # Sort selection by average of range
+            mz_filtered_indices = sorted(list(mz_filtered_indices), key=lambda x: (float(x[1:-1].split(", ")[0]) + float(x[1:-1].split(", ")[1])) / 2)
+            all_spectra_df = all_spectra_df[mz_filtered_indices]
     
     if len(all_spectra_df.columns) != 0:
         # Note: We transpose the dataframe so that the proteins are on the x-axis
@@ -275,7 +325,7 @@ def draw_protein_heatmap(all_spectra_df, bin_size, cluster_dict=None):
         # Update axis text (we do this here otherwise spacing is not even)
         heatmap.update_layout(
             xaxis=dict(title="Protein", ticktext=list(all_spectra_df.index.values), tickvals=list(range(len(all_spectra_df.index))), side='top'),
-            yaxis=dict(title="m/z", ticktext=[_convert_bin_to_mz(x) for x in all_spectra_df.columns], tickvals=list(range(len(all_spectra_df.columns)))),
+            yaxis=dict(title="m/z", ticktext=all_spectra_df.columns, tickvals=list(range(len(all_spectra_df.columns)))),
             margin=dict(t=5, pad=0),
         )
         
@@ -319,9 +369,6 @@ def draw_protein_heatmap(all_spectra_df, bin_size, cluster_dict=None):
         fig.update_coloraxes(cmin=0.0, cmax=1.0, cmid=0.5,colorscale='Bluered')
         
         st.plotly_chart(fig,use_container_width=True)
-
-        # Rename the indices to be more human readable using _convert_bin_to_mz
-        all_spectra_df.columns = [_convert_bin_to_mz(x) for x in all_spectra_df.columns]
 
         # Add a button to download the heatmap
         st.download_button("Download Current Heatmap Data", all_spectra_df.T.to_csv(), "protein_heatmap.csv", help="Download the data used to generate the heatmap.")
