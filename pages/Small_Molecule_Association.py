@@ -25,7 +25,8 @@ from utils import custom_css, parse_numerical_input
 st.set_page_config(page_title="IDBac - Small Molecule Association", page_icon="assets/idbac_logo_square.png", layout="wide", initial_sidebar_state="collapsed", menu_items=None)
 custom_css()
 
-st.info("Welcome to IDBac's Small Molecule Association Page! This page is currently in development.")
+st.info("Welcome to IDBac's Small Molecule Association Page! This page is currently in development. \n \
+        Looking for a task to try out the small molecule page with? 7bcac5e463b146879b1f6d4058e1ef19")
 
 def basic_dendrogram(disabled=False):
     """

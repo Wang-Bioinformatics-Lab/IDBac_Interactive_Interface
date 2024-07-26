@@ -90,7 +90,8 @@ def draw_protein_heatmap(all_spectra_df, bin_size, cluster_dict=None, dendro_ord
     all_options = format_proteins_as_strings(all_spectra_df)
 
     # Initialze all protins as selected
-    st.session_state['phm_selected_proteins'] = all_options
+    if 'phm_selected_proteins' not in st.session_state:
+        st.session_state['phm_selected_proteins'] = all_options
 
     #### Select Strains ####
     with st.form(key="phm_mz_filters", border=False):
@@ -168,7 +169,7 @@ def draw_protein_heatmap(all_spectra_df, bin_size, cluster_dict=None, dendro_ord
             phm_selected_proteins = add_filters_3.multiselect(
                 "Select Strains",
                 all_options,
-                default=st.session_state['phm_selected_proteins']
+                default=[]
             )
 
             
@@ -176,20 +177,23 @@ def draw_protein_heatmap(all_spectra_df, bin_size, cluster_dict=None, dendro_ord
         
     if phm_selected_prot_submitted:
         st.session_state['phm_selected_proteins'] = phm_selected_proteins
+        st.rerun()
 
     # Handle add button click
     if add_button:
+        # Add currently select protein
+        st.session_state['phm_selected_proteins'] = phm_selected_proteins
+
         # Add from clusters
         for cluster in st.session_state['phm_selected_clusters']:
             to_add = set(cluster) - set(st.session_state['phm_selected_proteins'])
             st.session_state['phm_selected_proteins'].extend(to_add)
-        st.session_state['phm_selected_clusters'].clear()
+
         # Add from metadata
         if st.session_state['phm_metadata_criteria'] is not None:
             relevant_ids = st.session_state['metadata_df'][st.session_state['metadata_df'][st.session_state['phm_metadata_criteria']].isin(st.session_state['phm_metadata_values'])].Filename
             to_add = set(relevant_ids) - set(st.session_state['phm_selected_proteins'])
             st.session_state['phm_selected_proteins'].extend(to_add)
-        st.session_state['phm_metadata_values'].clear()
 
         st.rerun()  # Refresh the UI to reflect the updated selection
     #########################
@@ -257,7 +261,7 @@ def draw_protein_heatmap(all_spectra_df, bin_size, cluster_dict=None, dendro_ord
         if st.session_state["phm_display_metadata"] == "Dendrogram Cluster":
             # Subtract 1 from cluster number to match the cluster_dict
             index = [f"Cluster {cluster_dict[filename]-1} - {filename}" for filename in index]
-            index = [x.replace("Cluster 0", "Unclustered") for x in index]
+            index = [x.replace("Cluster -1", "Unclustered") for x in index]
         else:
             # Append metadata to names if not nan
             index[all_spectra_df["_metadata"].notna().values] = all_spectra_df["_metadata"][all_spectra_df["_metadata"].notna()].values + \
