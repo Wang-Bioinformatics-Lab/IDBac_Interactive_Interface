@@ -38,52 +38,96 @@ def format_proteins_as_strings(df):
             
     return output
 
-def basic_dendrogram(disabled=False):
+def basic_dendrogram(spectrum_df=None, disabled=False, display=True):
     """
     This function generates a basic dendrogram for the protein heatmap page. 
     """
-    st.slider("Coloring Threshold", min_value=0.0, max_value=1.0, value=0.7, step=0.01, key="phm_coloring_threshold")
-    clustering_options = ["ward", "single", "complete", "average", "weighted", "centroid", "median"]
-    st.selectbox("Clustering Method", clustering_options, key="phm_clustering_method")
+
+    # If spectrum_df is specified, use that, otherwise use the query spectra
+    if spectrum_df is None:
+        spectrum_df = st.session_state['query_only_spectra_df']
+        query_spectra_numpy_data = st.session_state['query_spectra_numpy_data']
+    else:
+        # We need to subset the query_spectrum_numpy_data to match the selected proteins
+        selected_proteins = spectrum_df.index
+        query_spectra_numpy_data = st.session_state['query_spectra_numpy_data']
+        query_only_df = st.session_state['query_only_spectra_df']
+        # Select and reorder the numpy data by order in selected_proteins
+        indices = []
+        for protein in selected_proteins:
+            indices.append(np.where(query_only_df.filename == protein)[0][0])
+        query_spectra_numpy_data = query_spectra_numpy_data.take(indices, axis=0)
+
+    # Check if options have been initialized, if so skip
+    if 'phm_coloring_threshold' not in st.session_state:
+        st.slider("Coloring Threshold", min_value=0.0, max_value=1.0, value=0.7, step=0.01, key="phm_coloring_threshold")
+        clustering_options = ["ward", "single", "complete", "average", "weighted", "centroid", "median"]
+        st.selectbox("Clustering Method", clustering_options, key="phm_clustering_method")
 
     if disabled:
-        return None, None
-    if st.session_state['query_spectra_numpy_data'].shape[0] <= 1:
+        return None, None, None
+    if query_spectra_numpy_data.shape[0] <= 1:
         st.warning("There are not enough spectra to create a dendrogram. \n \
                    Please check number of input spectra and database search results file.")
-        return None, None
+        return None, None, None
 
     def _dist_fun(x):
-        return squareform(st.session_state['distance_measure'](x))
+        return squareform(st.session_state['distance_measure'](x), force='tovector')
 
-    dendro = ff.create_dendrogram(st.session_state['query_spectra_numpy_data'],
-                                orientation='bottom',
-                                labels=st.session_state['query_only_spectra_df'].filename.values, # We will use the labels as a unique identifier
-                                distfun=_dist_fun,
-                                linkagefun=lambda x: linkage(x, method=st.session_state["phm_clustering_method"],),
-                                color_threshold=st.session_state["phm_coloring_threshold"])
-    
-    st.plotly_chart(dendro, use_container_width=True)
     # Sadly the only way to get the actual clusters (to plot the graph) is to recompute the linkage with scipy
     # (TODO: Just used scipy to plot it)
-    dist_matrix = _dist_fun(st.session_state['query_spectra_numpy_data'])
+    dist_matrix = _dist_fun(query_spectra_numpy_data)
     linkage_matrix = linkage(dist_matrix,
                             method=st.session_state["phm_clustering_method"])
     sch_dendro = dendrogram(linkage_matrix,
-                            labels=st.session_state['query_only_spectra_df'].filename.values,
+                            labels=spectrum_df.filename.values,
                             no_plot=True,
                             color_threshold=st.session_state["phm_coloring_threshold"])
     
     # Note that C0 means unclustered here:
-    cluster_dict = {filename: color for filename, color in zip(sch_dendro['ivl'], sch_dendro['leaves_color_list'])}
-    # Replace C0, C1, C2 with integers 
-    cluster_dict = {filename: int(color[1:]) for filename, color in cluster_dict.items()}
-    # Add 1 if value >= 1 to reserve 1 for small molecules, 0 for unclustered
-    cluster_dict = {filename: color + 1 if color >= 1 else 0 for filename, color in cluster_dict.items()}
-    
-    return cluster_dict, dendro
+    # Note that the colors will repeat, cluster_id should be unique
+    cluster_dict = {}   # Dictionary of ['filename'] {'cluster_id', 'color'}
+    filenames = sch_dendro['ivl']
+    colors_list = sch_dendro['leaves_color_list']
 
-def draw_protein_heatmap(all_spectra_df, bin_size, cluster_dict=None, dendro_ordering=None):
+    prev_color = colors_list[0]
+    curr_cluster = 1
+    for filename, color in zip(filenames, colors_list):
+        # If the last color doesn't equal this color, we have a new cluster
+        if color != prev_color and color != 'C0':   # Don't increment the cluster if it's unclustered
+            curr_cluster += 1
+            prev_color = color
+        elif color == 'C0':     # To handle the edge case where to clusters of the same color are split by an unclustered protein
+            prev_color = None
+        cluster_dict[filename] = {
+                                  'cluster': curr_cluster if color != 'C0' else 0,  # If the color is C0, it's unclustered
+                                  'color': int(color[1:])
+                                  }
+    
+    dendro = ff.create_dendrogram(query_spectra_numpy_data,
+                                orientation='bottom',
+                                labels=spectrum_df.filename.values, # We will use the labels as a unique identifier
+                                distfun=_dist_fun,
+                                linkagefun=lambda x: linkage(x, method=st.session_state["phm_clustering_method"],),
+                                color_threshold=st.session_state["phm_coloring_threshold"])
+    
+    # Add clusters to dendrogram labels
+    for i, label in enumerate(dendro.layout.xaxis.ticktext):
+        cluster = cluster_dict.get(label)
+        if cluster is not None:
+            cluster = cluster['cluster']
+            if cluster == 0:
+                dendro.layout.xaxis.ticktext[i] = f"Unclustered - {label}"
+            else:
+                dendro.layout.xaxis.ticktext[i] = f"Cluster {cluster} - {label}"
+    
+    if display == False:
+        return cluster_dict, dendro, filenames
+    st.plotly_chart(dendro, use_container_width=True)
+
+    return cluster_dict, dendro, filenames
+
+def draw_protein_heatmap(all_spectra_df, bin_size, all_clusters_dict):     # , cluster_dict=None, dendro=None, dendro_ordering=None'
     st.subheader("Protein Spectra m/z Heatmap")
     add_filters_1, add_filters_2, add_filters_3 = st.columns([0.45, 0.10, 0.45])
     # Options
@@ -96,23 +140,24 @@ def draw_protein_heatmap(all_spectra_df, bin_size, cluster_dict=None, dendro_ord
     #### Select Strains ####
     with st.form(key="phm_mz_filters", border=False):
         # Protein Cluster Selection
-        disabled=False
-        if cluster_dict is None:
-            cluster_dict = [None]
+
+        if all_clusters_dict is None:
+            all_clusters_dict = [None]
             add_filters_1.multiselect("Select Clusters to Add", [], disabled=True, key='phm_selected_clusters')
             
         else:
             inverted_cluster_dict = {}
-            for filename, cluster_id in cluster_dict.items():
+            for filename, dict_for_filename in all_clusters_dict.items():
+                cluster_id = dict_for_filename['cluster']
                 if inverted_cluster_dict.get(cluster_id) is None:
                     inverted_cluster_dict[cluster_id] = [filename]
                 else:
                     inverted_cluster_dict[cluster_id].append(filename)
-            cluster_display_dict = {tuple(set(filenames)): f"Cluster {cluster_id-1}: {tuple(set(filenames))}".replace(',','') for cluster_id, filenames in inverted_cluster_dict.items()}
+            cluster_display_dict = {tuple(set(filenames)): f"Cluster {cluster_id}: {tuple(set(filenames))}".replace(',','') for cluster_id, filenames in inverted_cluster_dict.items()}
             unclustered_key = inverted_cluster_dict.get(0)
             if unclustered_key is not None:
                 unclustered_key = tuple(set(unclustered_key))
-                cluster_display_dict[unclustered_key] = cluster_display_dict[unclustered_key].replace("Cluster -1", "Unclustered")
+                cluster_display_dict[unclustered_key] = cluster_display_dict[unclustered_key].replace("Cluster 0", "Unclustered")
             
             add_filters_1.multiselect("Select Clusters to Add", 
                             list(set(cluster_display_dict.keys())),
@@ -217,16 +262,26 @@ def draw_protein_heatmap(all_spectra_df, bin_size, cluster_dict=None, dendro_ord
     min_intensity = st.slider("Minimum Relative Intensity", min_value=0.0, max_value=1.0, step=0.01, value=0.40,
                               help="The minimum relative intensity value to display.")
     
+    # Whether to overlay dendrogram
+    st.checkbox("Overlay Dendrogram", key="phm_overlay_dendrogram")
+    
     metadata_options = ["None", "Dendrogram Cluster"] + list(st.session_state.get("metadata_df").columns)
     st.selectbox("Display Metadata", metadata_options, key="phm_display_metadata")
 
-    st.selectbox("Sort Proteins By", ["Protein Name", "Dendrogram Clustering", "Metadata"], key="phm_sort_proteins_by")
+    if st.session_state['phm_overlay_dendrogram']:
+        st.selectbox("Sort Proteins By", ["Dendrogram Clustering"], key="phm_sort_proteins_by", disabled=True)
+    else:
+        st.selectbox("Sort Proteins By", ["Protein Name", "Dendrogram Clustering", "Metadata"], key="phm_sort_proteins_by")
 
     # Remove "DB Result - " from the selected proteins -- DB Results are currently deprecated
     selected_proteins = [x.replace("DB Result - ", "") for x in st.session_state['phm_selected_proteins']]
 
     # Set index to filename
     all_spectra_df = all_spectra_df.set_index("filename")
+    all_spectra_df['filename'] = all_spectra_df.index
+
+    # Recompute dendrogram with selected values only
+    subset_cluster_dict, local_dendro, local_dendro_ordering = basic_dendrogram(all_spectra_df.loc[selected_proteins, :], display=False)
 
     if st.session_state["phm_display_metadata"] != "None" and\
         st.session_state["phm_display_metadata"] != "Dendrogram Cluster":
@@ -236,10 +291,11 @@ def draw_protein_heatmap(all_spectra_df, bin_size, cluster_dict=None, dendro_ord
         all_spectra_df["_metadata"] = metadata_df.loc[all_spectra_df.index, st.session_state["phm_display_metadata"]]
 
     if st.session_state["phm_sort_proteins_by"] == "Dendrogram Clustering":
-        if dendro_ordering is None:
+        if local_dendro_ordering is None:
             st.error("Unable to order the proteins by dendrogram clustering, please see dendrogram.")
 
-        selected_proteins = dendro_ordering
+        # get the local_dendro_ordering subset by selected_proteins
+        selected_proteins = [x for x in local_dendro_ordering if x in selected_proteins]
 
     elif st.session_state["phm_sort_proteins_by"] == "Metadata":
         if st.session_state["phm_display_metadata"] == "None":
@@ -259,9 +315,9 @@ def draw_protein_heatmap(all_spectra_df, bin_size, cluster_dict=None, dendro_ord
     if st.session_state["phm_display_metadata"] != "None":
         index = all_spectra_df.index.values
         if st.session_state["phm_display_metadata"] == "Dendrogram Cluster":
-            # Subtract 1 from cluster number to match the cluster_dict
-            index = [f"Cluster {cluster_dict[filename]-1} - {filename}" for filename in index]
-            index = [x.replace("Cluster -1", "Unclustered") for x in index]
+            # Subtract 1 from cluster number to match the subset_cluster_dict
+            index = [f"Cluster {subset_cluster_dict[filename]['cluster']} - {filename}" for filename in index]
+            index = [x.replace("Cluster 0", "Unclustered") for x in index]
         else:
             # Append metadata to names if not nan
             index[all_spectra_df["_metadata"].notna().values] = all_spectra_df["_metadata"][all_spectra_df["_metadata"].notna()].values + \
@@ -363,6 +419,10 @@ def draw_protein_heatmap(all_spectra_df, bin_size, cluster_dict=None, dendro_ord
             # Also us the X values from the dendrogram
             x = dendro.layout.xaxis.tickvals
         
+        if local_dendro is not None and st.session_state['phm_overlay_dendrogram']:
+            # Map x-axis values to local_dendrogram values
+            x = local_dendro.layout.xaxis.tickvals
+
         heatmap = plotly.express.imshow(all_spectra_df.T.values,    # Transpose so m/zs are rows
                                         x=x,
                                         aspect ='auto', 
@@ -406,13 +466,54 @@ def draw_protein_heatmap(all_spectra_df, bin_size, cluster_dict=None, dendro_ord
             
         else:
             fig = heatmap
-            
+
         fig.update_layout(showlegend=False,
                     coloraxis_colorbar=dict(title="Relative Intensity", 
                                             len=min(500, dynamic_height), 
                                             lenmode="pixels", 
                                             y=0.75)
                                         )
+
+        if st.session_state['phm_overlay_dendrogram']:
+            merged_fig = plotly.subplots.make_subplots(rows=2, cols=1,
+                                              shared_xaxes=True,
+                                              row_width=[0.9, 0.1],
+                                              vertical_spacing=0.07,)
+            
+            # Add dendro
+            for trace in local_dendro.data:
+                merged_fig.add_trace(trace, row=1, col=1)
+
+            # Set heatmap x-ticks to match dendrogram (already sorted in the same order)
+            fig.update_xaxes(ticktext=local_dendro.layout.xaxis.ticktext, tickvals=local_dendro.layout.xaxis.tickvals)
+
+            # Add heatmap
+            for trace in fig.data:
+                merged_fig.add_trace(trace, row=2, col=1)
+
+            # Update heatmap y-axis
+            merged_fig.update_yaxes(ticktext=fig.layout.yaxis.ticktext, tickvals=fig.layout.yaxis.tickvals, row=2, col=1)
+
+            # Show x-labels between plots
+            merged_fig.update_xaxes(showticklabels=True, row=2, col=1, side='top', 
+                                    ticktext=['']*len(local_dendro.layout.xaxis.ticktext),
+                                    tickvals=local_dendro.layout.xaxis.tickvals,
+                                    ticklen=5)
+            
+            merged_fig.update_xaxes(showticklabels=True, row=1, col=1,
+                                    ticktext=[x[:20] + "..." if len(x)>=20 else x for x in local_dendro.layout.xaxis.ticktext], # Trim text
+                                    tickvals=local_dendro.layout.xaxis.tickvals,
+                                    ticklen=5)
+
+            # Hide the legend for the dendrogram
+            merged_fig.update_layout(showlegend=False)
+
+            # Update height
+            merged_fig.update_layout(height=dynamic_height + 400)
+
+            fig = merged_fig
+
+        # Update color axis
         fig.update_coloraxes(cmin=0.0, cmax=1.0, cmid=0.5,colorscale='Bluered')
         
         st.plotly_chart(fig,use_container_width=True)
@@ -420,13 +521,10 @@ def draw_protein_heatmap(all_spectra_df, bin_size, cluster_dict=None, dendro_ord
         # Add a button to download the heatmap
         st.download_button("Download Current Heatmap Data", all_spectra_df.T.to_csv(), "protein_heatmap.csv", help="Download the data used to generate the heatmap.")
 
-cluster_dict = None
+all_clusters_dict = None
 st.subheader("Spectral Similarity Options")
 with st.popover(label='Set Spectral Clustering Parameters'):
-    cluster_dict, dendro = basic_dendrogram()
-
-# Get ordering of x-ticks from dendrogram to pass to heatmap for ordering
-dendro_ordering = dendro.layout.xaxis.ticktext
+    all_clusters_dict, dendro, dendro_ordering = basic_dendrogram()
 
 # Use "query_only_spectra_df" because database spectra may be binned to a different size
-draw_protein_heatmap(st.session_state['query_only_spectra_df'], st.session_state['workflow_params']['bin_size'], cluster_dict, dendro_ordering=dendro_ordering)
+draw_protein_heatmap(st.session_state['query_only_spectra_df'], st.session_state['workflow_params']['bin_size'], all_clusters_dict=all_clusters_dict) # , cluster_dict, dendro=dendro, dendro_ordering=dendro_ordering
