@@ -61,7 +61,9 @@ def basic_dendrogram(spectrum_df=None, disabled=False, display=True):
     # Check if options have been initialized, if so skip
     if 'phm_coloring_threshold' not in st.session_state:
         st.slider("Coloring Threshold", min_value=0.0, max_value=1.0, value=0.7, step=0.01, key="phm_coloring_threshold")
-        clustering_options = ["ward", "single", "complete", "average", "weighted", "centroid", "median"]
+        clustering_options = ["average", "single", "complete", "weighted"]
+        if st.session_state['distance_measure'] == "euclidean":
+            clustering_options += ['ward', 'median', 'centroid']
         st.selectbox("Clustering Method", clustering_options, key="phm_clustering_method")
 
     if disabled:
@@ -454,8 +456,8 @@ def draw_protein_heatmap(all_spectra_df, bin_size, all_clusters_dict):     # , c
                 fig.add_trace(trace, row=1, col=1)
             
             # Add x-axis labels from dendrogram
-            fig.update_xaxes(ticktext=dendro.layout.xaxis.ticktext, tickvals=dendro.layout.xaxis.tickvals, row=1, col=1)
-            fig.update_xaxes(ticktext=dendro.layout.xaxis.ticktext, tickvals=dendro.layout.xaxis.tickvals, row=2, col=1)
+            fig.update_xaxes(ticktext=dendro.layout.xaxis.ticktext, tickvals=dendro.layout.xaxis.tickvals, row=1, col=1, tickangle=90)
+            fig.update_xaxes(ticktext=dendro.layout.xaxis.ticktext, tickvals=dendro.layout.xaxis.tickvals, row=2, col=1, tickangle=90)
             # Add y labels to dendrogram
             fig.update_yaxes(ticktext=dendro.layout.yaxis.ticktext, tickvals=dendro.layout.yaxis.tickvals, row=1, col=1, title="Dendrogram Distance")
             # Add y labels to heatmap

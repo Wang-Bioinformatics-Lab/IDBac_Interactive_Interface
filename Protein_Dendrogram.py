@@ -166,7 +166,7 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict,
                       db_label_column=None,
                       metadata_df=None,
                       db_search_columns=None,
-                      cluster_method="ward",
+                      cluster_method="average",
                       coloring_threshold=None,
                       cutoff=None,
                       show_annotations=True,
@@ -707,9 +707,9 @@ st.header("Dendrogram Display Options")
 
 with st.expander("Clustering Settings", expanded=True):
     # Add Clustering Method dropdown
-    clustering_options = ["average", "single", "complete", "weighted", "centroid", "median"]
+    clustering_options = ["average", "single", "complete", "weighted"]
     if st.session_state['distance_measure'] == "euclidean":
-        clustering_options += ['ward']
+        clustering_options += ['ward', 'median', 'centroid']
     st.session_state["clustering_method"] = st.selectbox("Clustering Method", clustering_options, index=0)
     # Add coloring threshold slider
     st.slider("Coloring Threshold", 0.0, 1.0, step=0.05, key='coloring_threshold',
