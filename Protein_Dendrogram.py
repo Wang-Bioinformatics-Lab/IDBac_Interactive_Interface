@@ -16,7 +16,7 @@ import plotly.graph_objects as go
 
 import numpy as np
 
-from utils import write_job_params, write_warnings, enrich_genbank_metadata, metadata_validation
+from utils import write_job_params, write_warnings, enrich_genbank_metadata, metadata_validation, custom_css
 from Protein_Dendrogram_Components import draw_protein_heatmap
 
 class np_data_wrapper():
@@ -81,8 +81,13 @@ def get_dist_function_wrapper(distfun):
         num_inputs = len(non_db_search_result_indices)
         
         if len(non_db_search_result_indices) != 0:
-            computed_distances = distfun(data_np[non_db_search_result_indices])
-        else: 
+            if st.session_state['given_distance_measure'] == 'presence':
+                _data_np = data_np[non_db_search_result_indices].copy()
+                _data_np[_data_np > 0] = 1.0
+            else:
+                _data_np = data_np[non_db_search_result_indices].copy()
+            computed_distances = distfun(_data_np)
+        else:
             computed_distances = np.zeros((0, num_inputs))
         
         # Add database search results
@@ -161,7 +166,7 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict,
                       db_label_column=None,
                       metadata_df=None,
                       db_search_columns=None,
-                      cluster_method="ward",
+                      cluster_method="average",
                       coloring_threshold=None,
                       cutoff=None,
                       show_annotations=True,
@@ -502,6 +507,7 @@ def integrate_database_search_results(all_spectra_df:pd.DataFrame, database_sear
 
 # Set Page Configuration
 st.set_page_config(page_title="IDBac - Dendrogram", page_icon="assets/idbac_logo_square.png", layout="centered", initial_sidebar_state="auto", menu_items=None)
+custom_css()
 
 # Here we will add an input field for the GNPS2 task ID
 url_parameters = st.query_params
@@ -565,6 +571,7 @@ write_warnings(warnings_url)
 if "distance" in st.session_state['workflow_params'] and st.session_state['workflow_params'] is not None:
     given_distance_measure = st.session_state['workflow_params'].get('distance', 'cosine')
     assert given_distance_measure in {'presence', 'cosine', 'euclidean'}
+    st.session_state['given_distance_measure'] = given_distance_measure
     if given_distance_measure == 'cosine':
         st.session_state['distance_measure'] = cosine_distances
     elif given_distance_measure == 'euclidean':
@@ -574,6 +581,7 @@ if "distance" in st.session_state['workflow_params'] and st.session_state['workf
 else:
     st.warning("**Warning:** Unable to find a distance function in the workflow parameters. This may be an old task. Please rerun it. \
                Defaulting to cosine similarity.")
+    st.session_state['given_distance_measure'] = 'cosine'
     st.session_state['distance_measure'] = cosine_distances
 # By request, no longer displaying labels url
 if False:
@@ -616,7 +624,7 @@ else:
 ##### Create Session States #####
 # Create a session state for the clustering method
 if "clustering_method" not in st.session_state:
-    st.session_state["clustering_method"] = "ward"
+    st.session_state["clustering_method"] = "average"
 # Create a session state for the coloring threshold
 if "coloring_threshold" not in st.session_state:
     st.session_state["coloring_threshold"] = 0.70
@@ -697,98 +705,98 @@ if metadata_df is not None:
 ##### Add Display Parameters #####
 st.header("Dendrogram Display Options")
 
-st.subheader("Clustering Settings")
-# Add Clustering Method dropdown
-clustering_options = ["ward", "single", "complete", "average", "weighted", "centroid", "median"]
-st.session_state["clustering_method"] = st.selectbox("Clustering Method", clustering_options, index=0)
-# Add coloring threshold slider
-st.slider("Coloring Threshold", 0.0, 1.0, step=0.05, key='coloring_threshold',
-          help="Colors all links to the left of the threshold with the same color as long as they're linked below the threshold.")
+with st.expander("Clustering Settings", expanded=True):
+    # Add Clustering Method dropdown
+    clustering_options = ["average", "single", "complete", "weighted"]
+    if st.session_state['distance_measure'] == "euclidean":
+        clustering_options += ['ward', 'median', 'centroid']
+    st.session_state["clustering_method"] = st.selectbox("Clustering Method", clustering_options, index=0)
+    # Add coloring threshold slider
+    st.slider("Coloring Threshold", 0.0, 1.0, step=0.05, key='coloring_threshold',
+            help="Colors all links to the left of the threshold with the same color as long as they're linked below the threshold.")
 
-st.subheader("Metadata")
+with st.expander("Metadata", expanded=True):
+    st.checkbox("Use GenBank IDs to Enrich Metadata", help="If checked, the metadata will be enriched with GenBank accession numbers.", key="enrich_with_genbank", value=False)
 
-st.checkbox("Use GenBank IDs to Enrich Metadata", help="If checked, the metadata will be enriched with GenBank accession numbers.", key="enrich_with_genbank", value=False)
+    # Add Metadata dropdown for text
+    if metadata_df is None:
+        # If there is no metadata, then we will disable the dropdown
+        st.session_state["metadata_label"] = st.selectbox("Select a metadata category that will be displayed as text", ["No Metadata Available"], disabled=True)
+    else:
+        # Enrich metadata with genebank accession
+        if st.session_state["enrich_with_genbank"]:
+            metadata_df = enrich_genbank_metadata(metadata_df)
+        
+        columns_available = ["None"] + list(metadata_df.columns)
+        # Remove filename and scan from the metadata
+        columns_available =[x for x in columns_available if x.lower().strip() not in ['filename', 'scan/coordinate', 'small molecule file name']]
+        st.session_state["metadata_label"] = st.selectbox("Select a metadata category that will be displayed as text", columns_available)
 
-# Add Metadata dropdown for text
-if metadata_df is None:
-    # If there is no metadata, then we will disable the dropdown
-    st.session_state["metadata_label"] = st.selectbox("Select a metadata category that will be displayed as text", ["No Metadata Available"], disabled=True)
-else:
-    # Enrich metadata with genebank accession
-    if st.session_state["enrich_with_genbank"]:
-        metadata_df = enrich_genbank_metadata(metadata_df)
-    
-    columns_available = ["None"] + list(metadata_df.columns)
-    # Remove filename and scan from the metadata
-    columns_available =[x for x in columns_available if x.lower().strip() not in ['filename', 'scan/coordinate', 'small molecule file name']]
-    st.session_state["metadata_label"] = st.selectbox("Select a metadata category that will be displayed as text", columns_available)
+    # Add Metadata dropdown for scatter plots
+    if metadata_df is None:
+        # If there is no metadata, then we will disable the dropdown
+        st.session_state["metadata_scatter"] = st.multiselect("Select a metadata category that will be plotted", ["No Metadata Available"], default="No Metadata Available", disabled=True, max_selections=5)
+    else:
+        columns_available = list(metadata_df.columns)
+        # Remove forbidden columns
+        columns_available =[x for x in columns_available if x.lower().strip() not in ['filename', 'scan/coordinate', 'genbank accession', 'ncbi taxid', 'ms collected by', 'isolate collected by', 'sample collected by', 'pi', '16s sequence']]
+        st.session_state["metadata_scatter"]  = st.multiselect("Select a metadata category that will be plotted", columns_available, default=[], max_selections=5)
 
-# Add Metadata dropdown for scatter plots
-if metadata_df is None:
-    # If there is no metadata, then we will disable the dropdown
-    st.session_state["metadata_scatter"] = st.multiselect("Select a metadata category that will be plotted", ["No Metadata Available"], default="No Metadata Available", disabled=True, max_selections=5)
-else:
-    columns_available = list(metadata_df.columns)
-    # Remove forbidden columns
-    columns_available =[x for x in columns_available if x.lower().strip() not in ['filename', 'scan/coordinate', 'genbank accession', 'ncbi taxid', 'ms collected by', 'isolate collected by', 'sample collected by', 'pi', '16s sequence']]
-    st.session_state["metadata_scatter"]  = st.multiselect("Select a metadata category that will be plotted", columns_available, default=[], max_selections=5)
+with st.expander("Database Search Results", expanded=True):
+    if db_search_results is None:
+        # Write a message saying there are no db search results
+        text = "No database search results found for this task."
+        st.write(f":grey[{text}]")
 
-if db_search_results is None:
-    # Write a message saying there are no db search results
-    text = "No database search results found for this task."
-    st.write(f":grey[{text}]")
+    else:   
+        # Add DB Search Result dropdown
+        db_search_columns_for_selection = ['None'] + [x for x in db_search_columns.copy() if x != 'db_strain_name']
+        st.session_state["db_search_result_label"] = st.selectbox("Select a metadata category that will be displayed next to database hits", db_search_columns_for_selection)
+        
+        
+        # Add DB distance threshold slider
+        st.session_state["db_distance_threshold"] = st.slider("Maximum Database Distance Threshold", 0.0, float(st.session_state['workflow_params'].get("database_search_threshold", 1.0)), st.session_state["db_distance_threshold"], 0.05)
+        # Create a box for the maximum number of database results shown
+        st.session_state["max_db_results"] = st.number_input("Maximum Number of Database Results Shown", min_value=-1, max_value=None, value=st.session_state["max_db_results"], help="The maximum number of unique database isolates shown, highest distance is prefered. Enter -1 to show all database results.")  
+        # Create a 'select all' box for the db taxonomy filter
+        
+        col1, col2 = st.columns([0.84, 0.16])
+        with col1:
+            st.write("Select Displayed Database Taxonomies")
+        
+        with col2:
+            st.checkbox("Select All", value=True, key="select_all_db_taxonomies")
+        if st.session_state["select_all_db_taxonomies"] is True:
+            st.session_state["db_taxonomy_filter"] = db_taxonomies
+            # Add disabled multiselect to make this less jarring
+            st.multiselect("Select Displayed Database Taxonomies", db_taxonomies, disabled=True, label_visibility="collapsed", placeholder ="Select the taxonomies to display in the dendrogram")
+        else:
+            # Add multiselect with update button
+            st.session_state["db_taxonomy_filter"] = st.multiselect("Select Displayed Database Taxonomies", db_taxonomies, label_visibility="collapsed", placeholder ="Select the taxonomies to display in the dendrogram")
 
-else:
-    st.subheader("Database Search Result Filters")
-    
-    # Add DB Search Result dropdown
-    db_search_columns_for_selection = ['None'] + [x for x in db_search_columns.copy() if x != 'db_strain_name']
-    st.session_state["db_search_result_label"] = st.selectbox("Select a metadata category that will be displayed next to database hits", db_search_columns_for_selection)
-    
-    
-    # Add DB distance threshold slider
-    st.session_state["db_distance_threshold"] = st.slider("Maximum Database Distance Threshold", 0.0, float(st.session_state['workflow_params'].get("database_search_threshold", 1.0)), st.session_state["db_distance_threshold"], 0.05)
-    # Create a box for the maximum number of database results shown
-    st.session_state["max_db_results"] = st.number_input("Maximum Number of Database Results Shown", min_value=-1, max_value=None, value=st.session_state["max_db_results"], help="The maximum number of unique database isolates shown, highest distance is prefered. Enter -1 to show all database results.")  
-    # Create a 'select all' box for the db taxonomy filter
-    
+with st.expander("General", expanded=True):
+    # Add a selectbox that hides isolates
     col1, col2 = st.columns([0.84, 0.16])
     with col1:
-        st.write("Select Displayed Database Taxonomies")
-    
+        st.write("Select Isolates to be Hidden from the Dendrogram")
     with col2:
-        st.checkbox("Select All", value=True, key="select_all_db_taxonomies")
-    if st.session_state["select_all_db_taxonomies"] is True:
-        st.session_state["db_taxonomy_filter"] = db_taxonomies
+        st.checkbox("Hide All", value=False, key="hide_all_isolates")
+        
+    if st.session_state["hide_all_isolates"] is True:
+        # st.info("Hiding all isolates is currently disabled. Please select isolates manually.")
+        if True:
+            st.session_state["hidden_isolates"] = all_spectra_df["filename"].unique()
         # Add disabled multiselect to make this less jarring
-        st.multiselect("Select Displayed Database Taxonomies", db_taxonomies, disabled=True, label_visibility="collapsed", placeholder ="Select the taxonomies to display in the dendrogram")
+        st.multiselect("Select Isolates to be Hidden from the Dendrogram", all_spectra_df["filename"].unique(), disabled=True, label_visibility="collapsed", placeholder="Select isolates to hide from the dendrogram")
     else:
         # Add multiselect with update button
-        st.session_state["db_taxonomy_filter"] = st.multiselect("Select Displayed Database Taxonomies", db_taxonomies, label_visibility="collapsed", placeholder ="Select the taxonomies to display in the dendrogram")
+        st.session_state["hidden_isolates"] = st.multiselect("Select Isolates to be Hidden from the Dendrogram", all_spectra_df["filename"].unique(), label_visibility="collapsed", placeholder="Select isolates to hide from the dendrogram")
 
-st.subheader("General")
-# Add a selectbox that hides isolates
-col1, col2 = st.columns([0.84, 0.16])
-with col1:
-    st.write("Select Isolates to be Hidden from the Dendrogram")
-with col2:
-    st.checkbox("Hide All", value=False, key="hide_all_isolates")
-    
-if st.session_state["hide_all_isolates"] is True:
-    # st.info("Hiding all isolates is currently disabled. Please select isolates manually.")
-    if True:
-        st.session_state["hidden_isolates"] = all_spectra_df["filename"].unique()
-    # Add disabled multiselect to make this less jarring
-    st.multiselect("Select Isolates to be Hidden from the Dendrogram", all_spectra_df["filename"].unique(), disabled=True, label_visibility="collapsed", placeholder="Select isolates to hide from the dendrogram")
-else:
-    # Add multiselect with update button
-    st.session_state["hidden_isolates"] = st.multiselect("Select Isolates to be Hidden from the Dendrogram", all_spectra_df["filename"].unique(), label_visibility="collapsed", placeholder="Select isolates to hide from the dendrogram")
-
-# Add option to add a cutoff line
-st.session_state["cutoff"] = st.number_input("Add Cutoff Line", min_value=0.0, max_value=1.0, value=None, help="Add a vertical line to the dendrogram at the specified distance.")
-# Add option to show annotations
-st.session_state["show_annotations"] = st.checkbox("Display Dendrogram Distances", value=bool(st.session_state["show_annotations"]), help="The values listed represent dendrogram distance. \
-                                                                                                       To obtain similarity scores, use the 'Database Search Summary' tab within the workflow output.")
+    # Add option to add a cutoff line
+    st.session_state["cutoff"] = st.number_input("Add Cutoff Line", min_value=0.0, max_value=1.0, value=None, help="Add a vertical line to the dendrogram at the specified distance.")
+    # Add option to show annotations
+    st.session_state["show_annotations"] = st.checkbox("Display Dendrogram Distances", value=bool(st.session_state["show_annotations"]), help="The values listed represent dendrogram distance. \
+                                                                                                        To obtain similarity scores, use the 'Database Search Summary' tab within the workflow output.")
 
 st.session_state['query_only_spectra_df'] = all_spectra_df
 
