@@ -75,11 +75,24 @@ def basic_dendrogram(disabled=False):
                             color_threshold=st.session_state["phm_coloring_threshold"])
     
     # Note that C0 means unclustered here:
-    cluster_dict = {filename: color for filename, color in zip(sch_dendro['ivl'], sch_dendro['leaves_color_list'])}
-    # Replace C0, C1, C2 with integers 
-    cluster_dict = {filename: int(color[1:]) for filename, color in cluster_dict.items()}
-    # Add 1 if value >= 1 to reserve 1 for small molecules, 0 for unclustered
-    cluster_dict = {filename: color + 1 if color >= 1 else 0 for filename, color in cluster_dict.items()}
+    # Note that the colors will repeat, cluster_id should be unique
+    cluster_dict = {}   # Dictionary of ['filename'] {'cluster_id', 'color'}
+    filenames = sch_dendro['ivl']
+    colors_list = sch_dendro['leaves_color_list']
+
+    prev_color = colors_list[0]
+    curr_cluster = 0
+    for filename, color in zip(filenames, colors_list):
+        # If the last color doesn't equal this color, we have a new cluster
+        if color != prev_color and color != 'C0':   # Don't increment the cluster if it's unclustered
+            curr_cluster += 1
+            prev_color = color
+        elif color == 'C0':     # To handle the edge case where to clusters of the same color are split by an unclustered protein
+            prev_color = None
+        cluster_dict[filename] = {
+                                  'cluster': curr_cluster if color != 'C0' else 0,  # If the color is C0, it's unclustered
+                                  'color': int(color[1:])
+                                  }
     
     return cluster_dict, dendro
 
@@ -103,16 +116,18 @@ def draw_protein_heatmap(all_spectra_df, bin_size, cluster_dict=None, dendro_ord
             
         else:
             inverted_cluster_dict = {}
-            for filename, cluster_id in cluster_dict.items():
+            for filename, dict_for_filename in cluster_dict.items():
+                cluster_id = dict_for_filename['cluster']
+                color = dict_for_filename['color']
                 if inverted_cluster_dict.get(cluster_id) is None:
                     inverted_cluster_dict[cluster_id] = [filename]
                 else:
                     inverted_cluster_dict[cluster_id].append(filename)
-            cluster_display_dict = {tuple(set(filenames)): f"Cluster {cluster_id-1}: {tuple(set(filenames))}".replace(',','') for cluster_id, filenames in inverted_cluster_dict.items()}
+            cluster_display_dict = {tuple(set(filenames)): f"Cluster {cluster_id}: {tuple(set(filenames))}".replace(',','') for cluster_id, filenames in inverted_cluster_dict.items()}
             unclustered_key = inverted_cluster_dict.get(0)
             if unclustered_key is not None:
                 unclustered_key = tuple(set(unclustered_key))
-                cluster_display_dict[unclustered_key] = cluster_display_dict[unclustered_key].replace("Cluster -1", "Unclustered")
+                cluster_display_dict[unclustered_key] = cluster_display_dict[unclustered_key].replace("Cluster 0", "Unclustered")
             
             add_filters_1.multiselect("Select Clusters to Add", 
                             list(set(cluster_display_dict.keys())),
@@ -239,7 +254,8 @@ def draw_protein_heatmap(all_spectra_df, bin_size, cluster_dict=None, dendro_ord
         if dendro_ordering is None:
             st.error("Unable to order the proteins by dendrogram clustering, please see dendrogram.")
 
-        selected_proteins = dendro_ordering
+        # get the dendor_ordering subset by selected_proteins
+        selected_proteins = [x for x in dendro_ordering if x in selected_proteins]
 
     elif st.session_state["phm_sort_proteins_by"] == "Metadata":
         if st.session_state["phm_display_metadata"] == "None":
@@ -260,8 +276,8 @@ def draw_protein_heatmap(all_spectra_df, bin_size, cluster_dict=None, dendro_ord
         index = all_spectra_df.index.values
         if st.session_state["phm_display_metadata"] == "Dendrogram Cluster":
             # Subtract 1 from cluster number to match the cluster_dict
-            index = [f"Cluster {cluster_dict[filename]-1} - {filename}" for filename in index]
-            index = [x.replace("Cluster -1", "Unclustered") for x in index]
+            index = [f"Cluster {cluster_dict[filename]['cluster']} - {filename}" for filename in index]
+            index = [x.replace("Cluster 0", "Unclustered") for x in index]
         else:
             # Append metadata to names if not nan
             index[all_spectra_df["_metadata"].notna().values] = all_spectra_df["_metadata"][all_spectra_df["_metadata"].notna()].values + \
