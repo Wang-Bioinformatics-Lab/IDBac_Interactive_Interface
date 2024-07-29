@@ -56,14 +56,6 @@ def basic_dendrogram(disabled=False):
     def _dist_fun(x):
         return squareform(st.session_state['distance_measure'](x))
 
-    dendro = ff.create_dendrogram(st.session_state['query_spectra_numpy_data'],
-                                orientation='bottom',
-                                labels=st.session_state['query_only_spectra_df'].filename.values, # We will use the labels as a unique identifier
-                                distfun=_dist_fun,
-                                linkagefun=lambda x: linkage(x, method=st.session_state["phm_clustering_method"],),
-                                color_threshold=st.session_state["phm_coloring_threshold"])
-    
-    st.plotly_chart(dendro, use_container_width=True)
     # Sadly the only way to get the actual clusters (to plot the graph) is to recompute the linkage with scipy
     # (TODO: Just used scipy to plot it)
     dist_matrix = _dist_fun(st.session_state['query_spectra_numpy_data'])
@@ -94,6 +86,25 @@ def basic_dendrogram(disabled=False):
                                   'color': int(color[1:])
                                   }
     
+    dendro = ff.create_dendrogram(st.session_state['query_spectra_numpy_data'],
+                                orientation='bottom',
+                                labels=st.session_state['query_only_spectra_df'].filename.values, # We will use the labels as a unique identifier
+                                distfun=_dist_fun,
+                                linkagefun=lambda x: linkage(x, method=st.session_state["phm_clustering_method"],),
+                                color_threshold=st.session_state["phm_coloring_threshold"])
+    
+    # Add clusters to dendrogram labels
+    for i, label in enumerate(dendro.layout.xaxis.ticktext):
+        cluster = cluster_dict.get(label)
+        if cluster is not None:
+            cluster = cluster['cluster']
+            if cluster == 0:
+                dendro.layout.xaxis.ticktext[i] = f"Unclustered - {label}"
+            else:
+                dendro.layout.xaxis.ticktext[i] = f"Cluster {cluster} - {label}"
+    
+    st.plotly_chart(dendro, use_container_width=True)
+
     return cluster_dict, dendro
 
 def draw_protein_heatmap(all_spectra_df, bin_size, cluster_dict=None, dendro_ordering=None):
