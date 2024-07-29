@@ -81,7 +81,7 @@ def basic_dendrogram(disabled=False):
     colors_list = sch_dendro['leaves_color_list']
 
     prev_color = colors_list[0]
-    curr_cluster = 0
+    curr_cluster = 1
     for filename, color in zip(filenames, colors_list):
         # If the last color doesn't equal this color, we have a new cluster
         if color != prev_color and color != 'C0':   # Don't increment the cluster if it's unclustered

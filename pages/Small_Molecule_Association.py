@@ -64,12 +64,28 @@ def basic_dendrogram(disabled=False):
                             no_plot=True,
                             color_threshold=st.session_state["sma_coloring_threshold"])
     
-    # Note that C0 means unclustered here:
-    cluster_dict = {filename: color for filename, color in zip(sch_dendro['ivl'], sch_dendro['leaves_color_list'])}
-    # Replace C0, C1, C2 with integers 
-    cluster_dict = {filename: int(color[1:]) for filename, color in cluster_dict.items()}
+    cluster_dict = {}
+    filenames    = sch_dendro['ivl']
+    colors_list  = sch_dendro['leaves_color_list']
+
+    prev_color = colors_list[0]
+    curr_cluster = 1
+    for color, filename in zip(colors_list, filenames):
+        if color != prev_color and color != 'C0':
+            curr_cluster += 1
+            prev_color = color
+        elif color == 'C0':
+            # To handle the edge case where to clusters of the same color are split by an unclustered protein
+            prev_color = None
+        cluster_dict[filename] = {
+                                  'cluster': curr_cluster if color != 'C0' else 0,  # If the color is C0, it's unclustered
+                                  'color': int(color[1:])
+                                  }
+
     # Add 1 if value >= 1 to reserve 1 for small molecules, 0 for unclustered
-    cluster_dict = {filename: color + 1 if color >= 1 else 0 for filename, color in cluster_dict.items()}
+    for filename in cluster_dict:
+        if cluster_dict[filename]['color'] >= 1:
+            cluster_dict[filename]['color'] += 1
     
     return cluster_dict, dendro
 
@@ -353,7 +369,8 @@ def generate_network(cluster_dict:dict=None, height=1000, width=600):
             added_edges = []
             # "Transpose Dict"
             spectral_communities = {}
-            for node, cluster in cluster_dict.items():
+            for node, metadata in cluster_dict.items():
+                cluster = metadata['cluster']
                 if cluster != 0:
                     if cluster in spectral_communities:
                         spectral_communities[cluster].append(node)
@@ -613,7 +630,8 @@ with st.form(key="sma_mz_filters", border=False):
         
     else:
         inverted_cluster_dict = {}
-        for filename, cluster_id in cluster_dict.items():
+        for filename, metadata in cluster_dict.items():
+            cluster_id = metadata['cluster']
             if inverted_cluster_dict.get(cluster_id) is None:
                 inverted_cluster_dict[cluster_id] = [filename]
             else:
