@@ -257,6 +257,9 @@ def custom_css():
             padding-top: 25px;
             text-align: center;
         }
+        div[data-testid="stExpander"] summary p {   /* Careful here, this has changed in past releases! */
+            font-size: 2rem;
+        }
         </style>
         """,
         unsafe_allow_html=True
