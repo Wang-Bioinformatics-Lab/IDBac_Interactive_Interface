@@ -81,8 +81,11 @@ def get_dist_function_wrapper(distfun):
         num_inputs = len(non_db_search_result_indices)
         
         if len(non_db_search_result_indices) != 0:
-            computed_distances = distfun(data_np[non_db_search_result_indices])
-        else: 
+            if st.session_state['distance_measure'] == 'presence':
+                _data_np = data_np[non_db_search_result_indices].copy()
+                _data_np[_data_np > 0] = 1.0
+            computed_distances = distfun(_data_np)
+        else:
             computed_distances = np.zeros((0, num_inputs))
         
         # Add database search results
