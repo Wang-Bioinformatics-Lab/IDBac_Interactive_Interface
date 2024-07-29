@@ -81,9 +81,11 @@ def get_dist_function_wrapper(distfun):
         num_inputs = len(non_db_search_result_indices)
         
         if len(non_db_search_result_indices) != 0:
-            if st.session_state['distance_measure'] == 'presence':
+            if st.session_state['given_distance_measure'] == 'presence':
                 _data_np = data_np[non_db_search_result_indices].copy()
                 _data_np[_data_np > 0] = 1.0
+            else:
+                _data_np = data_np[non_db_search_result_indices].copy()
             computed_distances = distfun(_data_np)
         else:
             computed_distances = np.zeros((0, num_inputs))
@@ -568,6 +570,7 @@ write_warnings(warnings_url)
 if "distance" in st.session_state['workflow_params'] and st.session_state['workflow_params'] is not None:
     given_distance_measure = st.session_state['workflow_params'].get('distance', 'cosine')
     assert given_distance_measure in {'presence', 'cosine', 'euclidean'}
+    st.session_state['given_distance_measure'] = given_distance_measure
     if given_distance_measure == 'cosine':
         st.session_state['distance_measure'] = cosine_distances
     elif given_distance_measure == 'euclidean':
@@ -577,6 +580,7 @@ if "distance" in st.session_state['workflow_params'] and st.session_state['workf
 else:
     st.warning("**Warning:** Unable to find a distance function in the workflow parameters. This may be an old task. Please rerun it. \
                Defaulting to cosine similarity.")
+    st.session_state['given_distance_measure'] = 'cosine'
     st.session_state['distance_measure'] = cosine_distances
 # By request, no longer displaying labels url
 if False:
