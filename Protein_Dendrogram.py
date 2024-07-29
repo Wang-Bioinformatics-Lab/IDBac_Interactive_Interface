@@ -616,7 +616,7 @@ else:
 ##### Create Session States #####
 # Create a session state for the clustering method
 if "clustering_method" not in st.session_state:
-    st.session_state["clustering_method"] = "ward"
+    st.session_state["clustering_method"] = "average"
 # Create a session state for the coloring threshold
 if "coloring_threshold" not in st.session_state:
     st.session_state["coloring_threshold"] = 0.70
@@ -699,7 +699,9 @@ st.header("Dendrogram Display Options")
 
 st.subheader("Clustering Settings")
 # Add Clustering Method dropdown
-clustering_options = ["ward", "single", "complete", "average", "weighted", "centroid", "median"]
+clustering_options = ["average", "single", "complete", "weighted", "centroid", "median"]
+if st.session_state['distance_measure'] == "euclidean":
+    clustering_options += ['ward']
 st.session_state["clustering_method"] = st.selectbox("Clustering Method", clustering_options, index=0)
 # Add coloring threshold slider
 st.slider("Coloring Threshold", 0.0, 1.0, step=0.05, key='coloring_threshold',
