@@ -268,7 +268,10 @@ def draw_protein_heatmap(all_spectra_df, bin_size, all_clusters_dict):     # , c
     st.checkbox("Overlay Dendrogram", key="phm_overlay_dendrogram")
     
     metadata_options = ["None", "Dendrogram Cluster"] + list(st.session_state.get("metadata_df").columns)
-    st.selectbox("Display Metadata", metadata_options, key="phm_display_metadata")
+    if st.session_state['phm_overlay_dendrogram']:
+        st.selectbox("Display Metadata", ['Dendrogram Cluster'], key="phm_display_metadata", disabled=True)
+    else:
+        st.selectbox("Display Metadata", metadata_options, key="phm_display_metadata")
 
     if st.session_state['phm_overlay_dendrogram']:
         st.selectbox("Sort Proteins By", ["Dendrogram Clustering"], key="phm_sort_proteins_by", disabled=True)
@@ -391,36 +394,7 @@ def draw_protein_heatmap(all_spectra_df, bin_size, all_clusters_dict):     # , c
         dynamic_height = max(500, len(all_spectra_df.columns) * 24) # Dyanmic height based on number of m/z values
         
         # If we're suppled a dendrogram, use it to reorder the heatmap
-        x = None
-        if False:   # The below code is copied from the small molecule heatmap, but it doesn't work for proteins.
-                    # I've left it here in case we want to try to get it working in the future.
-           
-            # Remove any rows where the filename is not currently selected
-            all_filenames = st.session_state['query_only_spectra_df'].filename.values
-            all_data      = st.session_state['query_spectra_numpy_data']
-            
-            # Get the indices of the selected proteins
-            selected_indices = [i for i, filename in enumerate(all_filenames) if filename in st.session_state["phm_selected_proteins"]]
-            # Get the data for the selected proteins
-            numpy_data = all_data[selected_indices]
-            
-            # Unfortunately, we have to recalculate the dendrogram, because things may cluster differently 
-            # depending on the selected proteins.
-            # Note though, that we share parameters with the above dendrogram.
-            dendro = ff.create_dendrogram(numpy_data,
-                                orientation='bottom',
-                                labels=st.session_state["phm_selected_proteins"],
-                                distfun=st.session_state['distance_measure'],
-                                linkagefun=lambda x: linkage(x, method=st.session_state["phm_clustering_method"],),
-                                color_threshold=st.session_state["phm_coloring_threshold"])
-            
-            # Reorder the dataframe based on the dendrogram
-            reordered_df = all_spectra_df.reindex(index=dendro.layout.xaxis.ticktext)
-            reordered_df = reordered_df.reindex(columns=dendro.layout.yaxis.ticktext)
-            all_spectra_df = reordered_df
-            # Also us the X values from the dendrogram
-            x = dendro.layout.xaxis.tickvals
-        
+        x = None        
         if local_dendro is not None and st.session_state['phm_overlay_dendrogram']:
             # Map x-axis values to local_dendrogram values
             x = local_dendro.layout.xaxis.tickvals
@@ -440,34 +414,7 @@ def draw_protein_heatmap(all_spectra_df, bin_size, all_clusters_dict):     # , c
         
         heatmap.update_coloraxes(cmin=0.0, cmax=1.0, cmid=0.5)
         
-        if False: # The below code is copied from the small molecule heatmap, but it doesn't work for proteins.
-            #  I've left it here in case we want to try to get it working in the future.
-            
-            dendrogram_height = 200
-            dendrogram_height_as_percent = dendrogram_height / (dynamic_height + dendrogram_height)
-            
-            fig = plotly.subplots.make_subplots(rows=2, cols=1,
-                                                shared_xaxes=True,
-                                                vertical_spacing=0.02,
-                                                row_heights=[dendrogram_height_as_percent, 1-dendrogram_height_as_percent])
-            fig.update_layout(margin=dict(l=0, r=0, b=0, t=0, pad=0), width=1500, height=dynamic_height + dendrogram_height)
-        
-            for trace in dendro.data:
-                fig.add_trace(trace, row=1, col=1)
-            
-            # Add x-axis labels from dendrogram
-            fig.update_xaxes(ticktext=dendro.layout.xaxis.ticktext, tickvals=dendro.layout.xaxis.tickvals, row=1, col=1, tickangle=90)
-            fig.update_xaxes(ticktext=dendro.layout.xaxis.ticktext, tickvals=dendro.layout.xaxis.tickvals, row=2, col=1, tickangle=90)
-            # Add y labels to dendrogram
-            fig.update_yaxes(ticktext=dendro.layout.yaxis.ticktext, tickvals=dendro.layout.yaxis.tickvals, row=1, col=1, title="Dendrogram Distance")
-            # Add y labels to heatmap
-            fig.update_yaxes(ticktext=heatmap.layout.yaxis.ticktext, tickvals=heatmap.layout.yaxis.tickvals, row=2, col=1,title="m/z")
-            
-            for trace in heatmap.data:
-                fig.add_trace(trace, row=2, col=1)
-            
-        else:
-            fig = heatmap
+        fig = heatmap
 
         fig.update_layout(showlegend=False,
                     coloraxis_colorbar=dict(title="Relative Intensity", 
@@ -477,10 +424,13 @@ def draw_protein_heatmap(all_spectra_df, bin_size, all_clusters_dict):     # , c
                                         )
 
         if st.session_state['phm_overlay_dendrogram']:
+            # Height with added room
+            dynamic_height = dynamic_height + 400
+            space_required_for_labels = 125
             merged_fig = plotly.subplots.make_subplots(rows=2, cols=1,
                                               shared_xaxes=True,
                                               row_width=[0.9, 0.1],
-                                              vertical_spacing=0.07,)
+                                              vertical_spacing=space_required_for_labels/dynamic_height,)
             
             # Add dendro
             for trace in local_dendro.data:
@@ -494,18 +444,21 @@ def draw_protein_heatmap(all_spectra_df, bin_size, all_clusters_dict):     # , c
                 merged_fig.add_trace(trace, row=2, col=1)
 
             # Update heatmap y-axis
-            merged_fig.update_yaxes(ticktext=fig.layout.yaxis.ticktext, tickvals=fig.layout.yaxis.tickvals, row=2, col=1)
+            merged_fig.update_yaxes(ticktext=fig.layout.yaxis.ticktext, tickvals=fig.layout.yaxis.tickvals, row=2, col=1,
+                                    autorange='reversed')
 
             # Show x-labels between plots
             merged_fig.update_xaxes(showticklabels=True, row=2, col=1, side='top', 
                                     ticktext=['']*len(local_dendro.layout.xaxis.ticktext),
                                     tickvals=local_dendro.layout.xaxis.tickvals,
-                                    ticklen=5)
+                                    ticklen=5,
+                                    tickangle=90)
             
             merged_fig.update_xaxes(showticklabels=True, row=1, col=1,
                                     ticktext=[x[:20] + "..." if len(x)>=20 else x for x in local_dendro.layout.xaxis.ticktext], # Trim text
                                     tickvals=local_dendro.layout.xaxis.tickvals,
-                                    ticklen=5)
+                                    ticklen=5,
+                                    tickangle=90)
 
             # Hide the legend for the dendrogram
             merged_fig.update_layout(showlegend=False)
