@@ -46,7 +46,14 @@ def basic_dendrogram(disabled=False):
         return None, None
 
     def _dist_fun(x):
-        return squareform(st.session_state['distance_measure'](x))
+        distances = st.session_state['distance_measure'](x)
+        if distances.shape[0] != distances.shape[1]:
+            raise ValueError("Distance matrix must be square.")
+        # Quantize distance matrix to 1e-6 to prevent symetric errors
+        distances = np.round(distances, 6)
+        dist_matrix = squareform(distances, force='tovector')
+        
+        return dist_matrix
 
     dendro = ff.create_dendrogram(st.session_state['query_spectra_numpy_data'],
                                 orientation='bottom',

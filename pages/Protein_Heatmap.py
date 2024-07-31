@@ -20,8 +20,8 @@ from streamlit.errors import StreamlitAPIException
 
 #####
 # A note abote streamlit session states:
-# All session states related to this page begin with "phm_" to reduce the 
-# chance of collisions with other pages. 
+# All session states related to this page begin with "phm_" to reduce the
+# chance of collisions with other pages.
 #####
 
 # Set Page Configuration
@@ -74,7 +74,13 @@ def basic_dendrogram(spectrum_df=None, disabled=False, display=True):
         return None, None, None
 
     def _dist_fun(x):
-        return squareform(st.session_state['distance_measure'](x), force='tovector')
+        distances = st.session_state['distance_measure'](x)
+        if distances.shape[0] != distances.shape[1]:
+            raise ValueError("Distance matrix must be square.")
+        # Quantize distance matrix to 1e-6 to prevent symetric errors
+        distances = np.round(distances, 6)
+        dist_matrix = squareform(distances, force='tovector')
+        return dist_matrix
 
     # Sadly the only way to get the actual clusters (to plot the graph) is to recompute the linkage with scipy
     # (TODO: Just used scipy to plot it)
