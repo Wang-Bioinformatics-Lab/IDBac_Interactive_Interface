@@ -96,7 +96,9 @@ def get_dist_function_wrapper(distfun):
         
         # Shortcut out to speed up computation
         if num_db_search_results == 0:
-            return squareform(computed_distances)
+            # Quantize distance matrix to 1e-6 to prevent symetric errors
+            computed_distances = np.round(computed_distances, 6)
+            return squareform(computed_distances, force='tovector')
         
         # In theory this should never happen, but it's a good sanity check
         if num_db_search_results + num_inputs != spectrum_data_df.shape[0]:
