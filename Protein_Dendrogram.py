@@ -152,7 +152,7 @@ def get_dist_function_wrapper(distfun):
             distance_matrix[i,i] = 0
         
         
-        if np.max(distance_matrix) > 1:
+        if np.max(distance_matrix) > 1 and st.session_state['given_distance_measure'] != 'euclidean':
             raise ValueError("Something went wrong during distance caluclation")
 
         # The bottom right corner is all ones
