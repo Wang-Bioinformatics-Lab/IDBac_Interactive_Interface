@@ -150,9 +150,9 @@ def filter_small_molecule_dict(small_molecule_dict):
     output = {}
     
     for k, d in small_molecule_dict.items():
-        mz_array = d['m/z array']
-        intensity_array = d['intensity array']
-        frequency_array = d['frequency array']
+        mz_array        = [float(x) for x in d['m/z array']]
+        intensity_array = [float(x) for x in d['intensity array']]
+        frequency_array = [float(x) for x in d['frequency array']]
         
         # Get indices where intensity is above threshold
         indices = [i for i, (intensity, frequency) in enumerate(zip(intensity_array, frequency_array)) if intensity > st.session_state.get("sma_relative_intensity_threshold", 0.1) and frequency > st.session_state.get("sma_replicate_frequency_threshold", 0.7)]
