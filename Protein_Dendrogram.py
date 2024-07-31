@@ -112,7 +112,7 @@ def get_dist_function_wrapper(distfun):
                 this_dist = db_dist_dict.get(db_filename)
                 if this_dist is not None:
                     # Deal with numerical percision error due to subtractive cancellation
-                    if this_dist > 0.999:
+                    if this_dist > 0.999 and st.session_state['given_distance_measure'] != 'euclidean':
                         db_distance_matrix[i, j] = 1
                     else:
                         db_distance_matrix[i, j] = this_dist # 1-sim because we want distance
@@ -131,7 +131,7 @@ def get_dist_function_wrapper(distfun):
                     this_dist = db_dist_dict.get(db_id_2)
                     if this_dist is not None:
                         # Deal with numerical percision error due to subtractive cancellation
-                        if this_dist > 0.999:
+                        if this_dist > 0.999 and st.session_state['given_distance_measure'] != 'euclidean':
                             db_db_distance_matrix[i, j] = 1
                             db_db_distance_matrix[j, i] = 1
                         else:
@@ -152,12 +152,15 @@ def get_dist_function_wrapper(distfun):
             distance_matrix[i,i] = 0
         
         
-        if np.max(distance_matrix) > 1:
+        if np.max(distance_matrix) > 1 and st.session_state['given_distance_measure'] != 'euclidean':
             raise ValueError("Something went wrong during distance caluclation")
+        
+        # Quantize distance matrix to 1e-6 to prevent symetric errors
+        distance_matrix = np.round(distance_matrix, 6)
 
         # The bottom right corner is all ones
         # assert np.max(distance_matrix) < 1.000001, f"Maximum distnace is {np.max(distance_matrix)}"
-        return squareform(distance_matrix)
+        return squareform(distance_matrix, force='tovector')
 
     return dist_function_wrapper
 
