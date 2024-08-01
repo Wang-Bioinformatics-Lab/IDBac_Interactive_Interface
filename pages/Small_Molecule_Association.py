@@ -323,7 +323,8 @@ def generate_network(cluster_dict:dict=None, height=1000, width=600):
                 node_shape_map = {}
                 
             # Assign color/shape based on community
-            for node, c_id in communities.items():
+            for node, data in communities.items():
+                c_id = data['color']
                 if st.session_state.get("sma_node_coloring") == "Spectral Similarity":
                     if c_id != 0:
                         node_color_map[node] = colors.to_hex(cmap(c_id))
@@ -473,7 +474,7 @@ def make_heatmap():
     
     if len(df) != 0:
         # Note: We transpose the dataframe so that the proteins are on the x-axis
-        st.markdown("Common m/z values between selected proteins and their intensities. Note: The graph filters are applied here.")
+        st.markdown("Common m/z values between selected strains and their intensities. Note: The graph filters are applied here.")
         # Draw Heatmap
         dynamic_height = max(500, len(df.columns) * 24) # Dyanmic height based on number of m/z values
         
@@ -574,7 +575,7 @@ st.slider("Replicate Frequency Threshold", min_value=0.00, max_value=1.0, value=
 
 # Add text input to select certain m/z's (comma-seperated)
 mz_col1, mz_col2 = st.columns([3, 1])
-mz_col1.text_input("Filter m/z Values", key="sma_selected_mzs", help="Enter m/z values seperated by commas. Ranges can be entered as [125.0-130.0] or as open ended (e.g., [127.0-]). No value will show all m/z values.")
+mz_col1.text_input("Search for specific m/z's", key="sma_selected_mzs", help="Enter m/z values seperated by commas. Ranges can be entered as [125.0-130.0] or as open ended (e.g., [127.0-]). No value will show all m/z values.")
 mz_col2.number_input("Tolerance (m/z)", key="sma_mz_tolerance", value=0.1, help="Tolerance for the selected m/z values. Does not apply to ranges.")
 try:
     if st.session_state.get("sma_selected_mzs"):
@@ -585,7 +586,7 @@ except:
     st.error("Please enter valid m/z values.")
     st.stop()
 
-st.subheader("Network Display Options")
+st.subheader("Metabolite Association Network Options")
 #### Network Layout Options
 st.selectbox("Network Layout", ["Default", "Spring", "Circular", "Spectral", "Kamada-Kawai"], key="sma_network_layout")
 if st.session_state.get("sma_network_layout") == 'Default':
@@ -619,12 +620,11 @@ if st.session_state.get("sma_node_coloring") == "Network Community Detection" or
 cluster_dict = None
 barebones_dendro = None
 
-st.subheader("Spectral Similarity Options")
-with st.popover(label='Set Spectral Clustering Parameters'):
+st.subheader("Visualize Small Molecule Data")
+with st.popover(label='Reference Protein Dendrogram Clusters'):
     cluster_dict, _ = basic_dendrogram()
             
 # Options to show only certain proteins/clusters
-st.subheader("Additional Filters")
 add_filters_1, add_filters_2, add_filters_3 = st.columns([0.46, 0.08, 0.46])
     # First column is a selectbox of protein names
     # Second is a selectbox of cluster names
@@ -635,7 +635,7 @@ with st.form(key="sma_mz_filters", border=False):
     disabled=False
     if cluster_dict is None:
         cluster_dict = [None]
-        add_filters_1.multiselect("Select Clusters to Add", [], disabled=True, key='sma_selected_clusters')
+        add_filters_1.multiselect("Populate by protein dendrogram clusters", [], disabled=True, key='sma_selected_clusters')
         
     else:
         inverted_cluster_dict = {}
@@ -651,7 +651,7 @@ with st.form(key="sma_mz_filters", border=False):
             unclustered_key = tuple(set(unclustered_key))
             cluster_display_dict[unclustered_key] = cluster_display_dict[unclustered_key].replace("Cluster -1", "Unclustered")
         
-        add_filters_1.multiselect("Select Clusters to Add", 
+        add_filters_1.multiselect("Populate by protein dendrogram clusters", 
                         list(set(cluster_display_dict.keys())),
                         format_func=cluster_display_dict.get,
                         key='sma_selected_clusters')
@@ -668,7 +668,7 @@ with st.form(key="sma_mz_filters", border=False):
 
     # Individual Protein Selection
     sma_selected_proteins = add_filters_3.multiselect(
-        "Select Proteins",
+        "Populate by strain",
         list(st.session_state["metadata_df"]['Filename']),
         default=st.session_state['sma_selected_proteins']
     )
@@ -689,15 +689,15 @@ if add_button:
 generate_network(cluster_dict)
 
 st.header("Small Molecule Heatmap")
-# st.multiselect("Select Proteins", st.session_state["metadata_df"]['Filename'].unique(), key='sma_selected_proteins')
+# st.multiselect("Populate by strain", st.session_state["metadata_df"]['Filename'].unique(), key='sma_selected_proteins')
 
 # Option for minimum instance frequency
 curr_num_proteins = len(st.session_state.get("sma_selected_proteins", []))
 
 if curr_num_proteins > 1:
-    st.slider("Display m/z values that are associated with this many proteins", min_value=1, max_value=curr_num_proteins, value=1, step=1, key="sma_min_mz_frequency")
+    st.slider("Display m/z values that are associated with this many strains", min_value=1, max_value=curr_num_proteins, value=1, step=1, key="sma_min_mz_frequency")
 else:
     # Display disabled
-    st.slider("Display m/z values that are associated with this many proteins", min_value=0, max_value=1, value=1, step=1, key="sma_min_mz_frequency", disabled=True)
+    st.slider("Display m/z values that are associated with this many strains", min_value=0, max_value=1, value=1, step=1, key="sma_min_mz_frequency", disabled=True)
 
 make_heatmap()
