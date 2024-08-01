@@ -520,7 +520,7 @@ url_parameters = st.query_params
 if "task" in url_parameters:
     st.session_state["task_id"]  = url_parameters["task"]
 elif "task_id" not in st.session_state:
-    st.session_state["task_id"] = "92a1587c78994b0ea4d0d22eec4c0427"
+    st.session_state["task_id"] = "b849e0a2b2b643c8957bdcc7c5303951"
     
 # Add other items to session state if available
 if "metadata_label" in url_parameters:
@@ -717,16 +717,18 @@ with st.expander("Clustering Settings", expanded=True):
         clustering_options += ['ward', 'median', 'centroid']
     st.session_state["clustering_method"] = st.selectbox("Clustering Method", clustering_options, index=0)
     # Add coloring threshold slider
-    st.slider("Coloring Threshold", 0.0, 1.0, step=0.05, key='coloring_threshold',
-            help="Colors all links to the left of the threshold with the same color as long as they're linked below the threshold.")
+    st.slider("Color code clusters based on a dendrogram cut-height", 0.0, 1.0, step=0.05, key='coloring_threshold',
+            help="Ex: If this value is set to 0.7, all clusters with parent node heights at or below 0.7 will be highlighted\
+                  with different colors. Any branches with a parent node above this threshold will be blue.")
 
 with st.expander("Metadata", expanded=True):
-    st.checkbox("Use GenBank IDs to Enrich Metadata", help="If checked, the metadata will be enriched with GenBank accession numbers.", key="enrich_with_genbank", value=False)
+    st.checkbox("Use GenBank IDs to Enrich Metadata", key="enrich_with_genbank", value=False,
+                help="If checked, the metadata will be enriched with GenBank accession numbers.")
 
     # Add Metadata dropdown for text
     if metadata_df is None:
         # If there is no metadata, then we will disable the dropdown
-        st.session_state["metadata_label"] = st.selectbox("Select a metadata category that will be displayed as text", ["No Metadata Available"], disabled=True)
+        st.session_state["metadata_label"] = st.selectbox("Select a metadata category that will be displayed as text next to the strain ID", ["No Metadata Available"], disabled=True)
     else:
         # Enrich metadata with genebank accession
         if st.session_state["enrich_with_genbank"]:
@@ -735,17 +737,18 @@ with st.expander("Metadata", expanded=True):
         columns_available = ["None"] + list(metadata_df.columns)
         # Remove filename and scan from the metadata
         columns_available =[x for x in columns_available if x.lower().strip() not in ['filename', 'scan/coordinate', 'small molecule file name']]
-        st.session_state["metadata_label"] = st.selectbox("Select a metadata category that will be displayed as text", columns_available)
+        st.session_state["metadata_label"] = st.selectbox("Select a metadata category that will be displayed as text next to the strain ID", columns_available)
 
     # Add Metadata dropdown for scatter plots
     if metadata_df is None:
         # If there is no metadata, then we will disable the dropdown
-        st.session_state["metadata_scatter"] = st.multiselect("Select a metadata category that will be plotted", ["No Metadata Available"], default="No Metadata Available", disabled=True, max_selections=5)
+        st.session_state["metadata_scatter"] = st.multiselect("Select metadata categories that will be displayed as a scatter plot alongside the dendrogram",
+                                                               ["No Metadata Available"], default="No Metadata Available", disabled=True, max_selections=5)
     else:
         columns_available = list(metadata_df.columns)
         # Remove forbidden columns
         columns_available =[x for x in columns_available if x.lower().strip() not in ['filename', 'scan/coordinate', 'genbank accession', 'ncbi taxid', 'ms collected by', 'isolate collected by', 'sample collected by', 'pi', '16s sequence']]
-        st.session_state["metadata_scatter"]  = st.multiselect("Select a metadata category that will be plotted", columns_available, default=[], max_selections=5)
+        st.session_state["metadata_scatter"]  = st.multiselect("Select metadata categories that will be displayed as a scatter plot alongside the dendrogram", columns_available, default=[], max_selections=5)
 
 with st.expander("Database Search Results", expanded=True):
     if db_search_results is None:
@@ -756,11 +759,12 @@ with st.expander("Database Search Results", expanded=True):
     else:   
         # Add DB Search Result dropdown
         db_search_columns_for_selection = ['None'] + [x for x in db_search_columns.copy() if x != 'db_strain_name']
-        st.session_state["db_search_result_label"] = st.selectbox("Select a metadata category that will be displayed next to database hits", db_search_columns_for_selection)
+        st.session_state["db_search_result_label"] = st.selectbox("Select a metadata category that will be displayed as text alongside the DB strain ID", db_search_columns_for_selection)
         
         
         # Add DB distance threshold slider
-        st.session_state["db_distance_threshold"] = st.slider("Maximum Database Distance Threshold", 0.0, float(st.session_state['workflow_params'].get("database_search_threshold", 1.0)), st.session_state["db_distance_threshold"], 0.05)
+        st.session_state["db_distance_threshold"] = st.slider("Maximum Database Distance Threshold", 0.0, float(st.session_state['workflow_params'].get("database_search_threshold", 1.0)), st.session_state["db_distance_threshold"], 0.05,
+                                                                  help="Note: 0.00 = identical spectra")
         # Create a box for the maximum number of database results shown
         st.session_state["max_db_results"] = st.number_input("Maximum Number of Database Results Shown", min_value=-1, max_value=None, value=st.session_state["max_db_results"], help="The maximum number of unique database isolates shown, highest distance is prefered. Enter -1 to show all database results.")  
         # Create a 'select all' box for the db taxonomy filter
@@ -777,13 +781,13 @@ with st.expander("Database Search Results", expanded=True):
             st.multiselect("Select Displayed Database Taxonomies", db_taxonomies, disabled=True, label_visibility="collapsed", placeholder ="Select the taxonomies to display in the dendrogram")
         else:
             # Add multiselect with update button
-            st.session_state["db_taxonomy_filter"] = st.multiselect("Select Displayed Database Taxonomies", db_taxonomies, label_visibility="collapsed", placeholder ="Select the taxonomies to display in the dendrogram")
+            st.session_state["db_taxonomy_filter"] = st.multiselect("Customize which DB strains are displayed within the dendrogram by taxonomy", db_taxonomies, label_visibility="collapsed", placeholder ="Select the taxonomies to display in the dendrogram")
 
 with st.expander("General", expanded=True):
     # Add a selectbox that hides isolates
     col1, col2 = st.columns([0.84, 0.16])
     with col1:
-        st.write("Select Isolates to be Hidden from the Dendrogram")
+        st.write("Select isolates that you would like to remove from the dendrogram")
     with col2:
         st.checkbox("Hide All", value=False, key="hide_all_isolates")
         
@@ -792,13 +796,13 @@ with st.expander("General", expanded=True):
         if True:
             st.session_state["hidden_isolates"] = all_spectra_df["filename"].unique()
         # Add disabled multiselect to make this less jarring
-        st.multiselect("Select Isolates to be Hidden from the Dendrogram", all_spectra_df["filename"].unique(), disabled=True, label_visibility="collapsed", placeholder="Select isolates to hide from the dendrogram")
+        st.multiselect("Select isolates that you would like to remove from the dendrogram", all_spectra_df["filename"].unique(), disabled=True, label_visibility="collapsed", placeholder="Select isolates to hide from the dendrogram")
     else:
         # Add multiselect with update button
-        st.session_state["hidden_isolates"] = st.multiselect("Select Isolates to be Hidden from the Dendrogram", all_spectra_df["filename"].unique(), label_visibility="collapsed", placeholder="Select isolates to hide from the dendrogram")
+        st.session_state["hidden_isolates"] = st.multiselect("Select isolates that you would like to remove from the dendrogram", all_spectra_df["filename"].unique(), label_visibility="collapsed", placeholder="Select isolates to hide from the dendrogram")
 
     # Add option to add a cutoff line
-    st.session_state["cutoff"] = st.number_input("Add Cutoff Line", min_value=0.0, max_value=1.0, value=None, help="Add a vertical line to the dendrogram at the specified distance.")
+    st.session_state["cutoff"] = st.number_input("Add a vertical dendrogram cut-height", min_value=0.0, max_value=1.0, value=None, help="Add a vertical line to the dendrogram at the specified distance.")
     # Add option to show annotations
     st.session_state["show_annotations"] = st.checkbox("Display Dendrogram Distances", value=bool(st.session_state["show_annotations"]), help="The values listed represent dendrogram distance. \
                                                                                                         To obtain similarity scores, use the 'Database Search Summary' tab within the workflow output.")
@@ -853,12 +857,10 @@ st.code(link)
 st.header("Additional Information")
 # Add a bulleted list of more information
 st.markdown("""
-            #### Metadata
-            * Metadata and input spectra match on the "filename" column, it must be included in both files.
-            * The metadata file must be a .csv, .tsv, .txt, or .xlsx file.
             #### Visualization
-            * Flat lines at x=0, are a result of perfect database search results.
-            * Coloring: All descendant links below an arbitrary cluster node will be colored the same color as that cluster node if that node is the 
+            * A flat line between strains along the y-axis of the dendrogram at '0' represents 
+            identical spectra between those strains.
+            * Cluster Color: All descendant links below an arbitrary cluster node will be colored the same color as that cluster node if that node is the 
             first one below the cut threshold. Links between clustering nodes greater than the cut threshold are colored blue. See this 
             [link](https://docs.scipy.org/doc/scipy/reference/generated/scipy.cluster.hierarchy.dendrogram.html) for more details.
             """)
