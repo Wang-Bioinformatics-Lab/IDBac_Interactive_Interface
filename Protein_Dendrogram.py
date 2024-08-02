@@ -550,6 +550,15 @@ if "show_annotations" in url_parameters:
     st.session_state["show_annotations"] = bool(url_parameters["show_annotations"])
 
 
+# IDBac Logo (+ janky image centering)
+col1, col2, col3 = st.columns([1, 3, 1])
+with col1:
+    st.write(' ')
+with col2:
+    st.image("assets/idbac_logo.png", )
+with col3:
+    st.write(' ')
+
 st.session_state["task_id"] = st.text_input('GNPS2 Task ID', st.session_state["task_id"])
 if st.session_state["task_id"] == '':
     st.error("Please input a valid GNPS2 Task ID")
@@ -593,7 +602,7 @@ if False:
     st.write(labels_url)
 
 # read numpy from url into a numpy array
-numpy_file = requests.get(numpy_url)
+numpy_file = requests.get(numpy_url, 60)
 numpy_file.raise_for_status()
 numpy_array = np.load(io.BytesIO(numpy_file.content))
 st.session_state['query_spectra_numpy_data'] = numpy_array
