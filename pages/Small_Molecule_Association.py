@@ -563,125 +563,125 @@ if st.session_state["metadata_df"] is None:
     st.error("Please upload a metadata file first.")
     st.stop()
 
-st.subheader("Small Molecule Filters")
-# Add a slider for the relative intensity threshold
-st.slider("Relative Intensity Threshold", min_value=0.05, max_value=1.0, value=0.15, step=0.01, 
-          key="sma_relative_intensity_threshold")
-st.slider("Replicate Frequency Threshold", min_value=0.00, max_value=1.0, value=0.70, step=0.05, 
-          key="sma_replicate_frequency_threshold", help="Only show m/z values that occur in at least this percentage of replicates.")
+with st.expander("Small Molecule Filters", expanded=True):
+    # Add a slider for the relative intensity threshold
+    st.slider("Relative Intensity Threshold", min_value=0.05, max_value=1.0, value=0.15, step=0.01, 
+            key="sma_relative_intensity_threshold")
+    st.slider("Replicate Frequency Threshold", min_value=0.00, max_value=1.0, value=0.70, step=0.05, 
+            key="sma_replicate_frequency_threshold", help="Only show m/z values that occur in at least this percentage of replicates.")
 
-# Add text input to select certain m/z's (comma-seperated)
-mz_col1, mz_col2 = st.columns([3, 1])
-mz_col1.text_input("Search for specific m/z's", key="sma_selected_mzs", help="Enter m/z values seperated by commas. Ranges can be entered as [125.0-130.0] or as open ended (e.g., [127.0-]). No value will show all m/z values.")
-mz_col2.number_input("Tolerance (m/z)", key="sma_mz_tolerance", value=0.1, help="Tolerance for the selected m/z values. Does not apply to ranges.")
-try:
-    if st.session_state.get("sma_selected_mzs"):
-        st.session_state["sma_parsed_selected_mzs"] = parse_numerical_input(st.session_state["sma_selected_mzs"])
-    else:
-        st.session_state["sma_parsed_selected_mzs"] = []
-except:
-    st.error("Please enter valid m/z values.")
-    st.stop()
+    # Add text input to select certain m/z's (comma-seperated)
+    mz_col1, mz_col2 = st.columns([3, 1])
+    mz_col1.text_input("Search for specific m/z's", key="sma_selected_mzs", help="Enter m/z values seperated by commas. Ranges can be entered as [125.0-130.0] or as open ended (e.g., [127.0-]). No value will show all m/z values.")
+    mz_col2.number_input("Tolerance (m/z)", key="sma_mz_tolerance", value=0.1, help="Tolerance for the selected m/z values. Does not apply to ranges.")
+    try:
+        if st.session_state.get("sma_selected_mzs"):
+            st.session_state["sma_parsed_selected_mzs"] = parse_numerical_input(st.session_state["sma_selected_mzs"])
+        else:
+            st.session_state["sma_parsed_selected_mzs"] = []
+    except:
+        st.error("Please enter valid m/z values.")
+        st.stop()
 
-st.subheader("Metabolite Association Network Options")
+with st.expander("Metabolite Association Network Options", expanded=True):
 #### Network Layout Options
-st.selectbox("Network Layout", ["Default", "Spring", "Circular", "Spectral", "Kamada-Kawai"], key="sma_network_layout")
-if st.session_state.get("sma_network_layout") == 'Default':
-    # Enable physics by default because it helps with the layout
-    st.selectbox("Physics", ["Yes", "No"], key="sma_physics")
-else:
-    st.session_state["sma_physics"] = "No"
-    # We can only do this using our custom layout, so we'll have to disable it for the Default layout
-    st.selectbox("Incorporate Spectral Similarity into Node Layout", ["Yes", "No"], key="sma_spectral_similarity_layout")
-
-#### Network Coloring Option 
-st.selectbox("Node Coloring", ["Protein/Small Molecule", "Network Community Detection", "Spectral Similarity"], key="sma_node_coloring")
-st.selectbox("Node Color Map", ['tab10', 'tab20', 'tab20b','tab20c',
-                                'Pastel1', 'Pastel2', 'Paired', 
-                                'Accent', 'Dark2', 'Set1', 'Set2', 'Set3'], 
-                                key="sma_node_color_map", help='See available color maps: \
-                                https://matplotlib.org/stable/users/explain/colors/colormaps.html#qualitative')
-st.selectbox("Node Shapes", ["Circular","Protein/Small Molecule", "Network Community Detection", "Spectral Similarity"], key="sma_node_shapes")
-
-#### Network Community Detection Options
-# Options for Network Community Detection Node Properties
-if st.session_state.get("sma_node_coloring") == "Network Community Detection" or \
-   st.session_state.get("sma_node_shapes") == "Network Community Detection":
-    st.subheader("Network Community Detection Options")
-    st.selectbox("Cluster Method", ["Louvain", "Greedy Modularity",], key="sma_cluster_method")
-    if st.session_state.get("sma_cluster_method") == "Louvain":
-        st.text("https://doi.org/10.1088/1742-5468/2008/10/P10008")
-    elif st.session_state.get("sma_cluster_method") == "Greedy Modularity":
-        st.text("https://doi.org/10.1103/PhysRevE.70.066111")
-# Options for Spectral Similarty Node Properties
-cluster_dict = None
-barebones_dendro = None
-
-st.subheader("Visualize Small Molecule Data")
-with st.popover(label='Reference Protein Dendrogram Clusters'):
-    cluster_dict, _ = basic_dendrogram()
-            
-# Options to show only certain proteins/clusters
-add_filters_1, add_filters_2, add_filters_3 = st.columns([0.46, 0.08, 0.46])
-    # First column is a selectbox of protein names
-    # Second is a selectbox of cluster names
-    # Third is an import button that adds the values of the clusters to the protein name selection
-
-with st.form(key="sma_mz_filters", border=False):
-    # Protein Cluster Selection
-    disabled=False
-    if cluster_dict is None:
-        cluster_dict = [None]
-        add_filters_1.multiselect("Populate by protein dendrogram clusters", [], disabled=True, key='sma_selected_clusters')
-        
+    st.selectbox("Network Layout", ["Default", "Spring", "Circular", "Spectral", "Kamada-Kawai"], key="sma_network_layout")
+    if st.session_state.get("sma_network_layout") == 'Default':
+        # Enable physics by default because it helps with the layout
+        st.selectbox("Physics", ["Yes", "No"], key="sma_physics")
     else:
-        inverted_cluster_dict = {}
-        for filename, metadata in cluster_dict.items():
-            cluster_id = metadata['cluster']
-            if inverted_cluster_dict.get(cluster_id) is None:
-                inverted_cluster_dict[cluster_id] = [filename]
-            else:
-                inverted_cluster_dict[cluster_id].append(filename)
-        cluster_display_dict = {tuple(set(filenames)): f"Cluster {cluster_id-1}: {tuple(set(filenames))}".replace(',','') for cluster_id, filenames in inverted_cluster_dict.items()}
-        unclustered_key = inverted_cluster_dict.get(0)
-        if unclustered_key is not None:
-            unclustered_key = tuple(set(unclustered_key))
-            cluster_display_dict[unclustered_key] = cluster_display_dict[unclustered_key].replace("Cluster -1", "Unclustered")
-        
-        add_filters_1.multiselect("Populate by protein dendrogram clusters", 
-                        list(set(cluster_display_dict.keys())),
-                        format_func=cluster_display_dict.get,
-                        key='sma_selected_clusters')
+        st.session_state["sma_physics"] = "No"
+        # We can only do this using our custom layout, so we'll have to disable it for the Default layout
+        st.selectbox("Incorporate Spectral Similarity into Node Layout", ["Yes", "No"], key="sma_spectral_similarity_layout")
+
+    #### Network Coloring Option 
+    st.selectbox("Node Coloring", ["Protein/Small Molecule", "Network Community Detection", "Spectral Similarity"], key="sma_node_coloring")
+    st.selectbox("Node Color Map", ['tab10', 'tab20', 'tab20b','tab20c',
+                                    'Pastel1', 'Pastel2', 'Paired', 
+                                    'Accent', 'Dark2', 'Set1', 'Set2', 'Set3'], 
+                                    key="sma_node_color_map", help='See available color maps: \
+                                    https://matplotlib.org/stable/users/explain/colors/colormaps.html#qualitative')
+    st.selectbox("Node Shapes", ["Circular","Protein/Small Molecule", "Network Community Detection", "Spectral Similarity"], key="sma_node_shapes")
+
+    #### Network Community Detection Options
+    # Options for Network Community Detection Node Properties
+    if st.session_state.get("sma_node_coloring") == "Network Community Detection" or \
+    st.session_state.get("sma_node_shapes") == "Network Community Detection":
+        st.subheader("Network Community Detection Options")
+        st.selectbox("Cluster Method", ["Louvain", "Greedy Modularity",], key="sma_cluster_method")
+        if st.session_state.get("sma_cluster_method") == "Louvain":
+            st.text("https://doi.org/10.1088/1742-5468/2008/10/P10008")
+        elif st.session_state.get("sma_cluster_method") == "Greedy Modularity":
+            st.text("https://doi.org/10.1103/PhysRevE.70.066111")
+    # Options for Spectral Similarty Node Properties
+    cluster_dict = None
+    barebones_dendro = None
+
+with st.expander("Visualize Small Molecule Data", expanded=True):
+    with st.popover(label='Reference Protein Dendrogram Clusters'):
+        cluster_dict, _ = basic_dendrogram()
                 
+    # Options to show only certain proteins/clusters
+    add_filters_1, add_filters_2, add_filters_3 = st.columns([0.46, 0.08, 0.46])
+        # First column is a selectbox of protein names
+        # Second is a selectbox of cluster names
+        # Third is an import button that adds the values of the clusters to the protein name selection
 
-    if 'sma_selected_clusters' not in st.session_state:
-        st.session_state['sma_selected_clusters'] = []
-    if 'sma_selected_proteins' not in st.session_state:
-        st.session_state['sma_selected_proteins'] = []
+    with st.form(key="sma_mz_filters", border=False):
+        # Protein Cluster Selection
+        disabled=False
+        if cluster_dict is None:
+            cluster_dict = [None]
+            add_filters_1.multiselect("Populate by protein dendrogram clusters", [], disabled=True, key='sma_selected_clusters')
+            
+        else:
+            inverted_cluster_dict = {}
+            for filename, metadata in cluster_dict.items():
+                cluster_id = metadata['cluster']
+                if inverted_cluster_dict.get(cluster_id) is None:
+                    inverted_cluster_dict[cluster_id] = [filename]
+                else:
+                    inverted_cluster_dict[cluster_id].append(filename)
+            cluster_display_dict = {tuple(set(filenames)): f"Cluster {cluster_id-1}: {tuple(set(filenames))}".replace(',','') for cluster_id, filenames in inverted_cluster_dict.items()}
+            unclustered_key = inverted_cluster_dict.get(0)
+            if unclustered_key is not None:
+                unclustered_key = tuple(set(unclustered_key))
+                cluster_display_dict[unclustered_key] = cluster_display_dict[unclustered_key].replace("Cluster -1", "Unclustered")
+            
+            add_filters_1.multiselect("Populate by protein dendrogram clusters", 
+                            list(set(cluster_display_dict.keys())),
+                            format_func=cluster_display_dict.get,
+                            key='sma_selected_clusters')
+                    
 
-    # Button to Move Clusters to Individual Protein List
-    add_filters_2.markdown('<div class="button-label">Add Clusters</div>', unsafe_allow_html=True)
-    add_button = add_filters_2.button(":arrow_forward:", key="Add")
+        if 'sma_selected_clusters' not in st.session_state:
+            st.session_state['sma_selected_clusters'] = []
+        if 'sma_selected_proteins' not in st.session_state:
+            st.session_state['sma_selected_proteins'] = []
 
-    # Individual Protein Selection
-    sma_selected_proteins = add_filters_3.multiselect(
-        "Populate by strain",
-        list(st.session_state["metadata_df"]['Filename']),
-        default=st.session_state['sma_selected_proteins']
-    )
+        # Button to Move Clusters to Individual Protein List
+        add_filters_2.markdown('<div class="button-label">Add Clusters</div>', unsafe_allow_html=True)
+        add_button = add_filters_2.button(":arrow_forward:", key="Add")
+
+        # Individual Protein Selection
+        sma_selected_proteins = add_filters_3.multiselect(
+            "Populate by strain",
+            list(st.session_state["metadata_df"]['Filename']),
+            default=st.session_state['sma_selected_proteins']
+        )
+            
+        sma_selected_prot_submitted = st.form_submit_button("Apply Filters")
         
-    sma_selected_prot_submitted = st.form_submit_button("Apply Filters")
-    
-if sma_selected_prot_submitted:
-    st.session_state['sma_selected_proteins'] = sma_selected_proteins
+    if sma_selected_prot_submitted:
+        st.session_state['sma_selected_proteins'] = sma_selected_proteins
 
-# Handle add button click
-if add_button:
-    for cluster in st.session_state['sma_selected_clusters']:
-        to_add = set(cluster) - set(st.session_state['sma_selected_proteins'])
-        st.session_state['sma_selected_proteins'].extend(to_add)
-    st.session_state['sma_selected_clusters'].clear()
-    st.rerun()  # Refresh the UI to reflect the updated selection
+    # Handle add button click
+    if add_button:
+        for cluster in st.session_state['sma_selected_clusters']:
+            to_add = set(cluster) - set(st.session_state['sma_selected_proteins'])
+            st.session_state['sma_selected_proteins'].extend(to_add)
+        st.session_state['sma_selected_clusters'].clear()
+        st.rerun()  # Refresh the UI to reflect the updated selection
 
 generate_network(cluster_dict)
 
