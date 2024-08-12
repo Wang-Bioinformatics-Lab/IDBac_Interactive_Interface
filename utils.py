@@ -288,12 +288,14 @@ def metadata_validation(metadata_table:pd.DataFrame, spectrum_df:pd.DataFrame):
     filenames_in_spectrum_not_in_metadata = list(spectrum_filenames - metadata_filenames)
     
     if len(filenames_in_metadata_not_in_spectrum) > 0:
-        with st.expander(":warning: Filenames in metadata table not in spectrum file:"):
-            st.write(filenames_in_metadata_not_in_spectrum)
+        if st.session_state.get('show_warnings', True):
+            with st.expander(":warning: Filenames in metadata table not in spectrum file:"):
+                st.write(filenames_in_metadata_not_in_spectrum)
     
     if len(filenames_in_spectrum_not_in_metadata) > 0:
-        with st.expander(":warning: Filenames in spectrum file not in metadata table:"):
-            st.write(filenames_in_spectrum_not_in_metadata)
+        if st.session_state.get('show_warnings', True):
+            with st.expander(":warning: Filenames in spectrum file not in metadata table:"):
+                st.write(filenames_in_spectrum_not_in_metadata)
 
 def format_proteins_as_strings(df):
     output = []

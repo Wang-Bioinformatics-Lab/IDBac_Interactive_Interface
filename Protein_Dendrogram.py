@@ -579,7 +579,8 @@ else:
     warnings_url = f"https://gnps2.org/resultfile?task={st.session_state['task_id']}&file=nf_output/errors.csv"
     
 st.session_state['workflow_params'] = write_job_params(task_id)
-write_warnings(warnings_url)
+if st.checkbox("Show Warnings", value=True, key="show_warnings"):
+    write_warnings(warnings_url)
 
 # If workflow parameters specfiy a similarity function, use it. Otherwise, default to cosine
 if "distance" in st.session_state['workflow_params'] and st.session_state['workflow_params'] is not None:
