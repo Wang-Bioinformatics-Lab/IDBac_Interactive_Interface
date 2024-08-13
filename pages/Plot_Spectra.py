@@ -282,6 +282,10 @@ def stick_plot(peaks_a, peaks_b=None, title=None):
     lower_range = max(min([peak[0] for peak in peaks_a]) - 100,0)
     upper_range = max([peak[0] for peak in peaks_a]) + 100
 
+    if peaks_b is not None:
+        lower_range = min(lower_range, min([peak[0] for peak in peaks_b]) - 100)
+        upper_range = max(upper_range, max([peak[0] for peak in peaks_b]) + 100)
+
     # Update the y-axis with new tick text
     fig.update_layout(
         title=dict(
