@@ -585,7 +585,7 @@ with st.expander("Small Molecule Filters", expanded=True):
 
 with st.expander("Metabolite Association Network Options", expanded=True):
 #### Network Layout Options
-    st.selectbox("Network Layout", ["Default", "Spring", "Circular", "Spectral", "Kamada-Kawai"], key="sma_network_layout")
+    st.selectbox("Network Layout", ["Kamada-Kawai", "Spring", "Circular", "Spectral",], key="sma_network_layout")
     if st.session_state.get("sma_network_layout") == 'Default':
         # Enable physics by default because it helps with the layout
         st.selectbox("Physics", ["Yes", "No"], key="sma_physics")
