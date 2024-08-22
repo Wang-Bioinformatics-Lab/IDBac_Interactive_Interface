@@ -18,6 +18,13 @@ import numpy as np
 
 from utils import write_job_params, write_warnings, enrich_genbank_metadata, metadata_validation, custom_css
 from Protein_Dendrogram_Components import draw_protein_heatmap
+from streamlit.components.v1 import html
+
+# Set Page Configuration
+st.set_page_config(page_title="IDBac - Dendrogram", page_icon="assets/idbac_logo_square.png", layout="centered", initial_sidebar_state="auto", menu_items=None)
+# Add tracking
+html('<script async defer data-website-id="4611e28d-c0ff-469d-a2f9-a0b54c0c8ee0" src="https://analytics.gnps2.org/umami.js"></script>', width=0, height=0)
+custom_css()
 
 class np_data_wrapper():
     def __init__(self, data_np, spectrum_data_df, db_distance_dict):
@@ -510,11 +517,6 @@ def integrate_database_search_results(all_spectra_df:pd.DataFrame, database_sear
     
     return all_spectra_df, database_distance_dict
 
-# Set Page Configuration
-st.set_page_config(page_title="IDBac - Dendrogram", page_icon="assets/idbac_logo_square.png", layout="centered", initial_sidebar_state="auto", menu_items=None)
-# Add tracking
-st.markdown('<script async defer data-website-id="4611e28d-c0ff-469d-a2f9-a0b54c0c8ee0" src="https://analytics.gnps2.org/umami.js"></script>', unsafe_allow_html=True)
-custom_css()
 
 # Here we will add an input field for the GNPS2 task ID
 url_parameters = st.query_params
