@@ -512,6 +512,8 @@ def integrate_database_search_results(all_spectra_df:pd.DataFrame, database_sear
 
 # Set Page Configuration
 st.set_page_config(page_title="IDBac - Dendrogram", page_icon="assets/idbac_logo_square.png", layout="centered", initial_sidebar_state="auto", menu_items=None)
+# Add tracking
+st.markdown('<script async defer data-website-id="4611e28d-c0ff-469d-a2f9-a0b54c0c8ee0" src="https://analytics.gnps2.org/umami.js"></script>', unsafe_allow_html=True)
 custom_css()
 
 # Here we will add an input field for the GNPS2 task ID
