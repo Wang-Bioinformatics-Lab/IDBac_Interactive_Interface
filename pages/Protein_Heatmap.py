@@ -135,7 +135,7 @@ def basic_dendrogram(spectrum_df=None, disabled=False, display=True):
 
     return cluster_dict, dendro, filenames
 
-def draw_protein_heatmap(all_spectra_df, bin_size, all_clusters_dict):     # , cluster_dict=None, dendro=None, dendro_ordering=None'
+def draw_protein_heatmap(all_spectra_df, bin_counts, bin_size, all_clusters_dict):     # , cluster_dict=None, dendro=None, dendro_ordering=None'
     st.subheader("Build a Protein Heatmap")
     add_filters_1, add_filters_2, add_filters_3 = st.columns([0.45, 0.10, 0.45])
     # Options
@@ -284,6 +284,18 @@ def draw_protein_heatmap(all_spectra_df, bin_size, all_clusters_dict):     # , c
     else:
         st.selectbox("Sort strains by", ["Strain Name", "Dendrogram Clustering", "Metadata"], key="phm_sort_proteins_by")
 
+    # Add option to filter down by number of replicates
+    st.slider("Required Presence Percentage", min_value=0.0, max_value=1.0, value=0.5, key="phm_replicate_threshold")
+    st.selectbox("Replicate Tolerance Mode", ['PPM', 'M/Z'], key="phm_replicate_tolerance_mode")
+    if st.session_state["phm_replicate_tolerance_mode"] == "PPM":
+        st.session_state["phm_ppm_tolerance"] = st.number_input("PPM Tolerance", min_value=0.0, max_value=None, value=1000.0)
+    else:
+        st.session_state["phm_mz_tolerance"] = None
+    if st.session_state["phm_replicate_tolerance_mode"] == "M/Z":
+        st.session_state["phm_mz_tolerance"] = st.number_input("M/Z Tolerance", min_value=0.0, max_value=None, value=1.0)
+    else:
+        st.session_state["phm_mz_tolerance"] = None
+
     # Remove "DB Result - " from the selected proteins -- DB Results are currently deprecated
     selected_proteins = [x.replace("DB Result - ", "") for x in st.session_state['phm_selected_proteins']]
 
@@ -318,9 +330,68 @@ def draw_protein_heatmap(all_spectra_df, bin_size, all_clusters_dict):     # , c
     elif st.session_state["phm_sort_proteins_by"] == "Strain Name":
         selected_proteins = sorted(selected_proteins)
 
-
+    def _convert_bin_to_mz(bin_name):
+        b = int(bin_name.split("_")[-1])
+        return f"[{b * bin_size}, {(b + 1) * bin_size})"
+    def _convert_bin_to_mz_tuple(bin_name):
+        b = int(bin_name.split("_")[-1])
+        return (b * bin_size, (b + 1) * bin_size)
+    
+    """
+    TODO: NEEDS TO SUM COUNTS AND DIVIDE BY NUMBER OF REPLICATES PER FILE
+    CURRENT IMPLEMENTATION ONLY HAS PERCENT PRESENCE AND MUST BE UPDATED IN THE WORKFLOW
+    
+    """
+    
     # Select and order relevant columns
     all_spectra_df = all_spectra_df.loc[selected_proteins, :]
+ 
+    bin_counts = bin_counts.loc[:, selected_proteins]
+    bin_counts = bin_counts.fillna(0)
+    aggregated_bin_counts = bin_counts.copy(deep=True)
+    # Set to all zeros
+    aggregated_bin_counts.loc[:, :] = 0
+
+    bin_counts['bin_mz_tuple'] = bin_counts.index.map(_convert_bin_to_mz_tuple)
+    bin_counts['lb'] = bin_counts['bin_mz_tuple'].apply(lambda x: x[0])
+    bin_counts['ub'] = bin_counts['bin_mz_tuple'].apply(lambda x: x[1])
+
+    columns_to_aggregate = aggregated_bin_counts.columns
+
+    if 'db_search_result' in columns_to_aggregate:
+        columns_to_aggregate = columns_to_aggregate.drop('db_search_result')
+    if 'filename' in columns_to_aggregate:
+        columns_to_aggregate = columns_to_aggregate.drop('filename')
+
+    # Aggregate bin counts within tolerance and column (filename) to get number of replicates for each bin
+    if st.session_state["phm_replicate_tolerance_mode"] == "M/Z":
+        for bin_tuple in bin_counts['bin_mz_tuple'].unique():
+            lb = bin_tuple[0] - st.session_state["phm_mz_tolerance"]
+            ub = bin_tuple[1] + st.session_state["phm_mz_tolerance"]
+            # Columnwise sum for all bins within the tolerance
+            mask = ((bin_counts['lb'] >= lb) & (bin_counts['ub'] <= ub))
+
+            aggregated_bin_counts.loc[mask, columns_to_aggregate] = bin_counts.loc[mask, columns_to_aggregate].sum(axis=0).values
+        
+        # Set all values less than phm_replicate_threshold to np.nan
+        aggregated_bin_counts[aggregated_bin_counts < st.session_state["phm_replicate_threshold"]] = np.nan
+
+        # Set all bins in all_spectra_df where aggregated_bin_counts is nan to nan
+        all_spectra_df = all_spectra_df.where(aggregated_bin_counts.T.notna())     # This is okay to do because .where() will use index, not order
+
+    elif st.session_state["phm_replicate_tolerance_mode"] == "PPM":
+        for bin_tuple in bin_counts['bin_mz_tuple'].unique():
+            lb = bin_tuple[0] - bin_tuple[0] * st.session_state["phm_ppm_tolerance"] / 1e6
+            ub = bin_tuple[1] + bin_tuple[1] * st.session_state["phm_ppm_tolerance"] / 1e6
+            # Columnwise sum for all bins within the tolerance
+            mask = ((bin_counts['lb'] >= lb) & (bin_counts['ub'] <= ub))
+            aggregated_bin_counts.loc[mask, columns_to_aggregate] = bin_counts.loc[mask, columns_to_aggregate].sum(axis=0).values   # values required?
+
+        # Set all values less than phm_replicate_threshold to np.nan
+        aggregated_bin_counts[aggregated_bin_counts < st.session_state["phm_replicate_threshold"]] = np.nan
+
+        # Set all bins in all_spectra_df where aggregated_bin_counts is nan to nan
+        all_spectra_df = all_spectra_df.where(aggregated_bin_counts.T.notna())
 
     # Add metadata to name if selected
     if st.session_state["phm_display_metadata"] != "None":
@@ -347,11 +418,6 @@ def draw_protein_heatmap(all_spectra_df, bin_size, all_clusters_dict):     # , c
     # Filter bins by count
     bin_columns = [col for col in bin_columns if all_spectra_df[col].notna().sum() >= min_count]
     all_spectra_df = all_spectra_df.loc[:, bin_columns]
-    
-    def _convert_bin_to_mz(bin_name):
-        bin = int(bin_name.split("_")[-1])
-        
-        return f"[{bin * bin_size}, {(bin + 1) * bin_size})"
     
     # Remove mzs with all nan
     all_spectra_df = all_spectra_df.dropna(how='all', axis='columns')
@@ -410,7 +476,7 @@ def draw_protein_heatmap(all_spectra_df, bin_size, all_clusters_dict):     # , c
                                         aspect ='auto', 
                                         width=1500, 
                                         height=dynamic_height,
-                                        color_continuous_scale='Bluered',)
+                                        color_continuous_scale='Bluered')
         # Update axis text (we do this here otherwise spacing is not even)
         heatmap.update_layout(
             xaxis=dict(title="Protein", ticktext=list(all_spectra_df.index.values), tickvals=list(range(len(all_spectra_df.index))), side='top'),
@@ -487,4 +553,4 @@ with st.popover(label='Reference protein dendrogram clusters'):
     all_clusters_dict, dendro, dendro_ordering = basic_dendrogram()
 
 # Use "query_only_spectra_df" because database spectra may be binned to a different size
-draw_protein_heatmap(st.session_state['query_only_spectra_df'], st.session_state['workflow_params']['bin_size'], all_clusters_dict=all_clusters_dict) # , cluster_dict, dendro=dendro, dendro_ordering=dendro_ordering
+draw_protein_heatmap(st.session_state['query_only_spectra_df'], st.session_state["bin_counts_df"], st.session_state['workflow_params']['bin_size'], all_clusters_dict=all_clusters_dict) # , cluster_dict, dendro=dendro, dendro_ordering=dendro_ordering

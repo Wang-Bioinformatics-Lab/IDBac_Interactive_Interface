@@ -575,11 +575,13 @@ if st.session_state["task_id"].startswith("DEV-"):
     dev_task_id = st.session_state['task_id'][4:]
     labels_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={dev_task_id}&file=nf_output/output_histogram_data_directory/labels_spectra.tsv"
     numpy_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={dev_task_id}&file=nf_output/output_histogram_data_directory/numerical_spectra.npy"
+    bin_counts_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={dev_task_id}&file=nf_output/bin_counts/merged/merged.csv"
     warnings_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={dev_task_id}&file=nf_output/errors.csv"
     
 else:
     labels_url = f"https://gnps2.org/resultfile?task={st.session_state['task_id']}&file=nf_output/output_histogram_data_directory/labels_spectra.tsv"
     numpy_url = f"https://gnps2.org/resultfile?task={st.session_state['task_id']}&file=nf_output/output_histogram_data_directory/numerical_spectra.npy"
+    bin_counts_url = f"https://gnps2.org/resultfile?task={st.session_state['task_id']}&file=nf_output/bin_counts/merged/merged.csv"
     warnings_url = f"https://gnps2.org/resultfile?task={st.session_state['task_id']}&file=nf_output/errors.csv"
     
 st.session_state['workflow_params'] = write_job_params(task_id)
@@ -611,6 +613,18 @@ numpy_file = requests.get(numpy_url, 60)
 numpy_file.raise_for_status()
 numpy_array = np.load(io.BytesIO(numpy_file.content))
 st.session_state['query_spectra_numpy_data'] = numpy_array
+
+# read bin counts from url
+bin_counts_df = None
+try:
+    bin_counts_csv = requests.get(bin_counts_url, 60)
+    bin_counts_csv.raise_for_status()
+    bin_counts_df = pd.read_csv(io.StringIO(bin_counts_csv.text), index_col=0)
+except:
+    st.warning("Unable to retrieve bin counts, this may be an old task.")
+st.session_state['bin_counts_df'] = bin_counts_df
+print("******************************")
+print(bin_counts_df)
 
 # read pandas dataframe from url
 all_spectra_df = pd.read_csv(labels_url, sep="\t")
@@ -716,8 +730,6 @@ else:
 
 if metadata_df is not None:
     # Drop anything with a nan filename
-    print(metadata_df, flush=True)
-    print(metadata_df.columns, flush=True)
     metadata_df = metadata_df.dropna(subset=["Filename"], axis=0)
     metadata_validation(metadata_df, all_spectra_df)
 
