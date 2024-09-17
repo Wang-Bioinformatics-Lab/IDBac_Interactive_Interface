@@ -377,7 +377,7 @@ def draw_protein_heatmap(all_spectra_df, bin_counts, replicate_counts, bin_size,
         columns_to_aggregate = columns_to_aggregate.drop('filename')
 
     # Aggregate bin counts within tolerance and column (filename) to get number of replicates for each bin
-    if st.session_state["phm_replicate_tolerance_mode"] == "M/Z":
+    if st.session_state["phm_replicate_tolerance_mode"] == "m/z":
         for bin_tuple in bin_counts['bin_mz_tuple'].unique():
             lb = bin_tuple[0] - st.session_state["phm_mz_tolerance"]
             ub = bin_tuple[1] + st.session_state["phm_mz_tolerance"]
@@ -386,7 +386,7 @@ def draw_protein_heatmap(all_spectra_df, bin_counts, replicate_counts, bin_size,
 
             aggregated_bin_counts.loc[mask, columns_to_aggregate] = bin_counts.loc[mask, columns_to_aggregate].sum(axis=0).values
 
-    elif st.session_state["phm_replicate_tolerance_mode"] == "PPM":
+    elif st.session_state["phm_replicate_tolerance_mode"] == "ppm":
         for bin_tuple in bin_counts['bin_mz_tuple'].unique():
             lb = bin_tuple[0] - bin_tuple[0] * st.session_state["phm_ppm_tolerance"] / 1e6
             ub = bin_tuple[1] + bin_tuple[1] * st.session_state["phm_ppm_tolerance"] / 1e6
@@ -487,6 +487,10 @@ def draw_protein_heatmap(all_spectra_df, bin_counts, replicate_counts, bin_size,
                                         width=1500, 
                                         height=dynamic_height,
                                         color_continuous_scale='Bluered')
+        
+        # Add replicate counts to the heatmap
+        # heatmap.update_traces(text=replicate_counts.loc[all_spectra_df.index, 'replicates'].values, hoverinfo='text')
+
         # Update axis text (we do this here otherwise spacing is not even)
         heatmap.update_layout(
             xaxis=dict(title="Protein", ticktext=list(all_spectra_df.index.values), tickvals=list(range(len(all_spectra_df.index))), side='top'),
