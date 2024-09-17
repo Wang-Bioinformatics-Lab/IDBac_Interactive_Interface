@@ -575,13 +575,15 @@ if st.session_state["task_id"].startswith("DEV-"):
     dev_task_id = st.session_state['task_id'][4:]
     labels_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={dev_task_id}&file=nf_output/output_histogram_data_directory/labels_spectra.tsv"
     numpy_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={dev_task_id}&file=nf_output/output_histogram_data_directory/numerical_spectra.npy"
-    bin_counts_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={dev_task_id}&file=nf_output/bin_counts/merged/merged.csv"
+    bin_counts_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={dev_task_id}&file=nf_output/bin_counts/bin_counts.csv"
+    replicate_count_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={dev_task_id}&file=nf_output/bin_counts/replicates.csv"
     warnings_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={dev_task_id}&file=nf_output/errors.csv"
     
 else:
     labels_url = f"https://gnps2.org/resultfile?task={st.session_state['task_id']}&file=nf_output/output_histogram_data_directory/labels_spectra.tsv"
     numpy_url = f"https://gnps2.org/resultfile?task={st.session_state['task_id']}&file=nf_output/output_histogram_data_directory/numerical_spectra.npy"
-    bin_counts_url = f"https://gnps2.org/resultfile?task={st.session_state['task_id']}&file=nf_output/bin_counts/merged/merged.csv"
+    bin_counts_url = f"https://gnps2.org/resultfile?task={st.session_state['task_id']}&file=nf_output/bin_counts/bin_counts.csv"
+    replicate_count_url = f"https://gnps2.org/resultfile?task={st.session_state['task_id']}&file=nf_output/bin_counts/replicates.csv"
     warnings_url = f"https://gnps2.org/resultfile?task={st.session_state['task_id']}&file=nf_output/errors.csv"
     
 st.session_state['workflow_params'] = write_job_params(task_id)
@@ -623,8 +625,16 @@ try:
 except:
     st.warning("Unable to retrieve bin counts, this may be an old task.")
 st.session_state['bin_counts_df'] = bin_counts_df
-print("******************************")
-print(bin_counts_df)
+
+replicate_count_df = None
+try:
+    replicate_count_csv = requests.get(replicate_count_url, 60)
+    replicate_count_csv.raise_for_status()
+    replicate_count_df = pd.read_csv(io.StringIO(replicate_count_csv.text), index_col=1)
+except:
+    st.warning("Unable to retrieve replicate counts, this may be an old task.")
+st.session_state['replicate_count_df'] = replicate_count_df
+
 
 # read pandas dataframe from url
 all_spectra_df = pd.read_csv(labels_url, sep="\t")
