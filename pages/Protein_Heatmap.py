@@ -488,8 +488,6 @@ def draw_protein_heatmap(all_spectra_df, bin_counts, replicate_counts, bin_size,
                                         height=dynamic_height,
                                         color_continuous_scale='Bluered')
         
-        # Add replicate counts to the heatmap
-        # heatmap.update_traces(text=replicate_counts.loc[all_spectra_df.index, 'replicates'].values, hoverinfo='text')
 
         # Update axis text (we do this here otherwise spacing is not even)
         heatmap.update_layout(
