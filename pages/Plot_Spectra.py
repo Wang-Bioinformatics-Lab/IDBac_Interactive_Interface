@@ -119,7 +119,7 @@ def get_peaks_from_USI(usi:str):
         r = requests.get(url, timeout=60)
         retries -= 1
     if r.status_code != 200:
-        raise ValueError("USI not found")
+        raise ValueError("USI not found", url)
 
     result_dictionary = r.json()
     peaks = result_dictionary["peaks"]
@@ -317,6 +317,78 @@ def stick_plot(peaks_a, peaks_b=None, title=None):
 
     st.plotly_chart(fig)
 
+def filter_peaks(peaks, name):
+    bin_counts, replicate_counts = st.session_state.get("bin_counts_df"), st.session_state.get('replicate_count_df')
+    all_spectra_df = st.session_state['query_only_spectra_df'].copy(deep=True).set_index('filename')
+    bin_size = st.session_state['workflow_params']['bin_size']
+
+    if bin_counts is None or replicate_counts is None:
+        st.error("Bin counts and replicate counts are required to generate the heatmap. Rerun this task to generate the heatmap.")
+        st.stop()
+
+    def _convert_bin_to_mz(bin_name):
+        b = int(bin_name.split("_")[-1])
+        return f"[{b * bin_size}, {(b + 1) * bin_size})"
+    def _convert_bin_to_mz_tuple(bin_name):
+        b = int(bin_name.split("_")[-1])
+        return (b * bin_size, (b + 1) * bin_size)
+
+    all_spectra_df = all_spectra_df.loc[name, :]
+ 
+    bin_counts = bin_counts.loc[:, [name]]
+    bin_counts = bin_counts.fillna(0)
+    aggregated_bin_counts = bin_counts.copy(deep=True)
+    # Set to all zeros
+    aggregated_bin_counts.loc[:, :] = 0
+
+    bin_counts['bin_mz_tuple'] = bin_counts.index.map(_convert_bin_to_mz_tuple)
+    bin_counts['lb'] = bin_counts['bin_mz_tuple'].apply(lambda x: x[0])
+    bin_counts['ub'] = bin_counts['bin_mz_tuple'].apply(lambda x: x[1])
+
+    columns_to_aggregate = aggregated_bin_counts.columns
+
+    if 'db_search_result' in columns_to_aggregate:
+        columns_to_aggregate = columns_to_aggregate.drop('db_search_result')
+    if 'filename' in columns_to_aggregate:
+        columns_to_aggregate = columns_to_aggregate.drop('filename')
+
+    if st.session_state["sp_replicate_tolerance_mode"] == "m/z":
+        for bin_tuple in bin_counts['bin_mz_tuple'].unique():
+            lb = bin_tuple[0] - st.session_state["sp_mz_tolerance"]
+            ub = bin_tuple[1] + st.session_state["sp_mz_tolerance"]
+            # Columnwise sum for all bins within the tolerance
+            mask = ((bin_counts['lb'] >= lb) & (bin_counts['ub'] <= ub))
+
+            aggregated_bin_counts.loc[mask, columns_to_aggregate] = bin_counts.loc[mask, columns_to_aggregate].sum(axis=0).values
+
+    elif st.session_state["sp_replicate_tolerance_mode"] == "ppm":
+        for bin_tuple in bin_counts['bin_mz_tuple'].unique():
+            lb = bin_tuple[0] - bin_tuple[0] * st.session_state["sp_ppm_tolerance"] / 1e6
+            ub = bin_tuple[1] + bin_tuple[1] * st.session_state["sp_ppm_tolerance"] / 1e6
+            # Columnwise sum for all bins within the tolerance
+            mask = ((bin_counts['lb'] >= lb) & (bin_counts['ub'] <= ub))
+            aggregated_bin_counts.loc[mask, columns_to_aggregate] = bin_counts.loc[mask, columns_to_aggregate].sum(axis=0).values   # values required?
+
+    # Filter peaks
+    aggregated_bin_counts = aggregated_bin_counts.reset_index()
+    aggregated_bin_counts.rename({name: 'freq'}, inplace=True, axis=1)
+    aggregated_bin_counts['freq'] = aggregated_bin_counts['freq'] / replicate_counts.loc[name, 'replicates']
+    print(aggregated_bin_counts['bin_name'].apply(_convert_bin_to_mz_tuple), flush=True)
+    aggregated_bin_counts[['bin_lb', 'bin_ub']] = aggregated_bin_counts.apply(lambda x: _convert_bin_to_mz_tuple(x['bin_name']), result_type='expand', axis=1)
+    print(aggregated_bin_counts, flush=True)
+
+    aggregated_bin_counts = {x.bin_lb for x in aggregated_bin_counts.itertuples() if x.freq > st.session_state['sp_replicate_threshold']}
+    print(aggregated_bin_counts, flush=True)
+    initial_len = len(peaks)
+    peaks = [[bin_mz, freq] for (bin_mz, freq) in peaks if bin_mz in aggregated_bin_counts]
+    print(f"Filtered {initial_len - len(peaks)} peaks", flush=True)
+
+    # Renormalize
+    max_intensity = max([peak[1] for peak in peaks])
+    peaks = [[peak[0], peak[1] / max_intensity] for peak in sorted(peaks)]
+
+    return peaks
+
 def draw_mirror_plot(all_spectra_df):
     # Add a dropdown allowing for mirror plots:
     st.header("Plot Spectra")
@@ -344,6 +416,23 @@ def draw_mirror_plot(all_spectra_df):
     if st.session_state['mirror_spectra_two'] != 'None':
         peaks_b = get_peaks(all_spectra_df, st.session_state['mirror_spectra_two'], st.session_state["task_id"])
 
+    ### Replicate Threshold Options ###
+    st.slider("Required Presence Percentage", min_value=0.0, max_value=1.0, value=0.5, key="sp_replicate_threshold")
+    st.selectbox("Replicate Tolerance Mode", ['ppm', 'm/z'], key="sp_replicate_tolerance_mode")
+    if st.session_state["sp_replicate_tolerance_mode"] == "ppm":
+        st.session_state["sp_ppm_tolerance"] = st.number_input("ppm tolerance", min_value=0.0, max_value=None, value=1000.0)
+    else:
+        st.session_state["sp_mz_tolerance"] = None
+    if st.session_state["sp_replicate_tolerance_mode"] == "m/z":
+        st.session_state["sp_mz_tolerance"] = st.number_input("m/z tolerance", min_value=0.0, max_value=None, value=1.0)
+    else:
+        st.session_state["sp_mz_tolerance"] = None
+    ###################################
+
+    peaks_a = filter_peaks(peaks_a, st.session_state['mirror_spectra_one'])
+    if peaks_b is not None:
+        peaks_b = filter_peaks(peaks_b, st.session_state['mirror_spectra_two'])
+    
     stick_plot(peaks_a, peaks_b, title=plot_title)
 
     # For Metabolomics Resolver
