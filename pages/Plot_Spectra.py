@@ -15,6 +15,7 @@ from scipy.cluster.hierarchy import linkage, dendrogram
 from scipy.spatial.distance import squareform
 from utils import custom_css, format_proteins_as_strings
 from streamlit.errors import StreamlitAPIException
+from collections import defaultdict
 
 # TODO:
 # [ ] Get processed spectra from DB, rather than raw
@@ -57,49 +58,50 @@ def get_USI(all_spectra_df: pd.DataFrame, filename: str, task:str):
 
     if db_result:
         # If it's a database search result, use the database_id to get the USI
+        raise ValueError("Database search results are not supported for this function.")
         output_USI = build_database_result_USI(row["database_id"].iloc[0], row["filename"].iloc[0])
     else:
         # If it's a query, use the query job to get the USI
         output_USI = f"mzspec:GNPS2:TASK-{task}-nf_output/merged/{row['filename'].iloc[0]}:scan:1"
     return output_USI
 
-def build_database_result_USI(database_id:str, file_name:str):
-    """
-    Build a USI for a database search result given a database_id. Note, if the original
-    task is missing/deteleted from GNPS2, this will not work.
+# def build_database_result_USI(database_id:str, file_name:str):
+#     """
+#     Build a USI for a database search result given a database_id. Note, if the original
+#     task is missing/deteleted from GNPS2, this will not work.
     
-    Parameters:
-    - database_id (str): The database_id of the database search result.
+#     Parameters:
+#     - database_id (str): The database_id of the database search result.
     
-    Returns:
-    - usi (str): The USI of the database search result.
-    """
+#     Returns:
+#     - usi (str): The USI of the database search result.
+#     """
     
-    # User database id to get original task id
-    # Example URL: https://idbac.org/api/spectrum?database_id=01HHBSS17717HA7VN5C167FYHC
-    url = "https://idbac.org/api/spectrum?database_id={}".format(database_id)
-    r = requests.get(url, timeout=60)
-    retries = 3
-    while r.status_code != 200 and retries > 0:
-        r = requests.get(url, timeout=60)
-        retries -= 1
-    if r.status_code != 200:
-        # Throw an exception for this because the database ids are supplied internally
-        raise ValueError("Database ID not found")
-    result_dictionary = r.json()
-    task = result_dictionary["task"]
-    file_name = result_dictionary["Filename"]
+#     # User database id to get original task id
+#     # Example URL: https://idbac.org/api/spectrum?database_id=01HHBSS17717HA7VN5C167FYHC
+#     url = "https://idbac.org/api/spectrum?database_id={}".format(database_id)
+#     r = requests.get(url, timeout=60)
+#     retries = 3
+#     while r.status_code != 200 and retries > 0:
+#         r = requests.get(url, timeout=60)
+#         retries -= 1
+#     if r.status_code != 200:
+#         # Throw an exception for this because the database ids are supplied internally
+#         raise ValueError("Database ID not found")
+#     result_dictionary = r.json()
+#     task = result_dictionary["task"]
+#     file_name = result_dictionary["Filename"]
        
-    return_usi = f"mzspec:GNPS2:TASK-{task}-nf_output/merged/{file_name}:scan:1"
+#     return_usi = f"mzspec:GNPS2:TASK-{task}-nf_output/merged/{file_name}:scan:1"     ######################## You can't do this
     
-    # Test the USI, so we can return an error message on the page
-    r = requests.get(f"https://metabolomics-usi.gnps2.org/json/?usi1={return_usi}")
-    if r.status_code != 200:
-        # Return None, signifying an error if the USI is not valid, this would imply that the original task is missing/deleted
-        st.error("File Upload Task is Missing or Deleted from GNPS2")
-        return None
+#     # Test the USI, so we can return an error message on the page
+#     r = requests.get(f"https://metabolomics-usi.gnps2.org/json/?usi1={return_usi}")
+#     if r.status_code != 200:
+#         # Return None, signifying an error if the USI is not valid, this would imply that the original task is missing/deleted
+#         st.error("File Upload Task is Missing or Deleted from GNPS2")
+#         return None
     
-    return return_usi
+#     return return_usi
 
 def get_peaks_from_USI(usi:str):
     """ Get the peaks from a USI.
@@ -119,7 +121,7 @@ def get_peaks_from_USI(usi:str):
         r = requests.get(url, timeout=60)
         retries -= 1
     if r.status_code != 200:
-        raise ValueError("USI not found")
+        raise ValueError("USI not found, you may need to rerun the analysis workflow.")
 
     result_dictionary = r.json()
     peaks = result_dictionary["peaks"]
@@ -154,7 +156,7 @@ def get_peaks(all_spectra_df: pd.DataFrame, filename: str, task:str):
         peaks = get_peaks_from_db_result(row["database_id"].iloc[0])
     else:
         # If it's a query, use the query job to get the USI
-        USI = f"mzspec:GNPS2:TASK-{task}-nf_output/merged/{row['filename'].iloc[0]}:scan:1"
+        USI = f"mzspec:GNPS2:TASK-{task}-nf_output/search/query_spectra/{row['filename'].iloc[0]}:scan:1"
 
         peaks = get_peaks_from_USI(USI)
 
@@ -173,6 +175,17 @@ def get_peaks(all_spectra_df: pd.DataFrame, filename: str, task:str):
     peaks = [[peak[0], peak[1] / max_intensity] for peak in sorted(peaks)]
 
     return peaks
+
+def bin_peaks(peaks, bin_size):
+    
+    outupt_dict = defaultdict(float)
+    for peak in peaks:
+        k = int(peak[0] / bin_size)
+        outupt_dict[k] += peak[1]
+
+    output =  [[k * bin_size, v] for k, v in outupt_dict.items()]
+    output = sorted(output, key=lambda x: x[0])
+    return output
 
 def get_peaks_from_db_result(database_id:str):
     """ Get the peaks from a database search result. This function will return the peaks 
@@ -198,6 +211,8 @@ def get_peaks_from_db_result(database_id:str):
     result_dictionary = r.json()
     peaks = result_dictionary["peaks"]   # Gives unbinned, unnormalized peaks unmerged by scan
     peaks = [[p['mz'], p['i']] for p in peaks]
+
+    peaks = bin_peaks(peaks, st.session_state['workflow_params']['bin_size'])
 
     return peaks
 
@@ -328,12 +343,9 @@ def draw_mirror_plot(all_spectra_df):
     # Select spectra two
     st.selectbox("Spectra Two", ['None'] + all_options, key='mirror_spectra_two', help="Select the second spectra to be plotted. Database search results are denoted by 'DB Result -'.")
     # Add a button to generate the mirror plot
-    spectra_one_USI = get_USI(all_spectra_df, st.session_state['mirror_spectra_one'], st.session_state["task_id"])
-    spectra_two_USI = get_USI(all_spectra_df, st.session_state['mirror_spectra_two'], st.session_state["task_id"])
-    
     
     # For Local Plot
-    if spectra_two_USI is None:
+    if st.session_state['mirror_spectra_two'] == 'None':
         default_title = f"{st.session_state['mirror_spectra_one']}"
     else:
         default_title = f"{st.session_state['mirror_spectra_one']} vs {st.session_state['mirror_spectra_two']}"
@@ -344,17 +356,30 @@ def draw_mirror_plot(all_spectra_df):
     if st.session_state['mirror_spectra_two'] != 'None':
         peaks_b = get_peaks(all_spectra_df, st.session_state['mirror_spectra_two'], st.session_state["task_id"])
 
+        if False:   # Cosine for debugging
+            # Create dictionaries from the peaks
+            peaks_a_dict = {peak[0]: peak[1] for peak in peaks_a}
+            peaks_b_dict = {peak[0]: peak[1] for peak in peaks_b}
+
+            # Get the union of the two sets of m/z values
+            all_mz = set(peaks_a_dict.keys()).union(set(peaks_b_dict.keys()))
+
+            # Create vectors for both sets of peaks, filling with 0 where necessary
+            peaks_a_vector = np.array([peaks_a_dict.get(mz, 0) for mz in all_mz])
+            peaks_b_vector = np.array([peaks_b_dict.get(mz, 0) for mz in all_mz])
+
+            # Calculate the norms
+            norm_a = np.linalg.norm(peaks_a_vector)
+            norm_b = np.linalg.norm(peaks_b_vector)
+
+            # Check if any norm is zero to avoid division by zero
+            if norm_a == 0 or norm_b == 0:
+                cosine_similarity = 0.0
+            else:
+                # Calculate cosine similarity
+                cosine_similarity = np.dot(peaks_a_vector, peaks_b_vector) / (norm_a * norm_b)
+
+            st.write(f"Cosine Similarity: {cosine_similarity:.2f}")
     stick_plot(peaks_a, peaks_b, title=plot_title)
-
-    # For Metabolomics Resolver
-    def _get_mirror_plot_url(usi1, usi2=None):
-        if usi2 is None:
-            url = f"https://metabolomics-usi.gnps2.org/dashinterface/?usi1={usi1}"
-        else:
-            url = f"https://metabolomics-usi.gnps2.org/dashinterface/?usi1={usi1}&usi2={usi2}"
-        return url
-
-    # If a user is able to get click the buttone before the USI is generated, they may get the page with an old option
-    st.link_button(label="View Binned Peaks In Spectrum Resolver", url=_get_mirror_plot_url(spectra_one_USI, spectra_two_USI))
-
+    
 draw_mirror_plot(st.session_state['spectra_df'])
