@@ -14,6 +14,7 @@ import plotly.figure_factory as ff
 from scipy.cluster.hierarchy import linkage, dendrogram
 from scipy.spatial.distance import squareform
 from utils import custom_css, parse_numerical_input
+import math
 
 #####
 # A note abote streamlit session states:
@@ -128,10 +129,11 @@ def get_small_molecule_dict():
             intensity_array = scan['intensity array']
             
             for mz, intensity in zip(mz_array, intensity_array):
-                if mz in mz_intensity_dict:
-                    mz_intensity_dict[mz].append(float(intensity))
+                _mz = np.round(float(mz), 1)
+                if _mz in mz_intensity_dict:
+                    mz_intensity_dict[_mz].append(float(intensity))
                 else:
-                    mz_intensity_dict[mz] = [float(intensity)]
+                    mz_intensity_dict[_mz] = [float(intensity)]
             
         for mz, intensities in mz_intensity_dict.items():
             mz_intensity_dict[mz] = sum(intensities) / len(intensities)
