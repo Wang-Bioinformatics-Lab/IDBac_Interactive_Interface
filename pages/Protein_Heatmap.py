@@ -1,15 +1,6 @@
 import streamlit as st
-import streamlit.components.v1 as components
-from pyvis import network as net
-from pyvis import options as pyvis_options
-import pandas as pd
 import numpy as np
-import json
-import requests
 import plotly
-import networkx as nx
-import matplotlib.pyplot as plt
-from matplotlib import colors
 import plotly.figure_factory as ff
 from scipy.cluster.hierarchy import linkage, dendrogram
 from scipy.spatial.distance import squareform
@@ -378,7 +369,7 @@ def draw_protein_heatmap(all_spectra_df, bin_counts, replicate_counts, bin_size,
 
     # Aggregate bin counts within tolerance and column (filename) to get number of replicates for each bin
     if st.session_state["phm_replicate_tolerance_mode"] == "m/z":
-        for bin_tuple in bin_counts['bin_mz_tuple'].unique():
+        for bin_tuple in bin_counts['bin_mz_tuple'].unique():   # This is effectively iterating over rows, which could be slow
             lb = bin_tuple[0] - st.session_state["phm_mz_tolerance"]
             ub = bin_tuple[1] + st.session_state["phm_mz_tolerance"]
             # Columnwise sum for all bins within the tolerance
