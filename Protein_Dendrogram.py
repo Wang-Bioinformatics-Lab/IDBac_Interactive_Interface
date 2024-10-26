@@ -339,7 +339,7 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict,
             fig.add_trace(metadata_scatter, row=1, col=col_counter)
             
             # ylim must be set for each axis, otherwise we get blank space
-            fig.update_yaxes(tickvals=y_values, ticktext=y_labels, range=[min(y_values)-10, max(y_values)+25], row=1, col=col_counter, showgrid=True,)
+            fig.update_yaxes(tickvals=y_values, ticktext=y_labels, range=[min(y_values)-10, max(y_values)+25], row=1, col=col_counter, showgrid=True, automargin=True)
             
             # Add title
             wrapped_title = col_name.replace(" ", "<br>") # TODO: Better wrapping
@@ -387,8 +387,11 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict,
         
         return fig
 
+    # Prevent x,y axis labels from being cut off during export
+    dendro.update_xaxes(automargin=True, title="")  # I can't believe the title is actually required here lol
+    dendro.update_yaxes(automargin=True, title="")
 
-    dendro.update_layout(width=dendrogram_width, height=dendrogram_height, margin=dict(l=0, r=0, b=0, t=0, pad=0))
+    dendro.update_layout(width=dendrogram_width, height=dendrogram_height) #margin=dict(l=10, r=10, b=10, t=10, pad=0))
     # Set ylim
     dendro.update_yaxes(range=[min(y_values)-5, max(y_values)+5], tickvals=y_values, ticktext=y_labels, autorange=False, ticksuffix=" ", ticks="outside")
     return dendro
