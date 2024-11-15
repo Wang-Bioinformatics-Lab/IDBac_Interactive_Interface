@@ -8,7 +8,7 @@ import plotly.figure_factory as ff
 import plotly
 # Now lets do pairwise cosine distance
 from sklearn.metrics.pairwise import cosine_distances, euclidean_distances
-from scipy.cluster.hierarchy import linkage
+from scipy.cluster.hierarchy import linkage, to_tree
 from scipy.spatial.distance import squareform
 import time
 import textwrap
@@ -20,6 +20,7 @@ import numpy as np
 from utils import write_job_params, write_warnings, enrich_genbank_metadata, metadata_validation, custom_css
 from Protein_Dendrogram_Components import draw_protein_heatmap
 from streamlit.components.v1 import html
+import ete3
 
 # Set Page Configuration
 st.set_page_config(page_title="IDBac - Dendrogram", page_icon="assets/idbac_logo_square.png", layout="centered", initial_sidebar_state="auto", menu_items=None)
@@ -254,17 +255,24 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict,
         
     if len(all_spectra_input) <= 1:
         st.error("There are not enough spectra to create a dendrogram. Please check number of input spectra and database search results file.")
-        return None
+        return None, None, None
 
     selected_distance_fun = st.session_state['distance_measure']
         
     # Creating Dendrogram  
-    dendro = ff.create_dendrogram(np_data_wrapper(data_np, all_spectra_input, db_distance_dict),
+    wrapped_np_data = np_data_wrapper(data_np, all_spectra_input, db_distance_dict)
+    wrapped_distance_fn = get_dist_function_wrapper(selected_distance_fun)
+    dendro = ff.create_dendrogram(wrapped_np_data,
                                   orientation='left',
                                   labels=all_spectra_df.index.values, # We will use the labels as a unique identifier
-                                  distfun=get_dist_function_wrapper(selected_distance_fun),
+                                  distfun=wrapped_distance_fn,
                                   linkagefun=lambda x: linkage(x, method=cluster_method),
                                   color_threshold=coloring_threshold)
+
+    dist_matrix = wrapped_distance_fn(wrapped_np_data)
+    linkage_matrix = linkage(dist_matrix,
+                            method=cluster_method)
+
     dendrogram_width = 800
     dendrogram_height = max(20*len(all_labels_list), 350)
     
@@ -388,7 +396,9 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict,
         # # Set ylim
         #     fig.update_yaxes(range=[min(y_values)-10, max(y_values)+10], row=1, col=col_counter)
         
-        return fig
+        translated_labels = [all_labels_list[int(identifier)] for identifier in y_axis_identifiers]
+
+        return fig, linkage_matrix, translated_labels
 
     # Prevent x,y axis labels from being cut off during export
     dendro.update_xaxes(automargin=True, title="")  # I can't believe the title is actually required here lol
@@ -397,7 +407,10 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict,
     dendro.update_layout(width=dendrogram_width, height=dendrogram_height) #margin=dict(l=10, r=10, b=10, t=10, pad=0))
     # Set ylim
     dendro.update_yaxes(range=[min(y_values)-5, max(y_values)+5], tickvals=y_values, ticktext=y_labels, autorange=False, ticksuffix=" ", ticks="outside")
-    return dendro
+    
+    
+    translated_labels = [all_labels_list[int(identifier)] for identifier in y_axis_identifiers]
+    return dendro, linkage_matrix, translated_labels
 
 
 def collect_database_search_results(task):
@@ -887,22 +900,51 @@ def get_svg_download_link(fig: go.Figure) -> str:
     html_link = f'<a href="{data_url}" download="plot.svg">Download SVG</a>'
     return html_link
 
+
+def get_ete_tree_download_link(linkage_matrix, labels):
+    """
+    Credit: https://github.com/scipy/scipy/issues/8274
+    """
+    tree = to_tree(linkage_matrix, False)
+
+    def build_newick(node, newick, parentdist, leaf_names):
+        if node.is_leaf(): # This is for SciPy not for ete or skbio so `is_leaf` utility function does not apply
+            return f"{leaf_names[node.id]}:{(parentdist - node.dist)/2}{newick}"
+        else:
+            if len(newick) > 0:
+                newick = f"):{(parentdist - node.dist)/2}{newick}"
+            else:
+                newick = ");"
+            newick = build_newick(node.get_left(), newick, node.dist, leaf_names)
+            newick = build_newick(node.get_right(), f",{newick}", node.dist, leaf_names)
+            newick = f"({newick}"
+            return newick
+    tree = build_newick(tree, "", tree.dist, labels)
+
+    # Generate the data URL for the download link
+    data_url = f"data:text/plain;base64,{base64.b64encode(tree.encode()).decode()}"
+    # Print out the HTML code for the download link
+    html_link = f'<a href="{data_url}" download="dendrogram.nwk">Download Newick Tree</a>'
+    return html_link
+
 # Creating the dendrogram
-dendro = create_dendrogram(numpy_array,
-                           all_spectra_df,
-                           db_distance_dict,
-                           plotted_metadata=st.session_state["metadata_scatter"],
-                           db_label_column=st.session_state["db_search_result_label"],
-                           metadata_df=metadata_df,
-                           db_search_columns=st.session_state["db_search_result_label"] ,
-                           cluster_method=st.session_state["clustering_method"],
-                           coloring_threshold=st.session_state["coloring_threshold"],
-                           cutoff=st.session_state["cutoff"],
-                           show_annotations=st.session_state["show_annotations"])
+dendro, linkage_matrix, labels = create_dendrogram(numpy_array,
+                                                        all_spectra_df,
+                                                        db_distance_dict,
+                                                        plotted_metadata=st.session_state["metadata_scatter"],
+                                                        db_label_column=st.session_state["db_search_result_label"],
+                                                        metadata_df=metadata_df,
+                                                        db_search_columns=st.session_state["db_search_result_label"] ,
+                                                        cluster_method=st.session_state["clustering_method"],
+                                                        coloring_threshold=st.session_state["coloring_threshold"],
+                                                        cutoff=st.session_state["cutoff"],
+                                                        show_annotations=st.session_state["show_annotations"])
 if dendro is not None:
     st.plotly_chart(dendro, use_container_width=True)
     # Add option to download as svg
     st.markdown(get_svg_download_link(dendro), unsafe_allow_html=True, help="Currently, this feature only officially supports the dendrogram _without_ metadata.")
+    # Add option to download as ete tree
+    st.markdown(get_ete_tree_download_link(linkage_matrix, labels), unsafe_allow_html=True, help="Download the dendrogram as an ETE tree.")
 
 # Create a shareable link to this page
 st.write("Shareable Link: ")
