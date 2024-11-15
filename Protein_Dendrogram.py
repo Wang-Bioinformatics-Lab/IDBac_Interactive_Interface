@@ -1,3 +1,4 @@
+import base64
 import streamlit as st
 import pandas as pd
 import requests
@@ -265,7 +266,7 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict,
                                   linkagefun=lambda x: linkage(x, method=cluster_method),
                                   color_threshold=coloring_threshold)
     dendrogram_width = 800
-    dendrogram_height = max(15*len(all_labels_list), 350)
+    dendrogram_height = max(20*len(all_labels_list), 350)
     
     if cutoff is not None:
         dendro.add_vline(x=cutoff, line_width=1, line_color='grey')
@@ -328,6 +329,7 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict,
         
             # Create the scatter on the new axis
             metadata_scatter = go.Scatter(x=consistently_ordered_metadata, y=y_values, mode='markers')
+
             # Show all x ticks
             fig.update_xaxes(tickvals=consistently_ordered_metadata,
                              ticktext=consistently_ordered_metadata,
@@ -335,7 +337,8 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict,
                              col=col_counter,
                              tickangle=90,
                              ticks="outside",
-                             showgrid=True)
+                             showgrid=True,
+                            )
             fig.add_trace(metadata_scatter, row=1, col=col_counter)
             
             # ylim must be set for each axis, otherwise we get blank space
@@ -862,6 +865,28 @@ if len(all_spectra_df) == 0:
 # Add any remaining variables to the session state if needed
 st.session_state["metadata_df"] = metadata_df
 
+def get_svg_download_link(fig: go.Figure) -> str:
+    """
+    URL encode the svg image and create a download link for the svg file.
+
+    Parameters:
+    - fig (plotly.graph_objs.Figure): The figure to download.
+
+    Returns:
+    - link (str): The download link for the svg file.
+    """
+    # Encode the svg image
+    svg_string = plotly.io.to_image(fig, format="svg")
+    # Base64 encode the SVG string
+    encoded_svg = base64.b64encode(svg_string).decode('utf-8')
+
+    # Generate the data URL for the download link
+    data_url = f"data:image/svg+xml;base64,{encoded_svg}"
+
+    # Print out the HTML code for the download link
+    html_link = f'<a href="{data_url}" download="plot.svg">Download SVG</a>'
+    return html_link
+
 # Creating the dendrogram
 dendro = create_dendrogram(numpy_array,
                            all_spectra_df,
@@ -876,6 +901,8 @@ dendro = create_dendrogram(numpy_array,
                            show_annotations=st.session_state["show_annotations"])
 if dendro is not None:
     st.plotly_chart(dendro, use_container_width=True)
+    # Add option to download as svg
+    st.markdown(get_svg_download_link(dendro), unsafe_allow_html=True, help="Currently, this feature only officially supports the dendrogram _without_ metadata.")
 
 # Create a shareable link to this page
 st.write("Shareable Link: ")
