@@ -333,7 +333,7 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict,
         col_counter = 1
         for col_name in plotted_metadata:
             # Reorder metadata array to be consistent with histogram axis
-            consistently_ordered_metadata = all_spectra_df[col_name].loc[y_axis_identifiers]
+            consistently_ordered_metadata = all_spectra_df[col_name].loc[y_axis_identifiers]    # Contains list of x-values ordered by y-axis
         
             # Create the scatter on the new axis
             metadata_scatter = go.Scatter(x=consistently_ordered_metadata, y=y_values, mode='markers')
@@ -346,7 +346,8 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict,
                              tickangle=90,
                              ticks="outside",
                              showgrid=True,
-                            )
+                             categoryorder='category ascending')
+            
             fig.add_trace(metadata_scatter, row=1, col=col_counter)
             
             # ylim must be set for each axis, otherwise we get blank space
@@ -359,11 +360,9 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict,
             
             col_counter+=1
             
-        # print(dir(fig), flush=True)
         # Add a border around the scatter plots
         rectangles_to_add = []
         for x,y in zip(range(1,num_cols), range(1, num_cols)):
-            # print(x,y, flush=True)
             if x == 1:
                 x = ""
             if y == 1:
