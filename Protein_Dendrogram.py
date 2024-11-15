@@ -944,7 +944,7 @@ if dendro is not None:
     # Add option to download as svg
     st.markdown(get_svg_download_link(dendro), unsafe_allow_html=True, help="Currently, this feature only officially supports the dendrogram _without_ metadata.")
     # Add option to download as ete tree
-    st.markdown(get_ete_tree_download_link(linkage_matrix, labels), unsafe_allow_html=True, help="Download the dendrogram as an ETE tree.")
+    st.markdown(get_ete_tree_download_link(linkage_matrix, labels), unsafe_allow_html=True)
 
 # Create a shareable link to this page
 st.write("Shareable Link: ")
