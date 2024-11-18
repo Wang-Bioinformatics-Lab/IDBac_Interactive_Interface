@@ -4,7 +4,7 @@ import plotly
 import plotly.figure_factory as ff
 from scipy.cluster.hierarchy import linkage, dendrogram
 from scipy.spatial.distance import squareform
-from utils import custom_css, parse_numerical_input
+from utils import custom_css, parse_numerical_input, _convert_bin_to_mz, _convert_bin_to_mz_tuple
 
 # import StreamlitAPIException
 from streamlit.errors import StreamlitAPIException
@@ -129,12 +129,8 @@ def basic_dendrogram(spectrum_df=None, disabled=False, display=True):
 @st.cache_data(max_entries=20, show_spinner="Counting Replicates...", ttl=3600*12)
 def compute_number_of_replicates(bin_counts, replicate_counts, selected_proteins):
     bin_size = st.session_state['workflow_params']['bin_size']
-    def _convert_bin_to_mz(bin_name):
-        b = int(bin_name.split("_")[-1])
-        return f"[{b * bin_size}, {(b + 1) * bin_size})"
-    def _convert_bin_to_mz_tuple(bin_name):
-        b = int(bin_name.split("_")[-1])
-        return (b * bin_size, (b + 1) * bin_size)
+    def __convert_bin_to_mz_tuple(bin_name):
+        return _convert_bin_to_mz_tuple(bin_name, bin_size)
 
     if bin_counts is None or replicate_counts is None:
         st.error("Bin counts and replicate counts are required to generate the heatmap. Rerun this task to generate the heatmap.")
@@ -147,7 +143,7 @@ def compute_number_of_replicates(bin_counts, replicate_counts, selected_proteins
     # Set to all zeros
     aggregated_bin_counts.loc[:, :] = 0
 
-    bin_counts['bin_mz_tuple'] = bin_counts.index.map(_convert_bin_to_mz_tuple)
+    bin_counts['bin_mz_tuple'] = bin_counts.index.map(__convert_bin_to_mz_tuple)
     bin_counts['lb'] = bin_counts['bin_mz_tuple'].apply(lambda x: x[0])
     bin_counts['ub'] = bin_counts['bin_mz_tuple'].apply(lambda x: x[1])
 
@@ -377,13 +373,6 @@ def draw_protein_heatmap(all_spectra_df, bin_counts, replicate_counts, bin_size,
         metadata_df = st.session_state["metadata_df"]
         metadata_df = metadata_df.set_index("Filename")
         all_spectra_df["_metadata"] = metadata_df.loc[all_spectra_df.index, st.session_state["phm_display_metadata"]]
-
-    def _convert_bin_to_mz(bin_name):
-        b = int(bin_name.split("_")[-1])
-        return f"[{b * bin_size}, {(b + 1) * bin_size})"
-    def _convert_bin_to_mz_tuple(bin_name):
-        b = int(bin_name.split("_")[-1])
-        return (b * bin_size, (b + 1) * bin_size)
     
 
     if bin_counts is None or replicate_counts is None:
@@ -444,9 +433,12 @@ def draw_protein_heatmap(all_spectra_df, bin_counts, replicate_counts, bin_size,
     bin_columns = [col for col in bin_columns if all_spectra_df[col].notna().sum() >= min_count]
     all_spectra_df = all_spectra_df.loc[:, bin_columns]
     
+    def __convert_bin_to_mz(bin):
+        return _convert_bin_to_mz(bin, bin_size)
+
     # Remove mzs with all nan
     all_spectra_df = all_spectra_df.dropna(how='all', axis='columns')
-    all_spectra_df.columns = [_convert_bin_to_mz(x) for x in all_spectra_df.columns]
+    all_spectra_df.columns = [__convert_bin_to_mz(x) for x in all_spectra_df.columns]
 
     # Remove all mzs not in the selected m/z range
     if st.session_state.get("phm_parsed_selected_mzs"):

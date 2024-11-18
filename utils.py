@@ -136,7 +136,7 @@ def get_genbank_metadata(genbank_accession: str) -> dict:
     def _fetch_assembly(assembly_id):
         base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?"
         params = {
-            "db": "assembly",
+            "db": "nucleotide",
             "id": assembly_id,
             "retmode": "json"
         }
@@ -148,7 +148,10 @@ def get_genbank_metadata(genbank_accession: str) -> dict:
     # Fetch metadata
     try:
         genbank_id = None
-        metadata_json = _fetch_metadata(genbank_accession, 'assembly')  # Changed db to 'assembly'
+        taxid = None
+        taxonomy_json = None
+        metadata_json = _fetch_metadata(genbank_accession, 'nucleotide')  # Changed db to 'assembly'
+
         metadata = {}
         num_results = int(metadata_json['esearchresult'].get('count', 0))
         if num_results > 1:
@@ -160,21 +163,18 @@ def get_genbank_metadata(genbank_accession: str) -> dict:
             elif len(idlist) == 1:
                 genbank_id = idlist[0]
         # at this point taxid will be None if it was not identified            
-            
         # Fetch taxid if genbank_id is found
         if genbank_id:
-            taxid = None
             # Overwrite metadata_json with assembly information
             metadata_json = _fetch_assembly(genbank_id)
             if 'error' in metadata_json['result'][genbank_id]:
                 raise Exception(f"Error fetching assembly information for GenBank accession {genbank_accession}: {metadata_json['result'][genbank_id]['error']}")
             taxid = metadata_json['result'][genbank_id].get('taxid', None)
-
         # Fetch taxonomy if taxid is found
         if taxid:
             taxonomy_json = None
             taxonomy_json = _fetch_taxonomy(taxid)
-            taxonomy_json = taxonomy_json['result'][taxid]
+            taxonomy_json = taxonomy_json['result'][str(taxid)]
             if 'error' in taxonomy_json:
                 st.warning(f"Error fetching taxonomy for GenBank accession {genbank_accession}: {taxonomy_json['error']}")
                 taxonomy_json = None
@@ -182,6 +182,7 @@ def get_genbank_metadata(genbank_accession: str) -> dict:
         # Filter the metadata to only what we want to integrate:
         if taxonomy_json:
             output_dict =  {
+                'TaxID From Genbank': taxid,
                 'Genbank accession': genbank_accession,
                 'Genbank-Division': taxonomy_json.get('division', 'Unknown'),
                 'Genbank-Scientific Name': taxonomy_json.get('scientificname', 'Unknown'),
@@ -194,10 +195,13 @@ def get_genbank_metadata(genbank_accession: str) -> dict:
             for key in output_dict:
                 if output_dict[key] == '':
                     output_dict[key] = 'None'
-            
+
             return output_dict, 1
+
+        return None, 0
     except Exception as e:
         return {
+            'TaxID From Genbank': taxid,
             'Genbank accession': genbank_accession,
             'Genbank-Division': 'Unknown',
             'Genbank-Scientific Name': 'Unknown',
@@ -339,3 +343,10 @@ def parse_numerical_input(string:str) -> list:
             st.error(f"Could not parse entry: {entry} " + str(e))
             return []
     return output_list
+
+def _convert_bin_to_mz(bin_name, bin_size):
+    b = int(bin_name.split("_")[-1])
+    return f"[{b * bin_size}, {(b + 1) * bin_size})"
+def _convert_bin_to_mz_tuple(bin_name, bin_size):
+    b = int(bin_name.split("_")[-1])
+    return (b * bin_size, (b + 1) * bin_size)
