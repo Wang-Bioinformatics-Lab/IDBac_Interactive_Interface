@@ -276,9 +276,6 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict,
     dendrogram_width = 800
     dendrogram_height = max(20*len(all_labels_list), 350)
     
-    if cutoff is not None:
-        dendro.add_vline(x=cutoff, line_width=1, line_color='grey')
-    
     # Add labels for each intersection
     if show_annotations:
         for dd in dendro.data:
@@ -397,19 +394,28 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict,
         
         translated_labels = [all_labels_list[int(identifier)] for identifier in y_axis_identifiers]
 
+        if cutoff is not None:
+            # add to dendrogram col only
+            fig.add_vline(x=cutoff, line_width=1, line_color='grey', row=1, col=col_counter)
+
         return fig, linkage_matrix, translated_labels
-
-    # Prevent x,y axis labels from being cut off during export
-    dendro.update_xaxes(automargin=True, title="")  # I can't believe the title is actually required here lol
-    dendro.update_yaxes(automargin=True, title="")
-
-    dendro.update_layout(width=dendrogram_width, height=dendrogram_height) #margin=dict(l=10, r=10, b=10, t=10, pad=0))
-    # Set ylim
-    dendro.update_yaxes(range=[min(y_values)-5, max(y_values)+5], tickvals=y_values, ticktext=y_labels, autorange=False, ticksuffix=" ", ticks="outside")
     
-    
-    translated_labels = [all_labels_list[int(identifier)] for identifier in y_axis_identifiers]
-    return dendro, linkage_matrix, translated_labels
+    else:
+
+        # Prevent x,y axis labels from being cut off during export
+        dendro.update_xaxes(automargin=True, title="")  # I can't believe the title is actually required here lol
+        dendro.update_yaxes(automargin=True, title="")
+
+        dendro.update_layout(width=dendrogram_width, height=dendrogram_height) #margin=dict(l=10, r=10, b=10, t=10, pad=0))
+        # Set ylim
+        dendro.update_yaxes(range=[min(y_values)-5, max(y_values)+5], tickvals=y_values, ticktext=y_labels, autorange=False, ticksuffix=" ", ticks="outside")
+        
+        translated_labels = [all_labels_list[int(identifier)] for identifier in y_axis_identifiers]
+
+        if cutoff is not None:
+            dendro.add_vline(x=cutoff, line_width=1, line_color='grey')
+        
+        return dendro, linkage_matrix, translated_labels
 
 
 def collect_database_search_results(task):
@@ -940,6 +946,8 @@ dendro, linkage_matrix, labels = create_dendrogram(numpy_array,
                                                         show_annotations=st.session_state["show_annotations"])
 if dendro is not None:
     st.plotly_chart(dendro, use_container_width=True)
+    # Display number of strains
+    st.write(f"Number of Strains: {len(labels)}")
     # Add option to download as svg
     st.markdown(get_svg_download_link(dendro), unsafe_allow_html=True, help="Currently, this feature only officially supports the dendrogram _without_ metadata.")
     # Add option to download as ete tree
