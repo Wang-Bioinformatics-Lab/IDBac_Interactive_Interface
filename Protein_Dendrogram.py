@@ -596,21 +596,22 @@ task_id = st.session_state["task_id"]
 
 # Now we will get all the relevant data from GNPS2 for plotting
 if st.session_state["task_id"].startswith("DEV-"):
-    dev_task_id = st.session_state['task_id'][4:]
-    labels_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={dev_task_id}&file=nf_output/output_histogram_data_directory/labels_spectra.tsv"
-    numpy_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={dev_task_id}&file=nf_output/output_histogram_data_directory/numerical_spectra.npy"
-    bin_counts_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={dev_task_id}&file=nf_output/bin_counts/bin_counts.csv"
-    replicate_count_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={dev_task_id}&file=nf_output/bin_counts/replicates.csv"
-    warnings_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={dev_task_id}&file=nf_output/errors.csv"
-    
+    base_url = "http://ucr-lemon.duckdns.org:4000"
+    task_id = st.session_state['task_id'][4:]
+elif st.session_state["task_id"].startswith("BETA-"):
+    base_url = "https://beta.gnps2.org"
+    task_id = st.session_state['task_id'][5:]
 else:
-    labels_url = f"https://gnps2.org/resultfile?task={st.session_state['task_id']}&file=nf_output/output_histogram_data_directory/labels_spectra.tsv"
-    numpy_url = f"https://gnps2.org/resultfile?task={st.session_state['task_id']}&file=nf_output/output_histogram_data_directory/numerical_spectra.npy"
-    bin_counts_url = f"https://gnps2.org/resultfile?task={st.session_state['task_id']}&file=nf_output/bin_counts/bin_counts.csv"
-    replicate_count_url = f"https://gnps2.org/resultfile?task={st.session_state['task_id']}&file=nf_output/bin_counts/replicates.csv"
-    warnings_url = f"https://gnps2.org/resultfile?task={st.session_state['task_id']}&file=nf_output/errors.csv"
-    
-st.session_state['workflow_params'] = write_job_params(task_id)
+    base_url = "https://gnps2.org"
+    task_id = st.session_state['task_id']
+labels_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/output_histogram_data_directory/labels_spectra.tsv"
+numpy_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/output_histogram_data_directory/numerical_spectra.npy"
+bin_counts_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/bin_counts/bin_counts.csv"
+replicate_count_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/bin_counts/replicates.csv"
+warnings_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/errors.csv"
+
+
+st.session_state['workflow_params'] = write_job_params(st.session_state['task_id'])
 if st.checkbox("Show Warnings", value=True, key="show_warnings"):
     write_warnings(warnings_url)
 
@@ -877,7 +878,7 @@ st.session_state['spectra_df'] = all_spectra_df
 all_spectra_df = all_spectra_df[~all_spectra_df["filename"].isin(st.session_state["hidden_isolates"])]
 if len(all_spectra_df) == 0:
     # If there are no spectra to display, then we will stop the script
-    st.error("There are no spectra to display. Please select different options.")
+    st.error("There are no protein spectra to display on the dendrogram. Please select different options and check protein spectra exist for this task.")
     st.stop()
     
 # Add any remaining variables to the session state if needed

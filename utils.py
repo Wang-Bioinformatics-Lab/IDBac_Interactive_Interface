@@ -9,11 +9,16 @@ import numpy as np
 
 def write_job_params(task_id:str):
     if task_id.startswith("DEV-"):
-        params_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={dev_task_id}&file=job_parameters.yaml"
-        merge_params_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={dev_task_id}&file=nf_output/merge_parameters.txt"
+        base_url = "http://ucr-lemon.duckdns.org:4000"
+        task_id = task_id.replace("DEV-", "")
+    elif task_id.startswith("BETA-"):
+        base_url = "https://beta.gnps2.org"
+        task_id = task_id.replace("BETA-", "")
     else:
-        params_url = f"https://gnps2.org/resultfile?task={task_id}&file=job_parameters.yaml"
-        merge_params_url = f"https://gnps2.org/resultfile?task={task_id}&file=nf_output/merge_parameters.txt"
+        base_url = "https://gnps2.org"
+
+    params_url = f"{base_url}/resultfile?task={task_id}&file=job_parameters.yaml"
+    merge_params_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/merge_parameters.txt"
 
     r = requests.get(params_url,timeout=(60,60))
     r.raise_for_status()

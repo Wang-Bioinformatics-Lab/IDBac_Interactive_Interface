@@ -98,9 +98,15 @@ def basic_dendrogram(disabled=False):
 
 def get_small_molecule_dict():
     if st.session_state['task_id'].startswith("DEV-"):
-        url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={st.session_state['task_id'][4:]}&file=nf_output/small_molecule/summary.json"
+        base_url = "http://ucr-lemon.duckdns.org:4000"
+        task_id = st.session_state['task_id'].replace("DEV-", "")
+    elif st.session_state['task_id'].startswith('BETA-'):
+        base_url = "https://beta.gnps2.org"
+        task_id = st.session_state['task_id'].replace("BETA-", "")
     else:
-        url = f"https://gnps2.org/resultfile?task={st.session_state['task_id']}&file=nf_output/small_molecule/summary.json"
+        base_url = "https://gnps2.org"
+        task_id = st.session_state['task_id']
+    url = f"{base_url}/resultfile?task={task_id}&file=nf_output/small_molecule/summary.json"
     
     response = requests.get(url, timeout=(120,120))
     if response.status_code != 200:
@@ -594,7 +600,13 @@ with st.expander("Metabolite Association Network Options", expanded=True):
     else:
         st.session_state["sma_physics"] = "No"
         # We can only do this using our custom layout, so we'll have to disable it for the Default layout
-        st.selectbox("Incorporate Spectral Similarity into Node Layout", ["Yes", "No"], key="sma_spectral_similarity_layout")
+        options = ['Yes', 'No']
+        disabled=False
+        if st.session_state.get('spectra_df') is None or \
+            len(st.session_state['spectra_df']) == 0:
+                options = ['No']
+                disabled = True
+        st.selectbox("Incorporate Spectral Similarity into Node Layout", options, key="sma_spectral_similarity_layout", disabled=disabled)
 
     #### Network Coloring Option 
     st.selectbox("Node Coloring", ["Protein/Small Molecule", "Network Community Detection", "Spectral Similarity"], key="sma_node_coloring")

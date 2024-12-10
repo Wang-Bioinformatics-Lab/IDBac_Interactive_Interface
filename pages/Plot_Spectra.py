@@ -382,4 +382,8 @@ def draw_mirror_plot(all_spectra_df):
             st.write(f"Cosine Similarity: {cosine_similarity:.2f}")
     stick_plot(peaks_a, peaks_b, title=plot_title)
     
-draw_mirror_plot(st.session_state['spectra_df'])
+if st.session_state.get('spectra_df') is not None and \
+    len(st.session_state['spectra_df']) > 0:
+        draw_mirror_plot(st.session_state['spectra_df'])
+else:
+    st.warning("No protein spectra data found. Please check that this task contains protein spectra data.")
