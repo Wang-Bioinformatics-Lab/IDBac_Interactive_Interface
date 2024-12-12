@@ -755,10 +755,13 @@ if st.checkbox("Upload Metadata", help="If left unchecked, the metadata associat
 else:
     # Getting the metadata
     if st.session_state['task_id'].startswith("DEV-"):
-        metadata_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={st.session_state['task_id'][4:]}&file=nf_output/output_histogram_data_directory/metadata.tsv"
+        base_url = "http://ucr-lemon.duckdns.org:4000"
+    if st.session_state['task_id'].startswith("BETA-"):
+        base_url = "https://beta.gnps2.org"
     else:
-        metadata_url = "https://gnps2.org/resultfile?task={}&file=nf_output/output_histogram_data_directory/metadata.tsv".format(task_id)
+        base_url = "https://gnps2.org"
     try:
+        metadata_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/output_histogram_data_directory/metadata.tsv"
         metadata_df = pd.read_csv(metadata_url, sep="\t", index_col=False)
     except:
         metadata_df = None 

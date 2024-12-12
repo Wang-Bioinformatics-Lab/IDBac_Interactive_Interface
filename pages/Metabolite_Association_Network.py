@@ -573,7 +573,7 @@ if st.session_state["metadata_df"] is None:
 
 with st.expander("Small Molecule Filters", expanded=True):
     # Add a slider for the relative intensity threshold
-    st.slider("Relative Intensity Threshold", min_value=0.05, max_value=1.0, value=0.15, step=0.01, 
+    st.slider("Relative Intensity Threshold", min_value=0.00, max_value=1.0, value=0.15, step=0.01, 
             key="sma_relative_intensity_threshold")
     st.slider("Replicate Frequency Threshold", min_value=0.00, max_value=1.0, value=0.70, step=0.05, 
             key="sma_replicate_frequency_threshold", help="Only show m/z values that occur in at least this percentage of replicates.")
