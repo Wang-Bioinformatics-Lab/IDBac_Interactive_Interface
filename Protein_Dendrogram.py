@@ -686,6 +686,9 @@ if db_search_results is not None:
     # Flatten
     db_taxonomies = [item for sublist in db_taxonomies for item in sublist]
     db_taxonomies = list(set(db_taxonomies))
+    # Sort alphabetically
+    db_taxonomies.sort()
+    
 else:
     db_search_columns = []
 
