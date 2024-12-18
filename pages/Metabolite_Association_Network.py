@@ -633,7 +633,10 @@ with st.expander("Metabolite Association Network Options", expanded=True):
 
 with st.expander("Visualize Small Molecule Data", expanded=True):
     with st.popover(label='Reference Protein Dendrogram Clusters'):
-        cluster_dict, _ = basic_dendrogram()
+        if st.session_state.get("query_spectra_numpy_data") is not None:
+            cluster_dict, _ = basic_dendrogram()
+        else:
+            cluster_dict, _ = basic_dendrogram(disabled=True) 
                 
     # Options to show only certain proteins/clusters
     add_filters_1, add_filters_2, add_filters_3 = st.columns([0.46, 0.08, 0.46])
