@@ -29,6 +29,10 @@ custom_css()
 
 st.info("This page is currently in Beta, and under development. All results are subject to change.")
 
+if st.session_state.get('query_only_spectra_df') is None:
+    st.error("No protein spectra were found for this task. Please check the task parameters.")
+    st.stop()
+
 def remove_adducts_to_mass_bins(bins:np.array, hydrogen=True, sodium=False)->np.array:
     """ Extend the mass bins with the mass of hydrogen, sodium and proton
 

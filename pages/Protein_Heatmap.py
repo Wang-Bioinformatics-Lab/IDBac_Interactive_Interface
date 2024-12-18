@@ -567,6 +567,13 @@ def draw_protein_heatmap(all_spectra_df, bin_counts, replicate_counts, bin_size,
         # Add a button to download the heatmap
         st.download_button("Download Current Heatmap Data", all_spectra_df.T.to_csv(), "protein_heatmap.csv", help="Download the data used to generate the heatmap.")
 
+def check_preconditions():
+    if st.session_state.get('query_only_spectra_df') is None:
+        st.error("No protein spectra were found for this task. Please check the task parameters.")
+        st.stop()
+
+check_preconditions()
+
 all_clusters_dict = None
 
 with st.popover(label='Reference protein dendrogram clusters'):
