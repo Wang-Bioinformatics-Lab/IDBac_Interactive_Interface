@@ -290,7 +290,10 @@ def metadata_validation(metadata_table:pd.DataFrame, spectrum_df:pd.DataFrame):
 
     # Check that the values in the metadata table and spectrum_df match
     metadata_filenames = set(metadata_table['Filename'])
-    spectrum_filenames = set(spectrum_df['filename'])
+    if spectrum_df is None:
+        spectrum_filenames = set()
+    else:
+        spectrum_filenames = set(spectrum_df['filename'])
     
     filenames_in_metadata_not_in_spectrum = list(metadata_filenames - spectrum_filenames)
     filenames_in_spectrum_not_in_metadata = list(spectrum_filenames - metadata_filenames)
@@ -300,7 +303,8 @@ def metadata_validation(metadata_table:pd.DataFrame, spectrum_df:pd.DataFrame):
             with st.expander(":warning: Filenames in metadata table not in spectrum file:"):
                 st.write(filenames_in_metadata_not_in_spectrum)
     
-    if len(filenames_in_spectrum_not_in_metadata) > 0:
+    if len(filenames_in_spectrum_not_in_metadata) > 0 and \
+        spectrum_df is not None:    # If none, that means there are no spectra at all and the user has already been warned
         if st.session_state.get('show_warnings', True):
             with st.expander(":warning: Filenames in spectrum file not in metadata table:"):
                 st.write(filenames_in_spectrum_not_in_metadata)

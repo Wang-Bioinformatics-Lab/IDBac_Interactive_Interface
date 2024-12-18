@@ -636,10 +636,14 @@ if False:
     st.write(labels_url)
 
 # read numpy from url into a numpy array
-numpy_file = requests.get(numpy_url, 60)
-numpy_file.raise_for_status()
-numpy_array = np.load(io.BytesIO(numpy_file.content))
-st.session_state['query_spectra_numpy_data'] = numpy_array
+try:
+    numpy_file = requests.get(numpy_url, 60)
+    numpy_file.raise_for_status()
+    numpy_array = np.load(io.BytesIO(numpy_file.content))
+except:
+    st.warning("No Spectra found for this task. Please check the workflow inputs.")
+    numpy_array = None
+    st.session_state['query_spectra_numpy_data'] = numpy_array
 
 # read bin counts from url
 bin_counts_df = None
@@ -648,7 +652,9 @@ try:
     bin_counts_csv.raise_for_status()
     bin_counts_df = pd.read_csv(io.StringIO(bin_counts_csv.text), index_col=0)
 except:
-    st.warning("Unable to retrieve bin counts, this may be an old task.")
+    if numpy_array is not None:
+        st.warning("Unable to retrieve bin counts, this may be an old task.")
+    bin_counts_df = None
 st.session_state['bin_counts_df'] = bin_counts_df
 
 replicate_count_df = None
@@ -657,12 +663,18 @@ try:
     replicate_count_csv.raise_for_status()
     replicate_count_df = pd.read_csv(io.StringIO(replicate_count_csv.text), index_col=1)
 except:
-    st.warning("Unable to retrieve replicate counts, this may be an old task.")
+    if numpy_array is not None:
+        st.warning("Unable to retrieve replicate counts, this may be an old task.")
+    replicate_count_df = None
 st.session_state['replicate_count_df'] = replicate_count_df
 
 
 # read pandas dataframe from url
-all_spectra_df = pd.read_csv(labels_url, sep="\t")
+try:
+    all_spectra_df = pd.read_csv(labels_url, sep="\t")
+except:
+    st.warning("No Spectra found for this task. Please check the workflow inputs.")
+    all_spectra_df = None
 
 # By request, no longer displaying dataframe table
 if False:
@@ -773,6 +785,11 @@ if metadata_df is not None:
     # Drop anything with a nan filename
     metadata_df = metadata_df.dropna(subset=["Filename"], axis=0)
     metadata_validation(metadata_df, all_spectra_df)
+
+st.session_state["metadata_df"] = metadata_df
+
+if all_spectra_df is None:
+    st.stop()
 
 ##### Add Display Parameters #####
 st.header("Dendrogram Display Options")
@@ -886,9 +903,7 @@ if len(all_spectra_df) == 0:
     # If there are no spectra to display, then we will stop the script
     st.error("There are no protein spectra to display on the dendrogram. Please select different options and check protein spectra exist for this task.")
     st.stop()
-    
-# Add any remaining variables to the session state if needed
-st.session_state["metadata_df"] = metadata_df
+
 
 def get_svg_download_link(fig: go.Figure) -> str:
     """
