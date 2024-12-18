@@ -673,7 +673,8 @@ st.session_state['replicate_count_df'] = replicate_count_df
 try:
     all_spectra_df = pd.read_csv(labels_url, sep="\t")
 except:
-    st.warning("No Spectra found for this task. Please check the workflow inputs.")
+    if numpy_array is not None:
+        st.warning("No Spectra found for this task. Please check the workflow inputs.")
     all_spectra_df = None
 
 # By request, no longer displaying dataframe table
