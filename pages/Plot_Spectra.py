@@ -156,7 +156,8 @@ def get_peaks(all_spectra_df: pd.DataFrame, filename: str, task:str):
         peaks = get_peaks_from_db_result(row["database_id"].iloc[0])
     else:
         # If it's a query, use the query job to get the USI
-        USI = f"mzspec:GNPS2:TASK-{task}-nf_output/search/query_spectra/{row['filename'].iloc[0]}:scan:1"
+        _task = task.strip("BETA-").strip("DEV-")
+        USI = f"mzspec:GNPS2:TASK-{_task}-nf_output/search/query_spectra/{row['filename'].iloc[0]}:scan:1"
 
         peaks = get_peaks_from_USI(USI)
 
