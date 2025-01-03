@@ -331,18 +331,19 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict,
         for col_name in plotted_metadata:
             # Reorder metadata array to be consistent with histogram axis
             consistently_ordered_metadata = all_spectra_df[col_name].loc[y_axis_identifiers]    # Contains list of x-values ordered by y-axis
-        
+            
             # Create the scatter on the new axis
             metadata_scatter = go.Scatter(x=consistently_ordered_metadata, y=y_values, mode='markers')
 
             # Show all x ticks
             fig.update_xaxes(tickvals=consistently_ordered_metadata,
-                             ticktext=consistently_ordered_metadata,
+                             ticktext=consistently_ordered_metadata.astype(str),
                              row=1,
                              col=col_counter,
                              tickangle=90,
                              ticks="outside",
                              showgrid=True,
+                             type='category',
                              categoryorder='category ascending')
             
             fig.add_trace(metadata_scatter, row=1, col=col_counter)
