@@ -712,7 +712,7 @@ print("small_molecule_dict", small_molecule_dict.keys(), flush=True)
 if small_molecule_dict is not None:
     choices = sorted(list(small_molecule_dict.keys()))
     print("choices", choices, flush=True)
-    download_choice = st.selectbox("Download merged small molecule data", choices)
+    download_choice = st.selectbox("Download merged and thresholded small molecule data", choices)
     download_bytes = convert_to_mzml(small_molecule_dict[download_choice])
     st.download_button("Download mzML", download_bytes, f"{download_choice}", help="Download the mzML file for the selected small molecule.")
 
