@@ -14,7 +14,7 @@ import plotly.figure_factory as ff
 from scipy.cluster.hierarchy import linkage, dendrogram
 from scipy.spatial.distance import squareform
 from utils import custom_css, parse_numerical_input
-import math
+from utils import convert_to_mzml
 
 #####
 # A note abote streamlit session states:
@@ -384,6 +384,7 @@ def generate_network(cluster_dict:dict=None, height=1000, width=600):
             added_edges = []
             # "Transpose Dict"
             spectral_communities = {}
+
             for node, metadata in cluster_dict.items():
                 cluster = metadata['cluster']
                 if cluster != 0:
@@ -435,6 +436,8 @@ def generate_network(cluster_dict:dict=None, height=1000, width=600):
     # print(html_graph)
     
     components.html(html_graph, height=height)
+
+    return small_mol_dict
     
 def make_heatmap():
     """
@@ -700,7 +703,18 @@ with st.expander("Visualize Small Molecule Data", expanded=True):
         st.session_state['sma_selected_clusters'].clear()
         st.rerun()  # Refresh the UI to reflect the updated selection
 
-generate_network(cluster_dict)
+small_molecule_dict = None
+small_molecule_dict = generate_network(cluster_dict)
+
+print("small_molecule_dict", small_molecule_dict.keys(), flush=True)
+
+# Download Options
+if small_molecule_dict is not None:
+    choices = sorted(list(small_molecule_dict.keys()))
+    print("choices", choices, flush=True)
+    download_choice = st.selectbox("Download merged small molecule data", choices)
+    download_bytes = convert_to_mzml(small_molecule_dict[download_choice])
+    st.download_button("Download mzML", download_bytes, f"{download_choice}", help="Download the mzML file for the selected small molecule.")
 
 st.header("Small Molecule Heatmap")
 # st.multiselect("Populate by strain", st.session_state["metadata_df"]['Filename'].unique(), key='sma_selected_proteins')

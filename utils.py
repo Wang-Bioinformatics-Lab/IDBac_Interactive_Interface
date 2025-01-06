@@ -6,6 +6,8 @@ import io
 from xml.etree import ElementTree
 import time
 import numpy as np
+from psims.mzml.writer import MzMLWriter
+from io import BytesIO
 
 def write_job_params(task_id:str):
     if task_id.startswith("DEV-"):
@@ -359,3 +361,48 @@ def _convert_bin_to_mz(bin_name, bin_size):
 def _convert_bin_to_mz_tuple(bin_name, bin_size):
     b = int(bin_name.split("_")[-1])
     return (b * bin_size, (b + 1) * bin_size)
+
+def convert_to_mzml(spectrum_dict:dict):
+    """Converts a dictionary to an mzML file using psims. Returns in a BytesIO object.
+
+    Args:
+        json_run (Path): The path to the json run file.
+
+    Returns:
+        BytesIO: The mzML file as a BytesIO object.
+    """
+
+    if not isinstance(spectrum_dict, dict):
+        raise ValueError("json_run must be a dictionary.")
+
+    output_bytes = BytesIO()
+
+    with MzMLWriter(output_bytes, close=False) as out:
+        out.controlled_vocabularies()
+
+        # Write the metadata as user parameters
+        
+        params = {}
+        params['id'] = 'global_metadata'
+
+        out.reference_param_group_list([
+            params
+        ])
+            
+        with out.run(id="admin_qc_download"):
+            with out.spectrum_list(count=1):
+                scan = 1
+                mz_array = spectrum_dict["m/z array"]
+                intensity_array = spectrum_dict["intensity array"]
+
+                out.write_spectrum(
+                    mz_array, intensity_array,
+                    id="scan={}".format(scan),
+                    params=[
+                        "MS1 Spectrum",
+                        {"ms level": 1},
+                        {"total ion current": sum(intensity_array)}
+                    ])
+                scan += 1
+
+    return output_bytes
