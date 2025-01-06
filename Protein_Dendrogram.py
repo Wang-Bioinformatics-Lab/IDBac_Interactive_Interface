@@ -644,7 +644,7 @@ try:
 except:
     st.warning("No Spectra found for this task. Please check the workflow inputs.")
     numpy_array = None
-    st.session_state['query_spectra_numpy_data'] = numpy_array
+st.session_state['query_spectra_numpy_data'] = numpy_array
 
 # read bin counts from url
 bin_counts_df = None
@@ -773,12 +773,13 @@ else:
     # Getting the metadata
     if st.session_state['task_id'].startswith("DEV-"):
         base_url = "http://ucr-lemon.duckdns.org:4000"
-    if st.session_state['task_id'].startswith("BETA-"):
+    elif st.session_state['task_id'].startswith("BETA-"):
         base_url = "https://beta.gnps2.org"
     else:
         base_url = "https://gnps2.org"
     try:
         metadata_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/output_histogram_data_directory/metadata.tsv"
+        print("metadata_url", metadata_url, flush=True)
         metadata_df = pd.read_csv(metadata_url, sep="\t", index_col=False)
     except:
         metadata_df = None 
