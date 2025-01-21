@@ -135,7 +135,7 @@ def get_small_molecule_dict():
             intensity_array = scan['intensity array']
             
             for mz, intensity in zip(mz_array, intensity_array):
-                _mz = np.round(float(mz), 1)
+                _mz = np.round(float(mz), 0)
                 if _mz in mz_intensity_dict:
                     mz_intensity_dict[_mz].append(float(intensity))
                 else:
@@ -257,8 +257,8 @@ def generate_network(cluster_dict:dict=None, height=1000, width=600):
             small_molecule_shape = shape_map.get_shape(0)[0]
             
         
-        nx_G.add_node(str(mz), 
-                      title=f'{mz} m/z', 
+        nx_G.add_node(f'{int(mz)}',                     # Displayed on node
+                      title=f'{int(mz)} m/z',           # Displayed on hover
                       color=colors.to_hex(cmap(1)), 
                       type="Small Molecule",
                       shape=small_molecule_shape)
@@ -277,7 +277,7 @@ def generate_network(cluster_dict:dict=None, height=1000, width=600):
                 continue
             
             for mz in small_mol_dict[row['Small molecule file name']]['m/z array']:
-                nx_G.add_edge(row['Filename'], str(mz), weight=6) # Weight modulates distnaces for some layouts
+                nx_G.add_edge(row['Filename'], f'{int(mz)}', weight=6) # Weight modulates distnaces for some layouts
                 
     if len(missing_summaries) > 0:
         st.warning(f"The following small molecules files were referenced in the metadata, but were not \
@@ -583,7 +583,7 @@ with st.expander("Small Molecule Filters", expanded=True):
 
     # Add text input to select certain m/z's (comma-seperated)
     mz_col1, mz_col2 = st.columns([3, 1])
-    mz_col1.text_input("Search for specific m/z's", key="sma_selected_mzs", help="Enter m/z values seperated by commas. Ranges can be entered as [125.0-130.0] or as open ended (e.g., [127.0-]). No value will show all m/z values.")
+    mz_col1.text_input("Search for specific m/z's", key="sma_selected_mzs", value="[200-2000]", help="Enter m/z values seperated by commas. Ranges can be entered as [125.0-130.0] or as open ended (e.g., [127.0-]). No value will show all m/z values.")
     mz_col2.number_input("Tolerance (m/z)", key="sma_mz_tolerance", value=0.1, help="Tolerance for the selected m/z values. Does not apply to ranges.")
     try:
         if st.session_state.get("sma_selected_mzs"):
