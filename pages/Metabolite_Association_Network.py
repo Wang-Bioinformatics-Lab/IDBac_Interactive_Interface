@@ -15,6 +15,7 @@ from scipy.cluster.hierarchy import linkage, dendrogram
 from scipy.spatial.distance import squareform
 from utils import custom_css, parse_numerical_input
 from utils import convert_to_mzml
+from typing import Dict, List
 
 #####
 # A note abote streamlit session states:
@@ -157,7 +158,21 @@ def get_small_molecule_dict():
     
     return output_dict
 
-def filter_small_molecule_dict(small_molecule_dict):
+def filter_small_molecule_dict(small_molecule_dict)->Dict[str, Dict[str, List[float]]]:
+    """ Applies intensity and frequency filters to the small molecule dictionary. Note that the replicate frequency is applied
+    independently of the intensity filter.
+    
+    Session State Parameters:
+    sma_relative_intensity_threshold: Relative intensity threshold required to pass filtering
+    sma_replicate_frequency_threshold: Frequency threshold required to pass filtering
+    sma_parsed_selected_mzs: List of m/z values to filter by
+
+    Parameters:
+    small_molecule_dict (dict): A dictionary of small molecule data
+
+    Returns:
+    dict: A filtered dictionary of small molecule data {filename: {m/z array: [float], intensity array: [float], frequency array: [float]}}
+    """
     
     output = {}
     
@@ -250,6 +265,7 @@ def generate_network(cluster_dict:dict=None, height=1000, width=600):
     small_mol_dict = filter_small_molecule_dict(get_small_molecule_dict())
     all_mzs = [small_mol_dict.get('m/z array', []) for small_mol_dict in small_mol_dict.values()]
     all_mzs = [mz for sublist in all_mzs for mz in sublist] # Flatten
+    mz_value_counts = pd.Series(all_mzs).value_counts()
     all_mzs = np.unique(all_mzs)
     for mz in all_mzs:
         small_molecule_shape = shape_map.get_shape(1)[0]
@@ -277,7 +293,8 @@ def generate_network(cluster_dict:dict=None, height=1000, width=600):
                 continue
             
             for mz in small_mol_dict[row['Small molecule file name']]['m/z array']:
-                nx_G.add_edge(row['Filename'], f'{int(mz)}', weight=6) # Weight modulates distnaces for some layouts
+                weight = (1/mz_value_counts.get(mz, 1))+0.5      # Weight inversely propotional to frequency per file
+                nx_G.add_edge(row['Filename'], f'{int(mz)}', weight=weight) 
                 
     if len(missing_summaries) > 0:
         st.warning(f"The following small molecules files were referenced in the metadata, but were not \
@@ -375,12 +392,12 @@ def generate_network(cluster_dict:dict=None, height=1000, width=600):
                              "Spectral": nx.drawing.layout.spectral_layout,
                              "Kamada-Kawai": nx.drawing.layout.kamada_kawai_layout,
                              "Bipartite Layout": nx.drawing.layout.bipartite_layout}        
-        layout_default_params = {"Spring": {"k": 0.75, "seed":42},
+        layout_default_params = {"Spring": {"k": 2/np.sqrt(len(nx_G)), "seed":42, "iterations": 30, "scale":1},   # k defaults to 1/sqrt(n)
                                  "Circular": {},
                                  "Spectral": {},
                                  "Kamada-Kawai": {}}
         if st.session_state['sma_spectral_similarity_layout'] == 'Yes':
-            # Add edges between protein nodes based on cluster
+            # Add edges between protein nodes based on clustering of proteins.
             added_edges = []
             # "Transpose Dict"
             spectral_communities = {}
@@ -397,7 +414,7 @@ def generate_network(cluster_dict:dict=None, height=1000, width=600):
                 for i, node1 in enumerate(nodes):
                     for node2 in nodes[i+1:]:
                         if (node1, node2) not in added_edges:
-                            nx_G.add_edge(node1, node2, weight=3)
+                            nx_G.add_edge(node1, node2, weight=0.2)
                             added_edges.append((node1, node2))
         
         # Apply layout
@@ -410,11 +427,22 @@ def generate_network(cluster_dict:dict=None, height=1000, width=600):
                     nx_G.remove_edge(*edge)
     
     # Convert to PyVis Graph
+    physics = (st.session_state.get("sma_physics", "No") == "Yes")
     graph = net.Network(height=f'{height}px', width='100%')
+    graph.toggle_physics(physics)   # For many nodes, things won't render if this is True, independent of how it's set per node/edge
+    # Get max and min x 
+    x_pos = [pos.get(node)[0] for node in nx_G.nodes]
+    y_pos = [pos.get(node)[1] for node in nx_G.nodes]
+
     for node in nx_G.nodes:
         if pos is not None:
-            x_pos = pos.get(node)[0] * width
-            y_pos = pos.get(node)[1] * height
+            x_pos = pos.get(node)[0]
+            y_pos = pos.get(node)[1]
+
+            # Adjust x,y by width and height
+            x_pos = x_pos * width
+            y_pos = y_pos * height
+
         else:
             x_pos = None
             y_pos = None
@@ -424,7 +452,6 @@ def generate_network(cluster_dict:dict=None, height=1000, width=600):
                        x=x_pos,
                        y=y_pos,
                        shape=nx_G.nodes[node].get('shape'),
-                       physics=st.session_state.get("sma_physics", False) == "Yes"
                        )
     for edge in nx_G.edges:
         graph.add_edge(edge[0], edge[1])
@@ -596,7 +623,7 @@ with st.expander("Small Molecule Filters", expanded=True):
 
 with st.expander("Metabolite Association Network Options", expanded=True):
 #### Network Layout Options
-    st.selectbox("Network Layout", ["Kamada-Kawai", "Spring", "Circular", "Spectral",], key="sma_network_layout")   # "Default" is another, unused option here
+    st.selectbox("Network Layout", ["Spring", "Kamada-Kawai", "Circular", "Spectral",], key="sma_network_layout")   # "Default" is another, unused option here
     if st.session_state.get("sma_network_layout") == 'Default':
         # Enable physics by default because it helps with the layout
         st.selectbox("Physics", ["Yes", "No"], key="sma_physics")
