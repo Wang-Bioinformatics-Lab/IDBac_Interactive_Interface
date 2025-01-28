@@ -23,16 +23,6 @@ custom_css()
 # Init logging
 logging.basicConfig(level=logging.INFO)
 
-def format_proteins_as_strings(df):
-    output = []
-    for row in df.to_dict(orient="records"):
-        if row['db_search_result']:
-            output.append(f"DB Result - {row['filename']}")
-        else:   
-            output.append(row['filename'])
-            
-    return output
-
 def basic_dendrogram(spectrum_df=None, disabled=False, display=True):
     """
     This function generates a basic dendrogram for the protein heatmap page. 
@@ -206,7 +196,7 @@ def draw_protein_heatmap(all_spectra_df, bin_counts, replicate_counts, bin_size,
     st.subheader("Build a Protein Heatmap")
     add_filters_1, add_filters_2, add_filters_3 = st.columns([0.45, 0.10, 0.45])
     # Options
-    all_options = format_proteins_as_strings(all_spectra_df)
+    all_options = all_spectra_df['filename'].values
 
     # Initialze all protins as selected
     if 'phm_selected_proteins' not in st.session_state:
@@ -616,7 +606,7 @@ def draw_protein_heatmap(all_spectra_df, bin_counts, replicate_counts, bin_size,
         logging.debug("Exiting draw_protein_heatmap().")
 
 def check_preconditions():
-    if st.session_state.get('query_only_spectra_df') is None:
+    if st.session_state.get('heatmap_binned_spectra') is None:
         st.error("No protein spectra were found for this task. Please check the task parameters.")
         st.stop()
 
@@ -627,8 +617,8 @@ all_clusters_dict = None
 with st.popover(label='Reference protein dendrogram clusters'):
     all_clusters_dict, dendro, dendro_ordering = basic_dendrogram()
 
-# Use "query_only_spectra_df" because database spectra may be binned to a different size
-draw_protein_heatmap(st.session_state['query_only_spectra_df'],
+# Use "heatmap_binned_spectra" because query/database spectra may be binned to a different size
+draw_protein_heatmap(st.session_state['heatmap_binned_spectra'],
                      st.session_state["bin_counts_df"],
                      st.session_state['replicate_count_df'],
                      st.session_state['workflow_params']['bin_size'],

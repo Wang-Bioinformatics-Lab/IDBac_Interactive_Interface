@@ -609,6 +609,7 @@ labels_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/output_histog
 numpy_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/output_histogram_data_directory/numerical_spectra.npy"
 bin_counts_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/bin_counts/bin_counts.csv"
 replicate_count_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/bin_counts/replicates.csv"
+protein_heatmap_binned_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/bin_counts/binned_spectra.csv"
 warnings_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/errors.csv"
 
 
@@ -646,6 +647,7 @@ except:
     numpy_array = None
 st.session_state['query_spectra_numpy_data'] = numpy_array
 
+############ Protein Heatmap I/O ############
 # read bin counts from url
 bin_counts_df = None
 try:
@@ -668,6 +670,19 @@ except:
         st.warning("Unable to retrieve replicate counts, this may be an old task.")
     replicate_count_df = None
 st.session_state['replicate_count_df'] = replicate_count_df
+
+heatmap_binned_spectra = None
+try:
+    heatmap_binned_spectra_csv = requests.get(protein_heatmap_binned_url, 60)
+    heatmap_binned_spectra_csv.raise_for_status()
+    heatmap_binned_spectra = pd.read_csv(io.StringIO(heatmap_binned_spectra_csv.text), index_col=0)
+except:
+    if heatmap_binned_spectra is not None:
+        st.warning("Unable to retrieve binned spectra, this may be an old task.")
+    heatmap_binned_spectra = None
+st.session_state['heatmap_binned_spectra'] = heatmap_binned_spectra
+
+################################################
 
 
 # read pandas dataframe from url
