@@ -5,6 +5,7 @@ import plotly.figure_factory as ff
 from scipy.cluster.hierarchy import linkage, dendrogram
 from scipy.spatial.distance import squareform
 from utils import custom_css, parse_numerical_input, _convert_bin_to_mz, _convert_bin_to_mz_tuple
+import logging
 
 # import StreamlitAPIException
 from streamlit.errors import StreamlitAPIException
@@ -18,6 +19,9 @@ from streamlit.errors import StreamlitAPIException
 # Set Page Configuration
 st.set_page_config(page_title="IDBac - Protein Heatmap", page_icon="assets/idbac_logo_square.png", layout="wide", initial_sidebar_state="collapsed", menu_items=None)
 custom_css()
+
+# Init logging
+logging.basicConfig(level=logging.INFO)
 
 def format_proteins_as_strings(df):
     output = []
@@ -58,10 +62,12 @@ def basic_dendrogram(spectrum_df=None, disabled=False, display=True):
         st.selectbox("Clustering Method", clustering_options, key="phm_clustering_method")
 
     if disabled:
+        logging.debug("Dendrogram disabled returning.")
         return None, None, None
     if query_spectra_numpy_data.shape[0] <= 1:
         st.warning("There are not enough spectra to create a dendrogram. \n \
                    Please check number of input spectra and database search results file.")
+        logging.debug("Dendrogram disabled (not enough spectra) returning.")
         return None, None, None
 
     def _dist_fun(x):
@@ -124,6 +130,7 @@ def basic_dendrogram(spectrum_df=None, disabled=False, display=True):
         return cluster_dict, dendro, filenames
     st.plotly_chart(dendro, use_container_width=True)
 
+    logging.debug("Exiting basic_dendrogram().")
     return cluster_dict, dendro, filenames
 
 @st.cache_data(max_entries=20, show_spinner="Counting Replicates...", ttl=3600*12)
@@ -243,6 +250,7 @@ def draw_protein_heatmap(all_spectra_df, bin_counts, replicate_counts, bin_size,
                                                 [],
                                                 key="phm_metadata_values",
                                                 disabled=True)
+            st.session_state['phm_metadata_criteria'] = None
             
         else:
             metadata_selection_col1.selectbox("Create Heatmap by metadata category",
@@ -301,12 +309,14 @@ def draw_protein_heatmap(all_spectra_df, bin_counts, replicate_counts, bin_size,
         for cluster in st.session_state['phm_selected_clusters']:
             to_add = set(cluster) - set(st.session_state['phm_selected_proteins'])
             st.session_state['phm_selected_proteins'].extend(to_add)
+            logging.debug(f"Adding {len(to_add)} proteins from cluster selection.")
 
         # Add from metadata
         if st.session_state['phm_metadata_criteria'] is not None:
             relevant_ids = st.session_state['metadata_df'][st.session_state['metadata_df'][st.session_state['phm_metadata_criteria']].isin(st.session_state['phm_metadata_values'])].Filename
             to_add = set(relevant_ids) - set(st.session_state['phm_selected_proteins'])
             st.session_state['phm_selected_proteins'].extend(to_add)
+            logging.debug(f"Adding {len(to_add)} proteins from metadata selection.")
 
         st.rerun()  # Refresh the UI to reflect the updated selection
     #########################
@@ -380,12 +390,28 @@ def draw_protein_heatmap(all_spectra_df, bin_counts, replicate_counts, bin_size,
         st.stop()
     
     # Select relevant columns
+    logging.debug(f"Starting with {len(all_spectra_df.index)} proteins for heatmap.")
+    logging.debug(f"Starting with  {len(all_spectra_df.columns)} bins for heatmap.")
     all_spectra_df = all_spectra_df.loc[selected_proteins, :]
+    logging.debug(f"Got {len(all_spectra_df.index)} proteins for heatmap.")
 
     # Compute (and cache) replicate count, then filter by threshold
     aggregated_bin_counts = compute_number_of_replicates(bin_counts, replicate_counts, selected_proteins)
+    if logging.getLevelName(logging.getLogger().getEffectiveLevel()) == "DEBUG":
+        # Download button
+        st.download_button("DEBUG: Download Aggregated Bin Counts", aggregated_bin_counts.to_csv(), "aggregated_bin_counts.csv", help="Download the aggregated bin counts.")
     aggregated_bin_counts[aggregated_bin_counts < st.session_state["phm_replicate_threshold"]] = np.nan
+    if logging.getLevelName(logging.getLogger().getEffectiveLevel()) == "DEBUG":
+        # Download button
+        st.download_button("DEBUG: Download Filtered Aggregated Bin Counts", aggregated_bin_counts.to_csv(), "filtered_aggregated_bin_counts.csv", help="Download the filtered aggregated bin counts.")
+        st.download_button("DEBUG: Binarized Filtered Aggregated Bin Counts", aggregated_bin_counts.T.notna().to_csv(), "binarized_filtered_aggregated_bin_counts.csv", help="Download the binarized filtered aggregated bin counts.")
+    logging.debug(f"Filtered by replicate threshold: {st.session_state['phm_replicate_threshold']}")
+    logging.debug(f"Setting {aggregated_bin_counts.isna().sum().sum()} values to nan based on replicate threshold.")
+    logging.debug(f"All aggregated bin counts are nan {aggregated_bin_counts.T.notna().values.all()}")
     all_spectra_df = all_spectra_df.where(aggregated_bin_counts.T.notna())
+    if logging.getLevelName(logging.getLogger().getEffectiveLevel()) == "DEBUG":
+        # Download button
+        st.download_button("DEBUG: Download Replicate Count Filtered Protein Spectra", all_spectra_df.to_csv(), "filtered_protein_spectra.csv", help="Download the filtered protein spectra.")
 
     # Order the proteins
     if st.session_state["phm_sort_proteins_by"] == "Dendrogram Clustering":
@@ -403,9 +429,13 @@ def draw_protein_heatmap(all_spectra_df, bin_counts, replicate_counts, bin_size,
         selected_proteins = all_spectra_df["_metadata"].sort_values().index
 
     elif st.session_state["phm_sort_proteins_by"] == "Strain Name":
+        logging.debug("Sorting proteins by strain name.")
         selected_proteins = sorted(selected_proteins)
     
+    logging_start_size = len(all_spectra_df.index)
     all_spectra_df = all_spectra_df.loc[selected_proteins, :]
+    logging.debug(f"Removed {logging_start_size - len(all_spectra_df.index)} proteins based on filters.")
+    logging.debug(f"Selected {len(all_spectra_df.index)} proteins for heatmap.")
 
     # Add metadata to name if selected
     if st.session_state["phm_display_metadata"] != "None":
@@ -422,26 +452,36 @@ def draw_protein_heatmap(all_spectra_df, bin_counts, replicate_counts, bin_size,
     
     bin_columns = [col for col in all_spectra_df.columns if col.startswith("BIN_")]
     bin_columns = sorted(bin_columns, key=lambda x: int(x.split("_")[-1]))
+    logging.debug(f"Found {len(bin_columns)} bins.")
     all_spectra_df = all_spectra_df.loc[:, bin_columns]
     # Normalize Intensity (Normalize Across Row)
-    all_spectra_df = all_spectra_df.div(all_spectra_df.max(axis=1), axis=0)
+    all_spectra_df = all_spectra_df.div(all_spectra_df.max(axis=1, skipna=True), axis=0)
+    if logging.getLevelName(logging.getLogger().getEffectiveLevel()) == "DEBUG":
+        maxes = all_spectra_df.max(axis=1, skipna=True)
+        logging.debug(f"Max intensity for each protein: {maxes}")
+
     # Set zeros to nan
     all_spectra_df = all_spectra_df.replace(0, np.nan)
     # Set all values less than min_intensity to nan
     all_spectra_df = all_spectra_df.where(all_spectra_df > min_intensity)
     # Filter bins by count
+    debug_inital_bin_cols = len(bin_columns)
     bin_columns = [col for col in bin_columns if all_spectra_df[col].notna().sum() >= min_count]
+    logging.debug(f"Filtered {debug_inital_bin_cols - len(bin_columns)} bins based on count threshold.")
     all_spectra_df = all_spectra_df.loc[:, bin_columns]
     
     def __convert_bin_to_mz(bin):
         return _convert_bin_to_mz(bin, bin_size)
 
     # Remove mzs with all nan
+    logging_start_size = len(all_spectra_df.columns)
     all_spectra_df = all_spectra_df.dropna(how='all', axis='columns')
+    logging.debug(f"Removed {logging_start_size - len(all_spectra_df.columns)} m/z values with all nan values.")
     all_spectra_df.columns = [__convert_bin_to_mz(x) for x in all_spectra_df.columns]
 
     # Remove all mzs not in the selected m/z range
     if st.session_state.get("phm_parsed_selected_mzs"):
+        logging.debug("Beginning m/z filtering.")
         if len(st.session_state["phm_parsed_selected_mzs"]) > 0:
             # Query columns that are included in the selected m/z values
             all_mz_bins = all_spectra_df.columns
@@ -451,6 +491,7 @@ def draw_protein_heatmap(all_spectra_df, bin_counts, replicate_counts, bin_size,
                 lower_bin = float(lower_bin)
                 upper_bin = float(upper_bin)
                 for filter in st.session_state["phm_parsed_selected_mzs"]:
+                    logging.debug(f"Filtering based on mz: {filter}")
                     if isinstance(filter, float):
                         if lower_bin <= filter < upper_bin:
                             mz_filtered_indices.add(mz_bin)
@@ -476,6 +517,11 @@ def draw_protein_heatmap(all_spectra_df, bin_counts, replicate_counts, bin_size,
             mz_filtered_indices = sorted(list(mz_filtered_indices), key=lambda x: (float(x[1:-1].split(", ")[0]) + float(x[1:-1].split(", ")[1])) / 2)
             all_spectra_df = all_spectra_df[mz_filtered_indices]
     
+    logging.debug(f"Drawing heatmap with {len(all_spectra_df.columns)} m/z values and {len(all_spectra_df.index)} proteins.")
+    if logging.getLevelName(logging.getLogger().getEffectiveLevel()) == "DEBUG":
+        # Createa a download button for the filtered data
+        st.download_button("DEBUG: Download Filtered Data", all_spectra_df.to_csv(), "filtered_protein_heatmap.csv", help="Download the data used to generate the heatmap.")
+
     if len(all_spectra_df.columns) != 0:
         # Note: We transpose the dataframe so that the proteins are on the x-axis
         st.markdown("Common m/z values between selected proteins and their relative intensities.")
@@ -515,6 +561,7 @@ def draw_protein_heatmap(all_spectra_df, bin_counts, replicate_counts, bin_size,
                                         )
 
         if st.session_state['phm_overlay_dendrogram']:
+            logging.debug("Overlaying dendrogram.")
             # Height with added room
             dynamic_height = dynamic_height + 400
             space_required_for_labels = 125
@@ -566,6 +613,7 @@ def draw_protein_heatmap(all_spectra_df, bin_counts, replicate_counts, bin_size,
 
         # Add a button to download the heatmap
         st.download_button("Download Current Heatmap Data", all_spectra_df.T.to_csv(), "protein_heatmap.csv", help="Download the data used to generate the heatmap.")
+        logging.debug("Exiting draw_protein_heatmap().")
 
 def check_preconditions():
     if st.session_state.get('query_only_spectra_df') is None:
