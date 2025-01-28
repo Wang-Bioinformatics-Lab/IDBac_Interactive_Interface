@@ -28,6 +28,8 @@ st.set_page_config(page_title="IDBac - Dendrogram", page_icon="assets/idbac_logo
 html('<script async defer data-website-id="4611e28d-c0ff-469d-a2f9-a0b54c0c8ee0" src="https://analytics.gnps2.org/umami.js"></script>', width=0, height=0)
 custom_css()
 
+DEFAULT_TASK_ID = "4cc7cfcad709417da7a0632b3cdacf98"
+
 class np_data_wrapper():
     def __init__(self, data_np, spectrum_data_df, db_distance_dict):
         """
@@ -549,7 +551,7 @@ url_parameters = st.query_params
 if "task" in url_parameters:
     st.session_state["task_id"]  = url_parameters["task"]
 elif "task_id" not in st.session_state:
-    st.session_state["task_id"] = "2b46b4ad876b4a05b866dba053d7be78"
+    st.session_state["task_id"] = DEFAULT_TASK_ID
     
 # Add other items to session state if available
 if "metadata_label" in url_parameters:
