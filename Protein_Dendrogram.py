@@ -274,6 +274,7 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict,
     dist_matrix = wrapped_distance_fn(wrapped_np_data)
     linkage_matrix = linkage(dist_matrix,
                             method=cluster_method)
+    dist_matrix_relative_labels = all_spectra_df.index.values
 
     dendrogram_width = 800
     dendrogram_height = max(20*len(all_labels_list), 350)
@@ -396,12 +397,13 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict,
         #     fig.update_yaxes(range=[min(y_values)-10, max(y_values)+10], row=1, col=col_counter)
         
         translated_labels = [all_labels_list[int(identifier)] for identifier in y_axis_identifiers]
+        dist_matrix_relative_labels = [all_labels_list[int(identifier)] for identifier in dist_matrix_relative_labels]
 
         if cutoff is not None:
             # add to dendrogram col only
             fig.add_vline(x=cutoff, line_width=1, line_color='grey', row=1, col=col_counter)
 
-        return fig, linkage_matrix, translated_labels
+        return fig, linkage_matrix, dist_matrix_relative_labels
     
     else:
 
@@ -414,11 +416,12 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict,
         dendro.update_yaxes(range=[min(y_values)-5, max(y_values)+5], tickvals=y_values, ticktext=y_labels, autorange=False, ticksuffix=" ", ticks="outside")
         
         translated_labels = [all_labels_list[int(identifier)] for identifier in y_axis_identifiers]
+        dist_matrix_relative_labels = [all_labels_list[int(identifier)] for identifier in dist_matrix_relative_labels]
 
         if cutoff is not None:
             dendro.add_vline(x=cutoff, line_width=1, line_color='grey')
         
-        return dendro, linkage_matrix, translated_labels
+        return dendro, linkage_matrix, dist_matrix_relative_labels
 
 
 def collect_database_search_results(task):
