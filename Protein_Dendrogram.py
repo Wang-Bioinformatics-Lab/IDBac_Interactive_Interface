@@ -424,7 +424,7 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict,
         return dendro, linkage_matrix, dist_matrix_relative_labels
 
 
-def collect_database_search_results(task):
+def collect_database_search_results(task, base_url):
     """
     Collect the database search results from the IDBAC Database. If the database search results are not available, then None is returned.
 
@@ -437,20 +437,16 @@ def collect_database_search_results(task):
     """
     try:
         # Getting the database search results
-        if task.startswith("DEV-"):
-            database_search_results_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={task[4:]}&file=nf_output/search/enriched_db_results.tsv"
-        else:
-            database_search_results_url = f"https://gnps2.org/resultfile?task={task}&file=nf_output/search/enriched_db_results.tsv"
+        database_search_results_url = f"{base_url}/resultfile?task={task}&file=nf_output/search/enriched_db_results.tsv"
+        print("Database Search Results URL", database_search_results_url, flush=True)
         database_search_results_df = pd.read_csv(database_search_results_url, sep="\t")
     except:
         database_search_results_df = None
         
     try:
         # Get the DB-DB distances
-        if task.startswith("DEV-"):
-            database_distance_url = f"http://ucr-lemon.duckdns.org:4000/resultfile?task={task[4:]}&file=nf_output/search/db_db_distance.tsv"
-        else:
-            database_distance_url = f"https://gnps2.org/resultfile?task={task}&file=nf_output/search/db_db_distance.tsv"
+        database_distance_url = f"{base_url}/resultfile?task={task}&file=nf_output/search/db_db_distance.tsv"
+        print("Database Distance URL", database_distance_url, flush=True)
         database_database_distance_table = pd.read_csv(database_distance_url, sep="\t")
     except Exception:
         database_database_distance_table = None
@@ -599,6 +595,7 @@ if st.session_state["task_id"] == '':
 st.write(st.session_state["task_id"])
 
 task_id = st.session_state["task_id"]
+base_url = None
 
 # Now we will get all the relevant data from GNPS2 for plotting
 if st.session_state["task_id"].startswith("DEV-"):
@@ -703,7 +700,7 @@ if False:
     st.write(all_spectra_df) # Currently, we're not displaying db search results
 
 # Collect the database search results
-db_search_results, db_db_distance_table = collect_database_search_results(task_id)
+db_search_results, db_db_distance_table = collect_database_search_results(task_id, base_url)
 
 if db_db_distance_table is None and db_search_results is not None:
     st.warning("""Database-database distances are not available for this task, perhaps this is an old task?  
@@ -870,8 +867,11 @@ with st.expander("Database Search Results", expanded=True):
         
         
         # Add DB distance threshold slider
-        st.session_state["db_distance_threshold"] = st.slider("Maximum Database Distance Threshold", 0.0, float(st.session_state['workflow_params'].get("database_search_threshold", 1.0)), st.session_state["db_distance_threshold"], 0.05,
+        st.session_state["db_distance_threshold"] = st.slider("Maximum Database Distance Threshold", 0.0, 1.0, st.session_state["db_distance_threshold"], 0.05,
                                                                   help="Note: 0.00 = identical spectra")
+        workflow_thresh = float(st.session_state['workflow_params'].get("database_search_threshold", 1.0))
+        if st.session_state["db_distance_threshold"] > workflow_thresh:
+            st.warning(f"The database distance threshold is greater than the workflow threshold. Only seed strains may be included past {workflow_thresh:.2f}")
         # Create a box for the maximum number of database results shown
         st.session_state["max_db_results"] = st.number_input("Maximum Number of Database Results Shown", min_value=-1, max_value=None, value=st.session_state["max_db_results"], help="The maximum number of unique database isolates shown, highest distance is prefered. Enter -1 to show all database results.")  
         # Create a 'select all' box for the db taxonomy filter
