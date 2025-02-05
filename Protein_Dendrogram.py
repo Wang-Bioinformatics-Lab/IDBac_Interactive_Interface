@@ -871,7 +871,7 @@ with st.expander("Database Search Results", expanded=True):
                                                                   help="Note: 0.00 = identical spectra")
         workflow_thresh = float(st.session_state['workflow_params'].get("database_search_threshold", 1.0))
         if st.session_state["db_distance_threshold"] > workflow_thresh:
-            st.warning(f"The database distance threshold is greater than the workflow threshold. Only seed strains may be included past {workflow_thresh:.2f}")
+            st.warning(f"The database distance threshold is greater than the workflow threshold of {workflow_thresh:.2f}")
         # Create a box for the maximum number of database results shown
         st.session_state["max_db_results"] = st.number_input("Maximum Number of Database Results Shown", min_value=-1, max_value=None, value=st.session_state["max_db_results"], help="The maximum number of unique database isolates shown, highest distance is prefered. Enter -1 to show all database results.")  
         # Create a 'select all' box for the db taxonomy filter
