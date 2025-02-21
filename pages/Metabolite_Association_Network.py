@@ -429,6 +429,7 @@ def generate_network(cluster_dict:dict=None, height=1000, width=600):
     # Convert to PyVis Graph
     physics = (st.session_state.get("sma_physics", "No") == "Yes")
     graph = net.Network(height=f'{height}px', width='100%')
+    graph.options.edges.smooth.enabled = False
     graph.toggle_physics(physics)   # For many nodes, things won't render if this is True, independent of how it's set per node/edge
     # Get max and min x 
     x_pos = [pos.get(node)[0] for node in nx_G.nodes]
