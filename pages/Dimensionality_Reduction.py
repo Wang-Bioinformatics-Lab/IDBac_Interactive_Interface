@@ -156,7 +156,7 @@ with st.expander("Preprocessing", expanded=True):
     st.session_state.dm_centering = st.selectbox(
         "Select Centering Method",
         options=["None", "Mean", "Median"],
-        index=2,
+        index=1,
         help="Select the centering method to apply to the spectra before dimensionality reduction."
     )
     # Options for Scaling
