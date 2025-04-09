@@ -106,6 +106,7 @@ if st.session_state.dm_method == "t-SNE":
 
 # Dropdown for metadata coloring options (any column in metadata_df)
 plot_colors = "black"
+displayed_as_categorical=True
 if not metadata_df.empty:
     metadata_df = metadata_df.set_index('Filename')
     st.session_state.dm_metadata_coloring = st.selectbox(
@@ -133,6 +134,7 @@ if not metadata_df.empty:
             color_mapping = {key: cmap(i) for key, i in enumerate(plot_colors.unique())}
             plot_colors = [color_mapping.get(color, "black") for color in plot_colors]
         else:
+            displayed_as_categorical = False
             cmap = plt.get_cmap("viridis")
 
             # If not castable to float, map to a number and then normalize
@@ -206,20 +208,28 @@ def plot_reduced_data(reduced_data, plot_colors, selected_spectra, display_filen
     """Helper function to plot the reduced data for both PCA and t-SNE"""
     fig = go.Figure()
 
+    if not metadata_df.empty and st.session_state.dm_metadata_coloring != "None":
+        hover_text = [
+            f"{fname}:<br> {metadata_df.loc[fname, st.session_state.dm_metadata_coloring]}"
+            for fname in st.session_state.dm_selected_spectra
+        ]
+    else:
+        hover_text = st.session_state.dm_selected_spectra
+
     if n_components == 2:
         fig.add_trace(go.Scatter(
             x=reduced_data[:, 0],
             y=reduced_data[:, 1],
             mode='markers',
             marker=dict(size=10, color=plot_colors),  # Use plot_colors directly
-            hovertext=selected_spectra,
+            hovertext=hover_text,
             hoverinfo="text",
             text=selected_spectra if display_filename else None,
             textposition="top center"
         ))
 
         fig.update_layout(
-            title=f"{method} Results",
+            title="",
             xaxis_title=f"{method}1",
             yaxis_title=f"{method}2",
             template="plotly_white"
@@ -233,13 +243,13 @@ def plot_reduced_data(reduced_data, plot_colors, selected_spectra, display_filen
             z=reduced_data[:, 2],
             mode='markers+text' if display_filename else 'markers',
             marker=dict(size=5, color=plot_colors),  # Use plot_colors directly
-            hovertext=selected_spectra,
+            hovertext=hover_text,
             text=selected_spectra if display_filename else None,
             textposition="top center"
         ))
 
         fig.update_layout(
-            title=f"{method} Results",
+            title="",
             scene=dict(
                 xaxis_title=f"{method}1",
                 yaxis_title=f"{method}2",
