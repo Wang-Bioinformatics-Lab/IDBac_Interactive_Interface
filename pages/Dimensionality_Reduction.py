@@ -144,6 +144,29 @@ if not metadata_df.empty:
             norm = plt.Normalize(vmin=plot_colors.min(), vmax=plot_colors.max())
             plot_colors = [cmap(norm(i)) for i in plot_colors]
 
+with st.expander("Preprocessing", expanded=True):
+    # Options for Log Normalization
+    st.session_state.dm_log_normalization = st.selectbox(
+        "Select Log Normalization Method",
+        options=["None", "Log2", "Log10", ],
+        index=1,
+        help="Select the log normalization method to apply to the spectra before dimensionality reduction. All logs first "
+    )
+    # Options for Centering
+    st.session_state.dm_centering = st.selectbox(
+        "Select Centering Method",
+        options=["None", "Mean", "Median"],
+        index=2,
+        help="Select the centering method to apply to the spectra before dimensionality reduction."
+    )
+    # Options for Scaling
+    st.session_state.dm_scaling = st.selectbox(
+        "Select Scaling Method",
+        options=["None", "Standardization", "Min-Max Scaling"],
+        index=2,
+        help="Select the scaling method to apply to the spectra before dimensionality reduction."
+    )
+
 # Add Toggle for Displaying Filename as Text
 st.session_state.dm_display_filename = st.checkbox(
     "Display Filename as Text",
@@ -155,6 +178,29 @@ st.session_state.dm_display_filename = st.checkbox(
 _spectra_df = spectra_df.set_index('filename')
 spectra = _spectra_df.loc[st.session_state.dm_selected_spectra, _spectra_df.columns.str.startswith("BIN_")].values
 
+# Apply Log Normalization
+if st.session_state.dm_log_normalization == "Log2":
+    spectra = np.log2(spectra + 1)
+elif st.session_state.dm_log_normalization == "Log10":
+    spectra = np.log10(spectra + 1)
+elif st.session_state.dm_log_normalization == "None":
+    pass
+
+# Apply Centering
+if st.session_state.dm_centering == "Mean":
+    spectra = spectra - np.mean(spectra, axis=1, keepdims=True)
+elif st.session_state.dm_centering == "Median":
+    spectra = spectra - np.median(spectra, axis=1, keepdims=True)
+elif st.session_state.dm_centering == "None":
+    pass
+
+# Apply Scaling
+if st.session_state.dm_scaling == "Standardization":
+    spectra = (spectra - np.mean(spectra, axis=1, keepdims=True)) / np.std(spectra, axis=1, keepdims=True)
+elif st.session_state.dm_scaling == "Min-Max Scaling":
+    spectra = (spectra - np.min(spectra, axis=1, keepdims=True)) / (np.max(spectra, axis=1, keepdims=True) - np.min(spectra, axis=1, keepdims=True))
+elif st.session_state.dm_scaling == "None":
+    pass
 
 def plot_reduced_data(reduced_data, plot_colors, selected_spectra, display_filename, n_components, method):
     """Helper function to plot the reduced data for both PCA and t-SNE"""
