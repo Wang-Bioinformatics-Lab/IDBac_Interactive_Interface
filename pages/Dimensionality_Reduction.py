@@ -19,6 +19,7 @@ from collections import defaultdict
 from sklearn.decomposition import PCA
 from sklearn.manifold import MDS
 from sklearn.manifold import TSNE
+import plotly.graph_objects as go
 
 from pages.Plot_Spectra import get_peaks, get_peaks_from_db_result
 
@@ -45,6 +46,7 @@ dm_n_components = 3
 
 # Get List of Options
 spectra_df = st.session_state.get('query_only_spectra_df')
+metadata_df = st.session_state.get('metadata_df', pd.DataFrame())
 bin_size = st.session_state['workflow_params'].get('bin_size')
 
 if spectra_df is None:
@@ -102,148 +104,138 @@ if st.session_state.dm_method == "t-SNE":
         help="Number of iterations for t-SNE. Higher values lead to more accurate results."
     )
 
+# Dropdown for metadata coloring options (any column in metadata_df)
+plot_colors = "black"
+if not metadata_df.empty:
+    metadata_df = metadata_df.set_index('Filename')
+    st.session_state.dm_metadata_coloring = st.selectbox(
+        "Select Metadata Column for Coloring",
+        options=["None"] + list(metadata_df.columns),
+        index=0,
+        help="Select a metadata column to color the spectra in the plot."
+    )
+    if st.session_state.dm_metadata_coloring != "None":
+        plot_colors = metadata_df.loc[st.session_state.dm_selected_spectra, st.session_state.dm_metadata_coloring]
+
+        # Convert plot_colors to a list of hex values
+        if len(plot_colors.unique()) <= 10:
+            cmap = plt.get_cmap("tab10")
+            color_mapping = {key: cmap(i) for key, i in enumerate(plot_colors.unique())}
+            plot_colors = [color_mapping.get(color, "black") for color in plot_colors]
+        elif len(plot_colors.unique()) <= 20:
+            cmap = plt.get_cmap("tab20")
+            color_mapping = {key: cmap(i) for key, i in enumerate(plot_colors.unique())}
+            plot_colors = [color_mapping.get(color, "black") for color in plot_colors]
+        else:
+            cmap = plt.get_cmap("viridis")
+
+            # If not castable to float, map to a number and then normalize
+            if not np.issubdtype(plot_colors.dtype, np.number):
+                color_map = {color: i for i, color in enumerate(plot_colors.unique())}
+                plot_colors = plot_colors.apply(lambda x: color_map.get(x, "black"))
+
+            # Normalize the continuous values
+            norm = plt.Normalize(vmin=plot_colors.min(), vmax=plot_colors.max())
+            plot_colors = [cmap(norm(i)) for i in plot_colors]
+
+# Add Toggle for Displaying Filename as Text
+st.session_state.dm_display_filename = st.checkbox(
+    "Display Filename as Text",
+    value=False,
+    help="Check this box to display the filename as text above each point."
+)
+
+# Spectra DataFrame
 _spectra_df = spectra_df.set_index('filename')
-# Extract all features from our spectra (all columns that start with "BIN_")
 spectra = _spectra_df.loc[st.session_state.dm_selected_spectra, _spectra_df.columns.str.startswith("BIN_")].values
 
 
-# Apply relevant clustering method
-if st.session_state.dm_method == "PCA":
-    # Perform PCA
-    try:
-        pca = PCA(n_components=dm_n_components)
-        reduced_data = pca.fit_transform(spectra)
+def plot_reduced_data(reduced_data, plot_colors, selected_spectra, display_filename, n_components, method):
+    """Helper function to plot the reduced data for both PCA and t-SNE"""
+    fig = go.Figure()
 
-        # Display results
-        st.subheader("PCA Results")
-        explained_variance = pd.DataFrame(pca.explained_variance_ratio_)
-        explained_variance.index=[f'PC{i+1}' for i in range(len(explained_variance))]
-        explained_variance.columns=['Explained Variance Ratio']
-        st.write(explained_variance)
-
-        # Plot results
-        if dm_n_components == 2:
-            fig = plotly.graph_objects.Figure()
-            fig.add_trace(plotly.graph_objects.Scatter(
+    if n_components == 2:
+        fig.add_trace(go.Scatter(
             x=reduced_data[:, 0],
             y=reduced_data[:, 1],
             mode='markers',
-            marker=dict(size=10, color='black'),  # Uniformly black
-            hovertext=st.session_state.dm_selected_spectra,
-            hoverinfo="text"
-            ))
-            fig.update_layout(
-            title="PCA Results",
-            xaxis_title="PC1",
-            yaxis_title="PC2",
+            marker=dict(size=10, color=plot_colors),  # Use plot_colors directly
+            hovertext=selected_spectra,
+            hoverinfo="text",
+            text=selected_spectra if display_filename else None,
+            textposition="top center"
+        ))
+
+        fig.update_layout(
+            title=f"{method} Results",
+            xaxis_title=f"{method}1",
+            yaxis_title=f"{method}2",
             template="plotly_white"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-        elif dm_n_components == 3:
-            fig = plotly.graph_objects.Figure()
-            fig.add_trace(plotly.graph_objects.Scatter3d(
+        )
+
+    elif n_components == 3:
+        text = selected_spectra if display_filename else None
+        fig.add_trace(go.Scatter3d(
             x=reduced_data[:, 0],
             y=reduced_data[:, 1],
             z=reduced_data[:, 2],
-            mode='markers',
-            marker=dict(size=5, color='black'),  # Uniformly black
-            hovertext=st.session_state.dm_selected_spectra,
-            ))
-            fig.update_layout(
-            title="PCA Results",
+            mode='markers+text' if display_filename else 'markers',
+            marker=dict(size=5, color=plot_colors),  # Use plot_colors directly
+            hovertext=selected_spectra,
+            text=selected_spectra if display_filename else None,
+            textposition="top center"
+        ))
+
+        fig.update_layout(
+            title=f"{method} Results",
             scene=dict(
-            xaxis_title="PC1",
-            yaxis_title="PC2",
-            zaxis_title="PC3"
+                xaxis_title=f"{method}1",
+                yaxis_title=f"{method}2",
+                zaxis_title=f"{method}3"
             ),
             template="plotly_white"
-            )
-            st.plotly_chart(fig, use_container_width=True, height=800)
+        )
+
+    st.plotly_chart(fig, use_container_width=True, height=800)
+
+# Apply relevant clustering method
+if st.session_state.dm_method == "PCA":
+    try:
+        # Perform PCA
+        pca = PCA(n_components=dm_n_components)
+        reduced_data = pca.fit_transform(spectra)
+
+        # Display PCA results
+        st.subheader("PCA Results")
+        explained_variance = pd.DataFrame(pca.explained_variance_ratio_)
+        explained_variance.index = [f'PC{i+1}' for i in range(len(explained_variance))]
+        explained_variance.columns = ['Explained Variance Ratio']
+        st.write(explained_variance)
+
+        # Plot PCA results
+        plot_reduced_data(reduced_data, plot_colors, st.session_state.dm_selected_spectra, st.session_state.dm_display_filename, dm_n_components, "PCA")
+
     except Exception as e:
         st.error(f"An error occurred during PCA: {e}")
 
-elif st.session_state.dm_method == "PCOA":
-    # Perform PCOA with dm_n_components and plot as scatter
-    # Note: PCOA is not directly available in sklearn, but can be implemented using MDS
-    mds = MDS(n_components=dm_n_components, dissimilarity='precomputed')
-    raise NotImplementedError("PCOA is not implemented yet.")
-    # The following is incorrect, that's not a distance matrix:
-    distance_matrix = squareform(input_spectra)
-    reduced_data = mds.fit_transform(distance_matrix)
-    # Display results
-    st.subheader("PCOA Results")
-    st.write("Reduced Data:")
-    st.dataframe(pd.DataFrame(reduced_data, columns=[f"PC{i+1}" for i in range(dm_n_components)]))
-    # Plot results
-    if dm_n_components == 2:
-        fig, ax = plt.subplots()
-        ax.scatter(reduced_data[:, 0], reduced_data[:, 1])
-        ax.set_xlabel("PC1")
-        ax.set_ylabel("PC2")
-        st.pyplot(fig)
-    elif dm_n_components == 3:
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-        ax.scatter(reduced_data[:, 0], reduced_data[:, 1], reduced_data[:, 2])
-        ax.set_xlabel("PC1")
-        ax.set_ylabel("PC2")
-        ax.set_zlabel("PC3")
-        st.pyplot(fig)
-
 elif st.session_state.dm_method == "t-SNE":
-    # Perform t-SNE
     try:
         tsne = TSNE(
-                        n_components=dm_n_components,
-                        perplexity=st.session_state.dm_perplexity,
-                        learning_rate=st.session_state.dm_learning_rate,
-                        max_iter=st.session_state.dm_max_iter
-                    )
+            n_components=dm_n_components,
+            perplexity=st.session_state.dm_perplexity,
+            learning_rate=st.session_state.dm_learning_rate,
+            max_iter=st.session_state.dm_max_iter
+        )
         reduced_data = tsne.fit_transform(spectra)
 
-        # Display results
+        # Display t-SNE results
         st.subheader("t-SNE Results")
         st.write("Reduced Data:")
         st.dataframe(pd.DataFrame(reduced_data, columns=[f"t-SNE{i+1}" for i in range(dm_n_components)]))
 
-        # Plot results
-        if dm_n_components == 2:
-            fig = plotly.graph_objects.Figure()
-            fig.add_trace(plotly.graph_objects.Scatter(
-                x=reduced_data[:, 0],
-                y=reduced_data[:, 1],
-                mode='markers',
-                marker=dict(size=10, color='black'),  # Uniformly black
-                hovertext=st.session_state.dm_selected_spectra,
-                hoverinfo="text"
-            ))
-            fig.update_layout(
-                title="t-SNE Results",
-                xaxis_title="t-SNE1",
-                yaxis_title="t-SNE2",
-                template="plotly_white"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-        elif dm_n_components == 3:
-            fig = plotly.graph_objects.Figure()
-            fig.add_trace(plotly.graph_objects.Scatter3d(
-                x=reduced_data[:, 0],
-                y=reduced_data[:, 1],
-                z=reduced_data[:, 2],
-                mode='markers',
-                marker=dict(size=5, color='black'),  # Uniformly black
-                hovertext=st.session_state.dm_selected_spectra,
-            ))
-            fig.update_layout(
-                title="t-SNE Results",
-                scene=dict(
-                    xaxis_title="t-SNE1",
-                    yaxis_title="t-SNE2",
-                    zaxis_title="t-SNE3"
-                ),
-                template="plotly_white"
-            )
-            st.plotly_chart(fig, use_container_width=True, height=800)
+        # Plot t-SNE results
+        plot_reduced_data(reduced_data, plot_colors, st.session_state.dm_selected_spectra, st.session_state.dm_display_filename, dm_n_components, "t-SNE")
+
     except Exception as e:
         st.error(f"An error occurred during t-SNE: {e}")
 
