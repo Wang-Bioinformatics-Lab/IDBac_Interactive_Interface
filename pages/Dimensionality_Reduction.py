@@ -1,25 +1,15 @@
 import streamlit as st
-import streamlit.components.v1 as components
-from pyvis import network as net
-from pyvis import options as pyvis_options
 import pandas as pd
 import numpy as np
-import json
-import requests
-import plotly
 import networkx as nx
 import matplotlib.pyplot as plt
-from matplotlib import colors
-import plotly.figure_factory as ff
-from scipy.cluster.hierarchy import linkage, dendrogram
-from scipy.spatial.distance import squareform
 from utils import custom_css, format_proteins_as_strings
-from streamlit.errors import StreamlitAPIException
-from collections import defaultdict
 from sklearn.decomposition import PCA
 from sklearn.manifold import MDS
 from sklearn.manifold import TSNE
 import plotly.graph_objects as go
+import plotly.express as px
+import plotly.colors as pc
 
 from pages.Plot_Spectra import get_peaks, get_peaks_from_db_result
 
@@ -204,59 +194,49 @@ elif st.session_state.dm_scaling == "Min-Max Scaling":
 elif st.session_state.dm_scaling == "None":
     pass
 
-def plot_reduced_data(reduced_data, plot_colors, selected_spectra, display_filename, n_components, method):
-    """Helper function to plot the reduced data for both PCA and t-SNE"""
-    fig = go.Figure()
+def plot_reduced_data(reduced_data, selected_spectra, display_filename, n_components, method, metadata_df=None):
+    # Basic plotting dataframe
+    plot_df = pd.DataFrame(reduced_data, columns=[f"{method}{i+1}" for i in range(n_components)])
+    plot_df['Filename'] = selected_spectra
 
-    if not metadata_df.empty and st.session_state.dm_metadata_coloring != "None":
-        hover_text = [
-            f"{fname}:<br> {metadata_df.loc[fname, st.session_state.dm_metadata_coloring]}"
-            for fname in st.session_state.dm_selected_spectra
-        ]
+    # Metadata coloring
+    coloring_col = st.session_state.get("dm_metadata_coloring", "None")
+    has_metadata = metadata_df is not None and not metadata_df.empty and coloring_col != "None"
+
+    if has_metadata:
+        plot_df[coloring_col] = metadata_df.loc[selected_spectra, coloring_col].values
+        plot_df['hover'] = plot_df['Filename'] + "<br>" + coloring_col + ": " + plot_df[coloring_col].astype(str)
     else:
-        hover_text = st.session_state.dm_selected_spectra
+        plot_df['hover'] = plot_df['Filename']
+        coloring_col = None  # plotly express will handle this case
 
+    # Choose Plotly Express for legend + color handling
     if n_components == 2:
-        fig.add_trace(go.Scatter(
-            x=reduced_data[:, 0],
-            y=reduced_data[:, 1],
-            mode='markers',
-            marker=dict(size=10, color=plot_colors),  # Use plot_colors directly
-            hovertext=hover_text,
-            hoverinfo="text",
-            text=selected_spectra if display_filename else None,
-            textposition="top center"
-        ))
-
-        fig.update_layout(
-            title="",
-            xaxis_title=f"{method}1",
-            yaxis_title=f"{method}2",
-            template="plotly_white"
+        fig = px.scatter(
+            plot_df,
+            x=f"{method}1",
+            y=f"{method}2",
+            color=coloring_col if has_metadata else None,
+            hover_name='hover',
+            text='Filename' if display_filename else None,
+            color_discrete_sequence=px.colors.qualitative.Plotly if has_metadata and plot_df[coloring_col].nunique() <= 10 else px.colors.qualitative.Light24,
+            color_continuous_scale='viridis' if has_metadata and not pd.api.types.is_categorical_dtype(plot_df[coloring_col]) and plot_df[coloring_col].dtype.kind in 'if' else None
+        )
+    else:
+        fig = px.scatter_3d(
+            plot_df,
+            x=f"{method}1",
+            y=f"{method}2",
+            z=f"{method}3",
+            color=coloring_col if has_metadata else None,
+            hover_name='hover',
+            text='Filename' if display_filename else None,
+            color_discrete_sequence=px.colors.qualitative.Plotly if has_metadata and plot_df[coloring_col].nunique() <= 10 else px.colors.qualitative.Light24,
+            color_continuous_scale='viridis' if has_metadata and not pd.api.types.is_categorical_dtype(plot_df[coloring_col]) and plot_df[coloring_col].dtype.kind in 'if' else None
         )
 
-    elif n_components == 3:
-        text = selected_spectra if display_filename else None
-        fig.add_trace(go.Scatter3d(
-            x=reduced_data[:, 0],
-            y=reduced_data[:, 1],
-            z=reduced_data[:, 2],
-            mode='markers+text' if display_filename else 'markers',
-            marker=dict(size=5, color=plot_colors),  # Use plot_colors directly
-            hovertext=hover_text,
-            text=selected_spectra if display_filename else None,
-            textposition="top center"
-        ))
-
-        fig.update_layout(
-            title="",
-            scene=dict(
-                xaxis_title=f"{method}1",
-                yaxis_title=f"{method}2",
-                zaxis_title=f"{method}3"
-            ),
-            template="plotly_white"
-        )
+    fig.update_traces(marker=dict(size=6 if n_components == 3 else 10))
+    fig.update_layout(template="plotly_white")
 
     st.plotly_chart(fig, use_container_width=True, height=800)
 
@@ -275,9 +255,17 @@ if st.session_state.dm_method == "PCA":
         st.write(explained_variance)
 
         # Plot PCA results
-        plot_reduced_data(reduced_data, plot_colors, st.session_state.dm_selected_spectra, st.session_state.dm_display_filename, dm_n_components, "PCA")
+        plot_reduced_data(
+                            reduced_data=reduced_data,
+                            selected_spectra=st.session_state.dm_selected_spectra,
+                            display_filename=st.session_state.dm_display_filename,
+                            n_components=dm_n_components,
+                            method="PCA",
+                            metadata_df=metadata_df
+                        )
 
     except Exception as e:
+        raise e
         st.error(f"An error occurred during PCA: {e}")
 
 elif st.session_state.dm_method == "t-SNE":
@@ -296,7 +284,14 @@ elif st.session_state.dm_method == "t-SNE":
         st.dataframe(pd.DataFrame(reduced_data, columns=[f"t-SNE{i+1}" for i in range(dm_n_components)]))
 
         # Plot t-SNE results
-        plot_reduced_data(reduced_data, plot_colors, st.session_state.dm_selected_spectra, st.session_state.dm_display_filename, dm_n_components, "t-SNE")
+        plot_reduced_data(
+                    reduced_data=reduced_data,
+                    selected_spectra=st.session_state.dm_selected_spectra,
+                    display_filename=st.session_state.dm_display_filename,
+                    n_components=dm_n_components,
+                    method="t-SNE",
+                    metadata_df=metadata_df
+                )
 
     except Exception as e:
         st.error(f"An error occurred during t-SNE: {e}")
