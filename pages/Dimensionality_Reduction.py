@@ -120,10 +120,16 @@ if not metadata_df.empty:
         # Convert plot_colors to a list of hex values
         if len(plot_colors.unique()) <= 10:
             cmap = plt.get_cmap("tab10")
+            # Map to category
+            plot_colors = plot_colors.astype("category").cat.codes
+
             color_mapping = {key: cmap(i) for key, i in enumerate(plot_colors.unique())}
             plot_colors = [color_mapping.get(color, "black") for color in plot_colors]
         elif len(plot_colors.unique()) <= 20:
             cmap = plt.get_cmap("tab20")
+            # Map to category
+            plot_colors = plot_colors.astype("category").cat.codes
+
             color_mapping = {key: cmap(i) for key, i in enumerate(plot_colors.unique())}
             plot_colors = [color_mapping.get(color, "black") for color in plot_colors]
         else:
