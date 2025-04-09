@@ -16,6 +16,7 @@ from scipy.spatial.distance import squareform
 from utils import custom_css, format_proteins_as_strings
 from streamlit.errors import StreamlitAPIException
 from collections import defaultdict
+import plotly.graph_objects as go
 
 # TODO:
 # [ ] Get processed spectra from DB, rather than raw
@@ -216,8 +217,6 @@ def get_peaks_from_db_result(database_id:str):
     peaks = bin_peaks(peaks, st.session_state['workflow_params']['bin_size'])
 
     return peaks
-
-import plotly.graph_objects as go
 
 def stick_plot(peaks_a, peaks_b=None, title=None):
     """Create a stick plot for two spectra with the bottom spectra mirrored, if specified.
