@@ -15,7 +15,8 @@ from scipy.cluster.hierarchy import linkage, dendrogram
 from scipy.spatial.distance import squareform
 from utils import custom_css, parse_numerical_input
 from utils import convert_to_mzml
-from typing import Dict, List
+from typing import Dict, List, Tuple
+import io
 
 #####
 # A note abote streamlit session states:
@@ -236,7 +237,18 @@ class ShapeMap():
         return self.shape_map[index], warning
     
 
-def generate_network(cluster_dict:dict=None, height=1000, width=600):
+def generate_network(cluster_dict:dict=None, height=1000, width=600)->Tuple[Dict[str, Dict[str, List[float]]], nx.Graph]:
+    """ This function generates a network graph of the small molecule data. It uses the pyvis library to create an interactive graph.
+    
+    Parameters:
+    cluster_dict (dict): A dictionary of small molecule data {filename: {m/z array: [float], intensity array: [float], frequency array: [float]}}
+    height (int): The height of the graph in pixels
+    width (int): The width of the graph in pixels
+
+    Returns:
+    dict: A dictionary of small molecule data {filename: {m/z array: [float], intensity array: [float], frequency array: [float]}}
+    networkx.Graph: A networkx graph object
+    """
     # TODO: Right now we don't integrate all_spectra_df which means there could be nodes that aren't truly in the network
     if st.session_state.get("metadata_df") is None:
         st.error("Please upload a metadata file first.")
@@ -465,7 +477,7 @@ def generate_network(cluster_dict:dict=None, height=1000, width=600):
     
     components.html(html_graph, height=height)
 
-    return small_mol_dict
+    return small_mol_dict, nx_G
     
 def make_heatmap():
     """
@@ -732,9 +744,17 @@ with st.expander("Visualize Small Molecule Data", expanded=True):
         st.rerun()  # Refresh the UI to reflect the updated selection
 
 small_molecule_dict = None
-small_molecule_dict = generate_network(cluster_dict)
+nx_G = None
+small_molecule_dict, nx_G = generate_network(cluster_dict)
 
 print("small_molecule_dict", small_molecule_dict.keys(), flush=True)
+
+if nx_G is not None:
+    # Write the graphml file to bytesIO
+    graphml_bytes = io.BytesIO()
+    nx.write_graphml(nx_G, graphml_bytes)
+    graphml_bytes.seek(0)
+    st.download_button("Download Network as .graphml", graphml_bytes, "IDBac_MAN.graphml", help="Download the network graph as a graphml file.")
 
 # Download Options
 if small_molecule_dict is not None:
