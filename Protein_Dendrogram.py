@@ -30,6 +30,12 @@ custom_css()
 
 DEFAULT_TASK_ID = "4cc7cfcad709417da7a0632b3cdacf98"
 
+# Alert banner
+st.warning(
+    "⚠️ **Maintenance Status**: The database is currently under maintenance and dependent results may change. "
+    "Anticipated completion is 5/12/2025 at 10:00 AM PST. If you have any questions, please contact us at nkrull@uic.edu."
+)
+
 class np_data_wrapper():
     def __init__(self, data_np, spectrum_data_df, db_distance_dict):
         """
