@@ -33,6 +33,7 @@ DEFAULT_TASK_ID = "4cc7cfcad709417da7a0632b3cdacf98"
 # Alert banner
 st.warning(
     "⚠️ **Maintenance Status**: The database is currently under maintenance and dependent results may change. "
+    "Workflows executed during this time will be **permanently** affected, even after maintenance is complete. "
     "Anticipated completion is 5/12/2025 at 10:00 AM PST. If you have any questions, please contact us at nkrull@uic.edu."
 )
 
