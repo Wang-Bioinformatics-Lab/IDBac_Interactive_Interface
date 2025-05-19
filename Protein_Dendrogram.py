@@ -28,7 +28,7 @@ st.set_page_config(page_title="IDBac - Dendrogram", page_icon="assets/idbac_logo
 html('<script async defer data-website-id="4611e28d-c0ff-469d-a2f9-a0b54c0c8ee0" src="https://analytics.gnps2.org/umami.js"></script>', width=0, height=0)
 custom_css()
 
-DEFAULT_TASK_ID = "4cc7cfcad709417da7a0632b3cdacf98"
+DEFAULT_TASK_ID = "5526b4a351bc44429afd1efce2c2351d"
 
 # Alert banner
 # st.warning(
