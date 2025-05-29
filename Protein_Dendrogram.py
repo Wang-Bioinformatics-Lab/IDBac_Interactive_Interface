@@ -127,6 +127,7 @@ def get_dist_function_wrapper(distfun):
         for i, filename in enumerate(non_db_search_result_filenames):
             db_dist_dict = db_distance_dict.get(filename)
             if db_dist_dict is None:
+                # It's missing from our queries for some reason, which is fine
                 continue
             for j, db_filename in enumerate(db_search_result_filenames):
                 this_dist = db_dist_dict.get(db_filename)
@@ -136,6 +137,8 @@ def get_dist_function_wrapper(distfun):
                         db_distance_matrix[i, j] = 1
                     else:
                         db_distance_matrix[i, j] = this_dist # 1-sim because we want distance
+                else:
+                    raise ValueError(f"Missing Query-DB distance for {filename} and {db_filename} in {db_dist_dict.keys()}")
         print("Time to compute db distances", time.time() - start_tile, flush=True)
         
         start_time = time.time()
@@ -444,10 +447,13 @@ def collect_database_search_results(task, base_url):
     """
     try:
         # Getting the database search results
-        database_search_results_url = f"{base_url}/resultfile?task={task}&file=nf_output/search/enriched_db_results.tsv"
+        # database_search_results_url = f"{base_url}/resultfile?task={task}&file=nf_output/search/enriched_db_results.tsv"
+        database_search_results_url = f"{base_url}/resultfile?task={task}&file=nf_output/search/complete_enriched_db_results.tsv"
         print("Database Search Results URL", database_search_results_url, flush=True)
         database_search_results_df = pd.read_csv(database_search_results_url, sep="\t")
     except:
+        st.error("This is GNPS task is now out of date. Please clone it to use the interactive dashboard.")
+        st.stop()
         database_search_results_df = None
         
     try:
@@ -460,7 +466,7 @@ def collect_database_search_results(task, base_url):
         
         if database_search_results_df is not None:
             if 'distance' not in database_search_results_df.columns:
-                st.warning("This is an old GNPS task. Please clone it to use the interactive dashboard.")
+                st.warning("This is GNPS task is now out of date. Please clone it to use the interactive dashboard.")
                 st.stop()
         
     return database_search_results_df, database_database_distance_table
@@ -533,13 +539,13 @@ def integrate_database_search_results(all_spectra_df:pd.DataFrame, database_sear
     to_concat = to_concat.drop(columns=['query_filename','distance'])             # Remove distance info 
     all_spectra_df = pd.concat((all_spectra_df, to_concat), axis=0)
     
-    # Build a distance dict for the database hits
+    # Build a distance dict for the database hits (build off full matrix, some may just not get used all-pairs distances are required)
     database_distance_dict = {}
-    for index, row in trimmed_search_results_df.iterrows():
+    for index, row in database_search_results_df.iterrows():
         if database_distance_dict.get(row['query_filename']) is None:
-            database_distance_dict[row['query_filename']] = {row['filename']: row['distance']}
+            database_distance_dict[row['query_filename']] = {row[db_label_column]: row['distance']}
         else:
-            database_distance_dict[row['query_filename']][row['filename']] = row['distance']
+            database_distance_dict[row['query_filename']][row[db_label_column]] = row['distance']
     if database_database_distances is not None:    
         # Add the DB-DB distances to the distance dictionary
         for index, row in database_database_distances.iterrows():    # This is known to be square, no need to flip the indices
