@@ -387,6 +387,7 @@ def generate_network(cluster_dict:dict=None, height=1000, width=600)->Tuple[Dict
         for node, node_type in list(nx_G.nodes.data('type')):
             if node_type == "Protein":
                 if node not in st.session_state['sma_selected_proteins']:
+                    print(f"DEBUG: Removing node {node} of type {node_type} because it is not in the selected proteins.", flush=True)
                     nx_G.remove_node(node)
        
         # Remove singleton m/z values
@@ -425,9 +426,11 @@ def generate_network(cluster_dict:dict=None, height=1000, width=600)->Tuple[Dict
             for cluster, nodes in spectral_communities.items():
                 for i, node1 in enumerate(nodes):
                     for node2 in nodes[i+1:]:
-                        if (node1, node2) not in added_edges:
-                            nx_G.add_edge(node1, node2, weight=0.2)
-                            added_edges.append((node1, node2))
+                        if (node1, node2) not in added_edges and \
+                            node1 in nx_G.nodes and \
+                            node2 in nx_G.nodes:
+                                nx_G.add_edge(node1, node2, weight=0.2)
+                                added_edges.append((node1, node2))
         
         # Apply layout
         pos = layout_fn_mapping[st.session_state.get("sma_network_layout")](nx_G, **layout_default_params[st.session_state.get("sma_network_layout")])
