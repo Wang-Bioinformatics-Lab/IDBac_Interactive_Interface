@@ -12,6 +12,7 @@ from scipy.cluster.hierarchy import linkage, to_tree
 from scipy.spatial.distance import squareform
 import time
 import textwrap
+import traceback
 
 import plotly.graph_objects as go
 
@@ -964,7 +965,7 @@ def get_svg_download_link(fig: go.Figure) -> str:
     return html_link
 
 
-def get_ete_tree_download_link(linkage_matrix, labels):
+def get_newick_tree_download_link(linkage_matrix, labels):
     """
     Credit: https://github.com/scipy/scipy/issues/8274
     """
@@ -990,8 +991,128 @@ def get_ete_tree_download_link(linkage_matrix, labels):
     html_link = f'<a href="{data_url}" download="dendrogram.nwk">Download Newick Tree</a>'
     return html_link
 
+def get_taxa_annotation_file(labels, metadata, all_spectra_df):
+    """Download a .txt file for usage in ITOL.
+
+    Parameters:
+    - labels (list): List of labels for the dendrogram.
+    - metadata (pandas.DataFrame): DataFrame containing metadata for the labels.
+
+    Returns:
+    - str: An html string containing the download link for the annotation file.
+    """
+    header = textwrap.dedent("""
+    AUTO_TAXONOMY
+
+    SEPARATOR COMMA
+
+    TAXONOMY_TYPE,NCBI
+
+    REPLACE_LEAF_LABELS 0
+
+    #1: taxonomy_name
+    #2: original_label (taxonomy_name)
+    #3: original_label|taxonomy_name
+    #4: taxonomy_name (original_label)
+    #5: taxonomy_name|original_label
+
+    LABEL_FORMAT 4
+
+    DATA
+
+    """)
+    try:
+        metadata = all_spectra_df[['filename', 'NCBI taxid', 'db_search_result']].copy(deep=True)
+
+        metadata.dropna(subset=['NCBI taxid'], inplace=True)
+        metadata.loc[metadata['db_search_result'], 'filename'] = 'DB Result - ' + metadata.loc[metadata['db_search_result'], 'filename'].astype(str)
+
+        color_assignments = metadata.set_index('filename')['NCBI taxid'].to_dict()
+       
+        print("color_assignments", color_assignments, flush=True)
+
+        # Data format is "node_id,taxa_id" on each line
+        data_lines = []
+        for label in labels:
+            # print("label", label, flush=True)
+            color = color_assignments.get(label)
+            if color is not None:
+                data_lines.append(f"{label},{color}")
+                # print(f"Added line for label {label}: {int(color)}", flush=True)
+
+        output_str = header + "\n" + "\n".join(data_lines)
+        # Encode the output string to base64
+        encoded_output = base64.b64encode(output_str.encode()).decode()
+        # Generate the data URL for the download link
+        data_url = f"data:text/plain;base64,{encoded_output}"
+
+        return f'<a href="{data_url}" download="annotation_file.txt">Download Annotation File</a>'
+
+    except Exception as e:
+        print("Error creating annotation file:", e, flush=True)
+        print(traceback.format_exc(), flush=True)
+        return "Unable to Create Annotation File."
+    
+def get_taxa_coloring_file(labels, metadata, all_spectra_df):
+    header = textwrap.dedent("""
+    TREE_COLORS
+    SEPERATEOR TAB
+    DATA
+    """)
+    # Data format NODE_ID TYPE COLOR LABEL_OR_STYLE SIZE_FACTOR
+    # We will only use NODE_ID,label_backgrounds,COLOR
+
+    try:
+        cols = ['filename', 'db_genus', 'db_search_result']
+        cols += ['genus'] if 'genus' in all_spectra_df.columns else []
+        metadata = all_spectra_df[cols].copy(deep=True)
+        # Move db_genus to genus if it exists
+        if 'genus' in metadata.columns:
+            metadata['genus'] = metadata['db_genus'].fillna(metadata['genus'])
+        else:
+            metadata['genus'] = metadata['db_genus']
+
+        metadata.dropna(subset=['genus'], inplace=True)
+        metadata.loc[metadata['db_search_result'], 'filename'] = 'DB Result - ' + metadata.loc[metadata['db_search_result'], 'filename'].astype(str)
+
+        # Convert taxa to colors using pastel categorical %20
+        taxa = metadata['genus'].unique()
+        # Create a color map for the taxa
+        color_map = {}
+        for i, taxon in enumerate(taxa):
+            # Use plotly to generate a pastel color
+            color = plotly.colors.qualitative.Pastel[i % len(plotly.colors.qualitative.Pastel)]
+            color_map[taxon] = color
+
+        # Create a dictionary for taxa assignments
+        metadata['color'] = metadata['genus'].map(color_map)
+        taxa_assignments = metadata.set_index('filename')['color'].to_dict()
+
+        print("taxa_assignments", taxa_assignments, flush=True)
+
+        data_lines = []
+
+        for label in labels:
+            print("label", label, flush=True)
+            color = taxa_assignments.get(label)
+            if color is not None:
+                data_lines.append(f"{label}\tlabel_background\t{str(color).replace('rgb', 'rgba').replace(')', ', 1.0)')}")  
+                print(f"Added line for label {label}: {color}", flush=True)
+
+        output_str = header + "\n" + "\n".join(data_lines)
+        # Encode the output string to base64
+        encoded_output = base64.b64encode(output_str.encode()).decode()
+        # Generate the data URL for the download link
+        data_url = f"data:text/plain;base64,{encoded_output}"
+        return f'<a href="{data_url}" download="coloring_file.txt">Download Coloring File</a>'
+    except Exception as e:
+        print("Error creating coloring file:", e, flush=True)
+        print(traceback.format_exc(), flush=True)
+        return "Unable to Create Coloring File."
+
+
 # Creating the dendrogram
-dendro, linkage_matrix, labels = create_dendrogram(numpy_array,
+dendro, linkage_matrix, labels = create_dendrogram(     numpy_array,
                                                         all_spectra_df,
                                                         db_distance_dict,
                                                         plotted_metadata=st.session_state["metadata_scatter"],
@@ -1001,7 +1122,8 @@ dendro, linkage_matrix, labels = create_dendrogram(numpy_array,
                                                         cluster_method=st.session_state["clustering_method"],
                                                         coloring_threshold=st.session_state["coloring_threshold"],
                                                         cutoff=st.session_state["cutoff"],
-                                                        show_annotations=st.session_state["show_annotations"])
+                                                        show_annotations=st.session_state["show_annotations"]
+                                                    )
 if dendro is not None:
     st.plotly_chart(dendro, use_container_width=True)
     # Display number of strains
@@ -1009,7 +1131,13 @@ if dendro is not None:
     # Add option to download as svg
     st.markdown(get_svg_download_link(dendro), unsafe_allow_html=True, help="Currently, this feature only officially supports the dendrogram _without_ metadata.")
     # Add option to download as ete tree
-    st.markdown(get_ete_tree_download_link(linkage_matrix, labels), unsafe_allow_html=True)
+    st.markdown(get_newick_tree_download_link(linkage_matrix, labels), unsafe_allow_html=True)
+    st.markdown(get_taxa_annotation_file(labels, metadata_df, all_spectra_df), unsafe_allow_html=True, help="Download an annotation prese for usage in ITOL. \
+                This file will replace database hits with their NCBI taxonomies. \
+                Include a column 'NCBI taxid' in your metadata to use this feature for queries")
+    st.markdown(get_taxa_coloring_file(labels, metadata_df, all_spectra_df), unsafe_allow_html=True, help="Download a coloring file for usage in ITOL. \
+                For db results, genus will be used. Include a column 'genus' in your metadata to use this feature.\
+                To show colors in ITOL after uploading the annotation file, toggle Advanced>Node options>Leaf node symbols. It can be set back to 'Hide' once done.")
 
 # Create a shareable link to this page
 st.write("Shareable Link: ")
