@@ -40,7 +40,7 @@ st.set_page_config(
 custom_css()
 
 st.title("Deposition QC")
-st.write("This page is for performing quality control on IDBac Deposition Dry Runs. Swatch between pages of the table via the sidebar.")
+st.write("This page is for performing quality control on IDBac Deposition Dry Runs. Switch between pages of the table via the sidebar.")
 
 # get dqc_task_id from URL
 url_task_id = st.query_params.get("task_id", None)

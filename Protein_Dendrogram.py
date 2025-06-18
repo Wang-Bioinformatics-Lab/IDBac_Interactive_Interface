@@ -1132,7 +1132,7 @@ if dendro is not None:
     st.markdown(get_svg_download_link(dendro), unsafe_allow_html=True, help="Currently, this feature only officially supports the dendrogram _without_ metadata.")
     # Add option to download as ete tree
     st.markdown(get_newick_tree_download_link(linkage_matrix, labels), unsafe_allow_html=True)
-    st.markdown(get_taxa_annotation_file(labels, metadata_df, all_spectra_df), unsafe_allow_html=True, help="Download an annotation prese for usage in ITOL. \
+    st.markdown(get_taxa_annotation_file(labels, metadata_df, all_spectra_df), unsafe_allow_html=True, help="Download an annotation preset for usage in ITOL. \
                 This file will replace database hits with their NCBI taxonomies. \
                 Include a column 'NCBI taxid' in your metadata to use this feature for queries")
     st.markdown(get_taxa_coloring_file(labels, metadata_df, all_spectra_df), unsafe_allow_html=True, help="Download a coloring file for usage in ITOL. \
