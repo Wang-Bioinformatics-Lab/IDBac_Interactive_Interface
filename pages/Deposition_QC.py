@@ -134,6 +134,21 @@ def request_image(usi: str):
     else:
         print("Returning None for image due to error:", response.status_code, flush=True)
         print("URL:", url, flush=True)
+        raise ValueError(f"Error fetching image for USI {usi}: {response.status_code}")
+    
+def request_img_cache_wrapper(usi: str):
+    """
+    Wrapper function to request an image with caching.
+    
+    Parameters:
+    - usi (str): The USI of the spectrum.
+    
+    Returns:
+    - image (bytes): The image data.
+    """
+    try:
+        return request_image(usi)
+    except Exception as e:
         return None
 
 # Add USI to metadata_df
@@ -167,7 +182,7 @@ def display_dataframe(df,):
 
     # Add base64 image strings
     relevant_df["Image"] = relevant_df["USI"].apply(
-        lambda x: request_image(x) if x is not None else None
+        lambda x: request_img_cache_wrapper(x) if x is not None else None
     )
     
     # Format image strings as `data:image/png;base64,...`
