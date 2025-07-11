@@ -233,14 +233,15 @@ def draw_protein_heatmap(all_spectra_df, bin_counts, replicate_counts, bin_size,
         metadata_selection_col1, metadata_selection_col2 = add_filters_1.columns([0.5, 0.5])
         if st.session_state.get('metadata_df') is None:
             metadata_selection_col1.selectbox("Create Heatmap by metadata category",
-                                              ["No Metadata Available"],
+                                              [None],
+                                              format_func=lambda x: "No Metadata Available",
                                               key="phm_metadata_criteria",
-                                              disabled=True)
+                                              disabled=True,)
             metadata_selection_col2.multiselect("Metadata Values",
                                                 [],
                                                 key="phm_metadata_values",
                                                 disabled=True)
-            st.session_state['phm_metadata_criteria'] = None
+            # st.session_state['phm_metadata_criteria'] = None
             
         else:
             metadata_selection_col1.selectbox("Create Heatmap by metadata category",
@@ -346,7 +347,8 @@ def draw_protein_heatmap(all_spectra_df, bin_counts, replicate_counts, bin_size,
     # Whether to overlay dendrogram
     st.checkbox("Overlay Dendrogram", key="phm_overlay_dendrogram")
     
-    metadata_options = ["None", "Dendrogram Cluster"] + list(st.session_state.get("metadata_df").columns)
+    metadata_options = ["None", "Dendrogram Cluster"]
+    metadata_options += st.session_state["metadata_df"].columns.tolist() if st.session_state.get("metadata_df") is not None else []
     if st.session_state['phm_overlay_dendrogram']:
         st.selectbox("Select metadata to be listed as text next to the strain ID", ['Dendrogram Cluster'], key="phm_display_metadata", disabled=True)
     else:
