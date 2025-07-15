@@ -165,6 +165,48 @@ st.session_state.dm_display_filename = st.checkbox(
     value=False,
     help="Check this box to display the filename as text above each point."
 )
+# Add slider for font-size multiplier
+st.session_state.dm_font_size_multiplier = st.slider(
+    "Font Size Multiplier",
+    min_value=0.5,
+    max_value=10.0,
+    value=1.0,
+    step=0.1,
+    help="Adjust the font size of the plot text elements."
+)
+# Add dropdown for font color 
+st.session_state.dm_font_color = st.selectbox(
+    "Select Font Color",
+    options=[
+        ("Black", "black"),
+        ("Dark Slate Gray", "darkslategray"),
+        ("Dim Gray", "dimgray"),
+        ("Gray", "gray"),
+        ("Light Gray", "lightgray"),
+        ("White", "white")
+    ],
+    index=0,
+    format_func=lambda x: x[0],
+    help="Select the font color for the plot text elements."
+)
+# Store only the color value in session state
+st.session_state.dm_font_color = st.session_state.dm_font_color[1]
+# Add dropdown for font family
+st.session_state.dm_font_family = st.selectbox(
+    "Select Font Family",
+    options=[
+        ("Arial", "Arial"),
+        ("Courier New", "Courier New"),
+        ("Georgia", "Georgia"),
+        ("Times New Roman", "Times New Roman"),
+        ("Verdana", "Verdana"),
+    ],
+    index=0,
+    format_func=lambda x: x[0],
+    help="Select the font family for the plot text elements."
+)
+# Store only the font family value in session state
+st.session_state.dm_font_family = st.session_state.dm_font_family[1]
 
 # Spectra DataFrame
 _spectra_df = spectra_df.set_index('filename')
@@ -208,7 +250,7 @@ def plot_reduced_data(reduced_data, selected_spectra, display_filename, n_compon
         plot_df['hover'] = plot_df['Filename'] + "<br>" + coloring_col + ": " + plot_df[coloring_col].astype(str)
     else:
         plot_df['hover'] = plot_df['Filename']
-        coloring_col = None  # plotly express will handle this case
+        coloring_col = None
 
     # Choose Plotly Express for legend + color handling
     if n_components == 2:
@@ -236,7 +278,28 @@ def plot_reduced_data(reduced_data, selected_spectra, display_filename, n_compon
         )
 
     fig.update_traces(marker=dict(size=6 if n_components == 3 else 10))
-    fig.update_layout(template="plotly_white")
+
+    # Global font scaling
+    base_size = 12  # Default base font size
+    font_size_multiplier = st.session_state.get('dm_font_size_multiplier', 1.0)
+    font_color = st.session_state.get('dm_font_color', 'black')
+    font_family = st.session_state.get('dm_font_family', 'Arial')
+    fig.update_layout(
+        template="plotly_white",
+        font=dict(
+            size=base_size * font_size_multiplier,
+            color=font_color,
+            family=font_family
+        ),
+        legend=dict(
+            font=dict(
+                size=base_size * font_size_multiplier * 0.9,
+                color=font_color,
+                family=font_family
+            )
+        ),
+        # title=dict(font=dict(size=base_size * font_size_multiplier * 1.2, color=font_color, family=font_family))
+    )
 
     st.plotly_chart(fig, use_container_width=True, height=800)
 
