@@ -23,7 +23,7 @@ custom_css()
 # Init logging
 logging.basicConfig(level=logging.INFO)
 
-def basic_dendrogram(spectrum_df=None, disabled=False, display=True):
+def basic_dendrogram(spectrum_df=None, disabled=False, display=True, add_opts=False):
     """
     This function generates a basic dendrogram for the protein heatmap page. 
     """
@@ -44,7 +44,8 @@ def basic_dendrogram(spectrum_df=None, disabled=False, display=True):
         query_spectra_numpy_data = query_spectra_numpy_data.take(indices, axis=0)
 
     # Check if options have been initialized, if so skip
-    if 'phm_coloring_threshold' not in st.session_state:
+    # if 'phm_coloring_threshold' not in st.session_state:
+    if add_opts:
         st.slider("Coloring Threshold", min_value=0.0, max_value=1.0, value=0.7, step=0.01, key="phm_coloring_threshold")
         clustering_options = ["average", "single", "complete", "weighted"]
         if st.session_state['distance_measure'] == "euclidean":
@@ -617,7 +618,7 @@ check_preconditions()
 all_clusters_dict = None
 
 with st.popover(label='Reference protein dendrogram clusters'):
-    all_clusters_dict, dendro, dendro_ordering = basic_dendrogram()
+    all_clusters_dict, dendro, dendro_ordering = basic_dendrogram(add_opts=True)
 
 # Use "heatmap_binned_spectra" because query/database spectra may be binned to a different size
 draw_protein_heatmap(st.session_state['heatmap_binned_spectra'],

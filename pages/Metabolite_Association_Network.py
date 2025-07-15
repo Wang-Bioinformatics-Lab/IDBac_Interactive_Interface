@@ -344,36 +344,36 @@ def generate_network(cluster_dict:dict=None, height=1000, width=600)->Tuple[Dict
             if warning_flag_set:
                 st.warning("More than 8 communities detected. Some shapes will be reused.")
                 
-    if st.session_state.get("sma_node_coloring") == "Spectral Similarity" or \
-        st.session_state.get("sma_node_shapes") == "Spectral Similarity":
+    if st.session_state.get("sma_node_coloring") == "Protein Dendrogram Clusters" or \
+        st.session_state.get("sma_node_shapes") == "Protein Dendrogram Clusters":
             communities = cluster_dict
             color_warning_flag_set = False
             warning_flag_set = False
             
-            if st.session_state.get("sma_node_coloring") == "Spectral Similarity":
+            if st.session_state.get("sma_node_coloring") == "Protein Dendrogram Clusters":
                 node_color_map = {}
                 
-            if st.session_state.get("sma_node_shapes") == "Spectral Similarity":
+            if st.session_state.get("sma_node_shapes") == "Protein Dendrogram Clusters":
                 node_shape_map = {}
                 
             # Assign color/shape based on community
             for node, data in communities.items():
                 c_id = data['color']
-                if st.session_state.get("sma_node_coloring") == "Spectral Similarity":
+                if st.session_state.get("sma_node_coloring") == "Protein Dendrogram Clusters":
                     if c_id != 0:
                         node_color_map[node] = colors.to_hex(cmap(c_id))
                     else:
                         node_color_map[node] = "#ffffff"
                         color_warning_flag_set = True
-                if st.session_state.get("sma_node_shapes") == "Spectral Similarity":
+                if st.session_state.get("sma_node_shapes") == "Protein Dendrogram Clusters":
                     shape, warn = shape_map.get_shape(c_id)
                     node_shape_map[node] = shape
                     if warn:
                         warning_flag_set = True
                         
-            if st.session_state.get("sma_node_coloring") == "Spectral Similarity":
+            if st.session_state.get("sma_node_coloring") == "Protein Dendrogram Clusters":
                 nx.set_node_attributes(nx_G, node_color_map, 'color')
-            if st.session_state.get("sma_node_shapes") == "Spectral Similarity":
+            if st.session_state.get("sma_node_shapes") == "Protein Dendrogram Clusters":
                 nx.set_node_attributes(nx_G, node_shape_map, 'shape')
                 if warning_flag_set:
                     st.warning("More than 8 clusters detected. Some shapes will be reused.")
@@ -652,16 +652,16 @@ with st.expander("Metabolite Association Network Options", expanded=True):
             len(st.session_state['spectra_df']) == 0:
                 options = ['No']
                 disabled = True
-        st.selectbox("Incorporate Spectral Similarity into Node Layout", options, key="sma_spectral_similarity_layout", disabled=disabled)
+        st.selectbox("Incorporate Protein Spectral Similarity into Node Layout", options, key="sma_spectral_similarity_layout", disabled=disabled)
 
     #### Network Coloring Option 
-    st.selectbox("Node Coloring", ["Protein/Small Molecule", "Network Community Detection", "Spectral Similarity"], key="sma_node_coloring")
+    st.selectbox("Node Coloring", ["Protein/Small Molecule", "Network Community Detection", "Protein Dendrogram Clusters"], key="sma_node_coloring")
     st.selectbox("Node Color Map", ['tab10', 'tab20', 'tab20b','tab20c',
                                     'Pastel1', 'Pastel2', 'Paired', 
                                     'Accent', 'Dark2', 'Set1', 'Set2', 'Set3'], 
                                     key="sma_node_color_map", help='See available color maps: \
                                     https://matplotlib.org/stable/users/explain/colors/colormaps.html#qualitative')
-    st.selectbox("Node Shapes", ["Circular","Protein/Small Molecule", "Network Community Detection", "Spectral Similarity"], key="sma_node_shapes")
+    st.selectbox("Node Shapes", ["Circular","Protein/Small Molecule", "Network Community Detection", "Protein Dendrogram Clusters"], key="sma_node_shapes")
 
     #### Network Community Detection Options
     # Options for Network Community Detection Node Properties

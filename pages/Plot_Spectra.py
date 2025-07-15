@@ -356,7 +356,7 @@ def draw_mirror_plot(all_spectra_df):
     if st.session_state['mirror_spectra_two'] != 'None':
         peaks_b = get_peaks(all_spectra_df, st.session_state['mirror_spectra_two'], st.session_state["task_id"])
 
-        if True:   # Cosine for debugging
+        if False:   # Cosine for debugging
             # Create dictionaries from the peaks
             peaks_a_dict = {peak[0]: peak[1] for peak in peaks_a}
             peaks_b_dict = {peak[0]: peak[1] for peak in peaks_b}
@@ -383,20 +383,21 @@ def draw_mirror_plot(all_spectra_df):
     stick_plot(peaks_a, peaks_b, title=plot_title)
 
     # Print the number of matched peaks and the total number of peaks
-    if peaks_b is not None:
-        peaks_a_mz = set([peak[0] for peak in peaks_a])
-        peaks_b_mz = set([peak[0] for peak in peaks_b])
-        # Remove peaks lower than 3k # DEBUG
-        peaks_a_mz = {mz for mz in peaks_a_mz if mz >= 3000}
-        peaks_b_mz = {mz for mz in peaks_b_mz if mz >= 3000}
+    if False:
+        if peaks_b is not None:
+            peaks_a_mz = set([peak[0] for peak in peaks_a])
+            peaks_b_mz = set([peak[0] for peak in peaks_b])
+            # Remove peaks lower than 3k # DEBUG
+            peaks_a_mz = {mz for mz in peaks_a_mz if mz >= 3000}
+            peaks_b_mz = {mz for mz in peaks_b_mz if mz >= 3000}
 
-        intersection = peaks_a_mz.intersection(peaks_b_mz)
-        st.write(f"Matched Peaks: {len(intersection)}")
-        st.write(f"Total Peaks in Spectra One: {len(peaks_a_mz)}")
-        st.write(f"Total Peaks in Spectra Two: {len(peaks_b_mz)}")
-        st.write(f"Unique m/z's Peaks in Both Spectra: {len(set(peaks_a_mz).union(set(peaks_b_mz)))}")
-    else:
-        st.write(f"Total Peaks in Spectra One: {len(peaks_a)}")
+            intersection = peaks_a_mz.intersection(peaks_b_mz)
+            st.write(f"Matched Peaks: {len(intersection)}")
+            st.write(f"Total Peaks in Spectra One: {len(peaks_a_mz)}")
+            st.write(f"Total Peaks in Spectra Two: {len(peaks_b_mz)}")
+            st.write(f"Unique m/z's Peaks in Both Spectra: {len(set(peaks_a_mz).union(set(peaks_b_mz)))}")
+        else:
+            st.write(f"Total Peaks in Spectra One: {len(peaks_a)}")
     
 if st.session_state.get('spectra_df') is not None and \
     len(st.session_state['spectra_df']) > 0:
