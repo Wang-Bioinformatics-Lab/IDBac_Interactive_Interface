@@ -30,6 +30,7 @@ html('<script async defer data-website-id="4611e28d-c0ff-469d-a2f9-a0b54c0c8ee0"
 custom_css()
 
 DEFAULT_TASK_ID = "f3420fc3e000443a88eed1e20ff22378"
+# DEFAULT_TASK_ID = "01b20c3c5be840d9af4afb34f83ccbb3"    # DEBUGGING PCA FONT SIZES
 
 # Alert banner
 # st.warning(
@@ -1125,7 +1126,19 @@ dendro, linkage_matrix, labels = create_dendrogram(     numpy_array,
                                                         show_annotations=st.session_state["show_annotations"]
                                                     )
 if dendro is not None:
-    st.plotly_chart(dendro, use_container_width=True)
+    # DEBUG
+    # Save the dendrogram to a 400 DPI PNG file
+    # plotly.io.write_image(dendro, "dendrogram.png", scale=2, width=1200, height=800, format="png")
+
+    config = {
+        'toImageButtonOptions': {
+        'format': 'png', # one of png, svg, jpeg, webp
+        'filename': 'IDBac_Protein_Dendrogram',
+        'scale':5 # Multiply title/legend/axis/canvas sizes by this factor
+        }
+    }
+
+    st.plotly_chart(dendro, use_container_width=True, config=config)
     # Display number of strains
     st.write(f"Number of Strains: {len(labels)}")
     # Add option to download as svg

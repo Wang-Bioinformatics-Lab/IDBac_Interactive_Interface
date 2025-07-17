@@ -301,7 +301,15 @@ def plot_reduced_data(reduced_data, selected_spectra, display_filename, n_compon
         # title=dict(font=dict(size=base_size * font_size_multiplier * 1.2, color=font_color, family=font_family))
     )
 
-    st.plotly_chart(fig, use_container_width=True, height=800)
+    config = {
+        'toImageButtonOptions': {
+        'format': 'png', # one of png, svg, jpeg, webp
+        'filename': 'IDBac_Dimensionality_Reduction_Protein',
+        'scale':5 # Multiply title/legend/axis/canvas sizes by this factor
+        }
+    }
+
+    st.plotly_chart(fig, use_container_width=True, height=800, config=config)
 
 # Apply relevant clustering method
 if st.session_state.dm_method == "PCA":
