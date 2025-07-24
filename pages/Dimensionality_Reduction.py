@@ -207,6 +207,23 @@ st.session_state.dm_font_family = st.selectbox(
 )
 # Store only the font family value in session state
 st.session_state.dm_font_family = st.session_state.dm_font_family[1]
+# Dropdown for gridline color
+st.session_state.dm_gridline_color = st.selectbox(
+    "Select Gridline Color",
+    options=[
+        ("Black", "black"),
+        ("Dark Slate Gray", "darkslategray"),
+        ("Dim Gray", "dimgray"),
+        ("Gray", "gray"),
+        ("Light Gray", "lightgray"),
+        ("White", "white")
+    ],
+    index=0,
+    format_func=lambda x: x[0],
+    help="Select the gridline color for the plot."
+)
+# Store only the color value in session state
+st.session_state.dm_gridline_color = st.session_state.dm_gridline_color[1]
 
 # Spectra DataFrame
 _spectra_df = spectra_df.set_index('filename')
@@ -284,6 +301,7 @@ def plot_reduced_data(reduced_data, selected_spectra, display_filename, n_compon
     font_size_multiplier = st.session_state.get('dm_font_size_multiplier', 1.0)
     font_color = st.session_state.get('dm_font_color', 'black')
     font_family = st.session_state.get('dm_font_family', 'Arial')
+    gridline_color = st.session_state.get('dm_gridline_color', 'black')
     fig.update_layout(
         template="plotly_white",
         font=dict(
@@ -298,6 +316,17 @@ def plot_reduced_data(reduced_data, selected_spectra, display_filename, n_compon
                 family=font_family
             )
         ),
+        xaxis=dict(
+            gridcolor=gridline_color
+        ),
+        yaxis=dict(
+            gridcolor=gridline_color
+        ),
+        scene=dict(
+            xaxis=dict(gridcolor=gridline_color),
+            yaxis=dict(gridcolor=gridline_color),
+            zaxis=dict(gridcolor=gridline_color)
+        ) if hasattr(fig, "update_scenes") or "scene" in fig.layout else {},
         # title=dict(font=dict(size=base_size * font_size_multiplier * 1.2, color=font_color, family=font_family))
     )
 
