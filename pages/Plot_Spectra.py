@@ -34,6 +34,7 @@ DECIMAL_PLACES=0
 st.set_page_config(page_title="IDBac - Plot Spectra", page_icon="assets/idbac_logo_square.png", layout="centered", initial_sidebar_state="auto", menu_items=None)
 custom_css()
 
+@st.cache_data(ttl=60*5, max_entries=20, show_spinner=True,)
 def get_USI(all_spectra_df: pd.DataFrame, filename: str, task:str):
     """
     Get the USI of a given filename.
@@ -122,7 +123,8 @@ def get_peaks_from_USI(usi:str):
         r = requests.get(url, timeout=60)
         retries -= 1
     if r.status_code != 200:
-        raise ValueError("USI not found, you may need to rerun the analysis workflow.")
+        st.error("GNPS2 USI not found, you may need to rerun the analysis workflow.")
+        st.stop()
 
     result_dictionary = r.json()
     peaks = result_dictionary["peaks"]
@@ -178,14 +180,49 @@ def get_peaks(all_spectra_df: pd.DataFrame, filename: str, task:str):
 
     return peaks
 
+def get_raw_peaks(filename: str, task:str):
+    """ Get the raw peaks of a given filename.
+    
+    Parameters:
+    - filename (str): The filename of the spectrum.
+    - task (str): The IDBAc_analysis task number
+    
+    Returns:
+    - peaks (list): The raw peaks of the spectrum.
+    """
+    peaks=None
+    is_db_result = False
+    if filename.startswith("DB Result - "):
+        filename = filename.replace("DB Result - ", "")
+        is_db_result = True
+
+    if is_db_result:
+        st.warning("Raw peaks for database search results are not supported.")
+
+    else:
+        if task.startswith("BETA-") or task.startswith("DEV-"):
+            st.warning("Raw peaks for beta/dev tasks are not supported.")
+
+        # For query jobs, we can get the raw peaks from the USI
+        usi = f"mzspec:GNPS2:TASK-{task.strip('BETA-').strip('DEV-')}-nf_output/raw_merged_for_plotting/{filename}:scan:1"
+        peaks = get_peaks_from_USI(usi)
+
+
+    if peaks:
+        # Normalize to base peak
+        max_intensity = max([peak[1] for peak in peaks])
+        peaks = [[peak[0], peak[1] / max_intensity] for peak in sorted(peaks)]  # This is going to be so big, it may be legitimately better to cast to numpy and back
+
+    return peaks
+
 def bin_peaks(peaks, bin_size):
     
-    outupt_dict = defaultdict(float)
+    output_dict = defaultdict(float)
     for peak in peaks:
         k = int(peak[0] / bin_size)
-        outupt_dict[k] += peak[1]
+        output_dict[k] += peak[1]
 
-    output =  [[k * bin_size, v] for k, v in outupt_dict.items()]
+    output =  [[k * bin_size, v] for k, v in output_dict.items()]
     output = sorted(output, key=lambda x: x[0])
     return output
 
@@ -218,21 +255,47 @@ def get_peaks_from_db_result(database_id:str):
 
     return peaks
 
-def stick_plot(peaks_a, peaks_b=None, title=None):
+def stick_plot(peaks_a, peaks_b=None, raw_peaks_a=None, raw_peaks_b=None, title=None, font_size_multiplier=1.0, gridlines='None'):
     """Create a stick plot for two spectra with the bottom spectra mirrored, if specified.
     
     Parameters:
     - peaks_a (list): The peaks of the first spectrum.
     - peaks_b (list): The peaks of the second spectrum.
+    - raw_peaks_a (list): The raw peaks of the first spectrum (optional).
+    - raw_peaks_b (list): The raw peaks of the second spectrum (optional).
+    - title (str): The title of the plot.
+    - font_size_multiplier (float): A multiplier for the font size of the plot.
+    - gridlines (str): The type of gridlines to display ('None', 'Horizontal', 'Grid').
     """
+    
+    base_font_size = 14 * font_size_multiplier
+    tick_font_size = 12 * font_size_multiplier
+    title_font_size = 18 * font_size_multiplier
+
+    assert gridlines in ['None', 'Horizontal', 'Grid'], "Gridlines must be one of 'None', 'Horizontal', or 'Grid'."
+
     fig = go.Figure(
         layout=dict(
             xaxis=dict(
-                title="m/z"
+                title="m/z",
+                title_font=dict(size=base_font_size, color='black'),
+                tickfont=dict(size=tick_font_size, color='black'),
+                showgrid=(gridlines in ['Grid']),
             ),
             yaxis=dict(
-                title="Normalized Intensity"
+                title="Normalized Intensity",
+                title_font=dict(size=base_font_size, color='black'),
+                tickfont=dict(size=tick_font_size, color='black'),
+                showgrid=(gridlines in ['Grid', 'Horizontal']),
             ),
+            title=dict(
+                text=title if title else "Spectra Plot",
+                font=dict(size=title_font_size, color='black'),
+                x=0.5,  # Center the title
+                xanchor='center'
+            ),
+            plot_bgcolor='white',
+            paper_bgcolor='white',
             # Set width, height
             width=650,
             height=500
@@ -267,7 +330,27 @@ def stick_plot(peaks_a, peaks_b=None, title=None):
                 line=dict(color=color_dict.get(peak[0], 'blue')),
 			name="" # Hide "Trace 0"
             ))
-    
+
+    # Overlay a line plot of the raw spectrum on top of the stick plot
+    if raw_peaks_a is not None:
+        # Plot the raw spectrum for peaks_a
+        fig.add_trace(go.Scatter(
+            x=[peak[0] for peak in raw_peaks_a],
+            y=[peak[1] for peak in raw_peaks_a],
+            mode='lines',
+            line=dict(color='black', width=1),
+            name="Raw Spectrum A"
+        ))
+    if raw_peaks_b is not None:
+        # Plot the raw spectrum for peaks_b
+        fig.add_trace(go.Scatter(
+            x=[peak[0] for peak in raw_peaks_b],
+            y=[-peak[1] for peak in raw_peaks_b],
+            mode='lines',
+            line=dict(color='black', width=1),
+            name="Raw Spectrum B"
+        ))
+
     # Get the current y-axis tick values and tick text
     yaxis = fig.layout.yaxis
     tickvals = yaxis.tickvals
@@ -317,7 +400,6 @@ def stick_plot(peaks_a, peaks_b=None, title=None):
             tickfont=dict(
                           color='black'
                    ),
-            showgrid=True
         ),
         showlegend=False,
         xaxis=dict(visible=True,
@@ -329,8 +411,24 @@ def stick_plot(peaks_a, peaks_b=None, title=None):
         plot_bgcolor='white',
         paper_bgcolor='white',
     )
+    # Apply font size multiplier
+    fig.update_layout(
+        font=dict(
+            size=12 * font_size_multiplier,  # Default font size is 12, adjust as needed
+            color='black'
+        )
+    )
 
-    st.plotly_chart(fig)
+    config = {
+        'toImageButtonOptions': {
+            'format': 'png', # one of png, svg, jpeg, webp
+            'filename': 'IDBac_Protein_Spectra_Plot',
+            'scale':5 # Multiply title/legend/axis/canvas sizes by this factor
+        }
+    }
+
+
+    st.plotly_chart(fig, config=config)
 
 def draw_mirror_plot(all_spectra_df):
     # Add a dropdown allowing for mirror plots:
@@ -342,7 +440,16 @@ def draw_mirror_plot(all_spectra_df):
     st.selectbox("Spectra One", all_options, key='mirror_spectra_one', help="Select the first spectra to be plotted. Database search results are denoted by 'DB Result -'.")
     # Select spectra two
     st.selectbox("Spectra Two", ['None'] + all_options, key='mirror_spectra_two', help="Select the second spectra to be plotted. Database search results are denoted by 'DB Result -'.")
-    # Add a button to generate the mirror plot
+    # Add a checkbox to include the raw spectra in the plot
+    st.checkbox("Include Raw Spectra", key='include_raw_spectra', value=False,
+                help="If checked, the raw spectra will be included in the plot.")
+    # Gridlines (horizontal, horizontal & vertical, or none)
+    st.selectbox("Gridlines", ['None', 'Horizontal', 'Grid'], key='gridlines')
+
+    # Font size multiplier
+    st.slider("Font Size Multiplier", min_value=0.5, max_value=15.0, value=1.0, step=0.1, key='font_size_multiplier',
+              help="Adjust the font size of the plot. This is a multiplier, so a value of 1.0 will use the default font size, while a value of 2.0 will double the font size.")
+    
     
     # For Local Plot
     if st.session_state['mirror_spectra_two'] == 'None':
@@ -380,7 +487,21 @@ def draw_mirror_plot(all_spectra_df):
                 cosine_similarity = np.dot(peaks_a_vector, peaks_b_vector) / (norm_a * norm_b)
 
             st.write(f"Cosine Similarity: {cosine_similarity:.2f}")
-    stick_plot(peaks_a, peaks_b, title=plot_title)
+
+    raw_peaks_a = None
+    raw_peaks_b = None
+    if st.session_state['include_raw_spectra']:
+        raw_peaks_a = get_raw_peaks(st.session_state['mirror_spectra_one'], st.session_state["task_id"])
+        if st.session_state['mirror_spectra_two'] != 'None':
+            raw_peaks_b = get_raw_peaks(st.session_state['mirror_spectra_two'], st.session_state["task_id"])
+
+    stick_plot(peaks_a,
+               peaks_b,
+               raw_peaks_a,
+               raw_peaks_b,
+               title=plot_title,
+               font_size_multiplier=st.session_state['font_size_multiplier'],
+               gridlines=st.session_state['gridlines'])
 
     # Print the number of matched peaks and the total number of peaks
     if False:
