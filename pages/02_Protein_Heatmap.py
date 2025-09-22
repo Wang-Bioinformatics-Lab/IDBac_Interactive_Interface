@@ -23,6 +23,13 @@ custom_css()
 # Init logging
 logging.basicConfig(level=logging.INFO)
 
+st.title("Protein m/z Heatmap")
+st.markdown("""
+    This page allows you to visualize protein MS spectra as a heatmap, facilitating the rapid identification of biomarkers driving protein MS clustering \
+            
+    To get started, select a set of isolates below and click "Apply/Update Filters". Then, adjust the heatmap parameters as needed.
+    """)
+
 def basic_dendrogram(spectrum_df=None, disabled=False, display=True, add_opts=False):
     """
     This function generates a basic dendrogram for the protein heatmap page. 
@@ -195,6 +202,11 @@ def draw_protein_heatmap(all_spectra_df, bin_counts, replicate_counts, bin_size,
     
     
     st.subheader("Build a Protein Heatmap")
+    st.markdown("""
+        Select a set of isolates to build your heatmap based on protein dendrogram clusters or metadata categories. Then, use the arrow to move the selection to the right. You can also directly select individual isolates in the right panel. \
+            
+        After making your selection, click "Apply/Update Filters" to generate the heatmap. \
+    """)
     add_filters_1, add_filters_2, add_filters_3 = st.columns([0.45, 0.10, 0.45])
     # Options
     all_options = all_spectra_df['filename'].values
@@ -287,6 +299,9 @@ def draw_protein_heatmap(all_spectra_df, bin_counts, replicate_counts, bin_size,
 
             
         phm_selected_prot_submitted = st.form_submit_button("Apply/Update Filters")
+
+    # Horizontal line
+    st.markdown(f"---")
         
     if phm_selected_prot_submitted:
         st.session_state['phm_selected_proteins'] = phm_selected_proteins
@@ -313,7 +328,7 @@ def draw_protein_heatmap(all_spectra_df, bin_counts, replicate_counts, bin_size,
         st.rerun()  # Refresh the UI to reflect the updated selection
     #########################
     
-
+    st.subheader("Heatmap Parameters")
     # Add option to filter down by number of replicates
     st.selectbox("Replicate Tolerance Mode", ['ppm', 'm/z'], key="phm_replicate_tolerance_mode")
     if st.session_state["phm_replicate_tolerance_mode"] == "ppm":

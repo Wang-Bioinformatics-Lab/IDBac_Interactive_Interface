@@ -34,6 +34,13 @@ DECIMAL_PLACES=0
 st.set_page_config(page_title="IDBac - Plot Spectra", page_icon="assets/idbac_logo_square.png", layout="centered", initial_sidebar_state="auto", menu_items=None)
 custom_css()
 
+st.title("Spectra Visualization Page")
+st.markdown("""
+    This page allows you to visualize protein MS spectra stick and mirror plots. Additionally, raw spectra can be overlaid on the stick plots for comparison. \
+            
+    To get started, select the spectra you want to visualize, choose whether to include raw spectra, and adjust the plot settings as needed.
+    """)
+
 @st.cache_data(ttl=60*5, max_entries=20, show_spinner=True,)
 def get_USI(all_spectra_df: pd.DataFrame, filename: str, task:str):
     """
@@ -131,7 +138,7 @@ def get_peaks_from_USI(usi:str):
 
     return peaks
 
-def get_peaks(all_spectra_df: pd.DataFrame, filename: str, task:str):
+def get_peaks(all_spectra_df: pd.DataFrame, filename: str, task:str, mass_range: tuple):
     """
     Get the peaks of a given filename.
     
@@ -139,6 +146,7 @@ def get_peaks(all_spectra_df: pd.DataFrame, filename: str, task:str):
     - all_spectra_df (pandas.DataFrame): The dataframe containing all spectra data.
     - filename (str): The filename of the spectrum.
     - task (str): The IDBAc_analysis task number
+    - mass_range (tuple): The mass range for filtering peaks (min_mz, max_mz)
     
     Returns:
     - usi (str): The USI of the spectrum.
@@ -178,14 +186,18 @@ def get_peaks(all_spectra_df: pd.DataFrame, filename: str, task:str):
     max_intensity = max([peak[1] for peak in peaks])
     peaks = [[peak[0], peak[1] / max_intensity] for peak in sorted(peaks)]
 
+    # Filter peaks based on the selected mass range
+    peaks = [[peak[0], peak[1]] for peak in peaks if mass_range[0] <= peak[0] <= mass_range[1]]
+
     return peaks
 
-def get_raw_peaks(filename: str, task:str):
+def get_raw_peaks(filename: str, task:str, mass_range: tuple):
     """ Get the raw peaks of a given filename.
     
     Parameters:
     - filename (str): The filename of the spectrum.
     - task (str): The IDBAc_analysis task number
+    - mass_range (tuple): The mass range for filtering peaks (min_mz, max_mz)
     
     Returns:
     - peaks (list): The raw peaks of the spectrum.
@@ -212,6 +224,9 @@ def get_raw_peaks(filename: str, task:str):
         # Normalize to base peak
         max_intensity = max([peak[1] for peak in peaks])
         peaks = [[peak[0], peak[1] / max_intensity] for peak in sorted(peaks)]  # This is going to be so big, it may be legitimately better to cast to numpy and back
+
+        # Filter peaks based on the selected mass range
+        peaks = [[peak[0], peak[1]] for peak in peaks if mass_range[0] <= peak[0] <= mass_range[1]]
 
     return peaks
 
@@ -432,14 +447,23 @@ def stick_plot(peaks_a, peaks_b=None, raw_peaks_a=None, raw_peaks_b=None, title=
 
 def draw_mirror_plot(all_spectra_df):
     # Add a dropdown allowing for mirror plots:
-    st.header("Plot Spectra")
-
     all_options = format_proteins_as_strings(all_spectra_df)
 
-    # Select spectra one
-    st.selectbox("Spectra One", all_options, key='mirror_spectra_one', help="Select the first spectra to be plotted. Database search results are denoted by 'DB Result -'.")
-    # Select spectra two
-    st.selectbox("Spectra Two", ['None'] + all_options, key='mirror_spectra_two', help="Select the second spectra to be plotted. Database search results are denoted by 'DB Result -'.")
+    # Select spectrum one
+    st.selectbox("Spectrum One", all_options, key='mirror_spectra_one', help="Select the first spectrum to be plotted. Database search results are denoted by 'DB Result -'.")
+    # Select spectrum two
+    st.selectbox("Spectrum Two", ['None'] + all_options, key='mirror_spectra_two', help="Select the second spectrum to be plotted. Database search results are denoted by 'DB Result -'.")
+
+    st.slider(
+        "Select Mass Range (m/z):",
+        min_value=2000,
+        max_value=30000,
+        value=(2000, 30000),
+        step=10,
+        key="mp_mass_range",
+        help="Adjust the mass range for spectra visualization and cosine similarity calculation."
+    )
+
     # Add a checkbox to include the raw spectra in the plot
     st.checkbox("Include Raw Spectra", key='include_raw_spectra', value=False,
                 help="If checked, the raw spectra will be included in the plot.")
@@ -458,42 +482,17 @@ def draw_mirror_plot(all_spectra_df):
         default_title = f"{st.session_state['mirror_spectra_one']} vs {st.session_state['mirror_spectra_two']}"
     plot_title = st.text_input("Set Title:", value=default_title)
 
-    peaks_a = get_peaks(all_spectra_df, st.session_state['mirror_spectra_one'], st.session_state["task_id"])
+    peaks_a = get_peaks(all_spectra_df, st.session_state['mirror_spectra_one'], st.session_state["task_id"], st.session_state["mp_mass_range"])
     peaks_b = None
     if st.session_state['mirror_spectra_two'] != 'None':
-        peaks_b = get_peaks(all_spectra_df, st.session_state['mirror_spectra_two'], st.session_state["task_id"])
-
-        if False:   # Cosine for debugging
-            # Create dictionaries from the peaks
-            peaks_a_dict = {peak[0]: peak[1] for peak in peaks_a}
-            peaks_b_dict = {peak[0]: peak[1] for peak in peaks_b}
-
-            # Get the union of the two sets of m/z values
-            all_mz = set(peaks_a_dict.keys()).union(set(peaks_b_dict.keys()))
-
-            # Create vectors for both sets of peaks, filling with 0 where necessary
-            peaks_a_vector = np.array([peaks_a_dict.get(mz, 0) for mz in all_mz])
-            peaks_b_vector = np.array([peaks_b_dict.get(mz, 0) for mz in all_mz])
-
-            # Calculate the norms
-            norm_a = np.linalg.norm(peaks_a_vector)
-            norm_b = np.linalg.norm(peaks_b_vector)
-
-            # Check if any norm is zero to avoid division by zero
-            if norm_a == 0 or norm_b == 0:
-                cosine_similarity = 0.0
-            else:
-                # Calculate cosine similarity
-                cosine_similarity = np.dot(peaks_a_vector, peaks_b_vector) / (norm_a * norm_b)
-
-            st.write(f"Cosine Similarity: {cosine_similarity:.2f}")
+        peaks_b = get_peaks(all_spectra_df, st.session_state['mirror_spectra_two'], st.session_state["task_id"], st.session_state["mp_mass_range"])
 
     raw_peaks_a = None
     raw_peaks_b = None
     if st.session_state['include_raw_spectra']:
-        raw_peaks_a = get_raw_peaks(st.session_state['mirror_spectra_one'], st.session_state["task_id"])
+        raw_peaks_a = get_raw_peaks(st.session_state['mirror_spectra_one'], st.session_state["task_id"], st.session_state["mp_mass_range"])
         if st.session_state['mirror_spectra_two'] != 'None':
-            raw_peaks_b = get_raw_peaks(st.session_state['mirror_spectra_two'], st.session_state["task_id"])
+            raw_peaks_b = get_raw_peaks(st.session_state['mirror_spectra_two'], st.session_state["task_id"], st.session_state["mp_mass_range"])
 
     stick_plot(peaks_a,
                peaks_b,
@@ -502,6 +501,47 @@ def draw_mirror_plot(all_spectra_df):
                title=plot_title,
                font_size_multiplier=st.session_state['font_size_multiplier'],
                gridlines=st.session_state['gridlines'])
+    
+    if peaks_b is not None:
+        # Create dictionaries from the peaks
+        peaks_a_dict = {peak[0]: peak[1] for peak in peaks_a}
+        peaks_b_dict = {peak[0]: peak[1] for peak in peaks_b}
+
+        # Get the union of the two sets of m/z values
+        all_mz = set(peaks_a_dict.keys()).union(set(peaks_b_dict.keys()))
+
+        # Create vectors for both sets of peaks, filling with 0 where necessary
+        peaks_a_vector = np.array([peaks_a_dict.get(mz, 0) for mz in all_mz])
+        peaks_b_vector = np.array([peaks_b_dict.get(mz, 0) for mz in all_mz])
+
+        # Calculate the norms
+        norm_a = np.linalg.norm(peaks_a_vector)
+        norm_b = np.linalg.norm(peaks_b_vector)
+
+        # Check if any norm is zero to avoid division by zero
+        if norm_a == 0 or norm_b == 0:
+            cosine_similarity = 0.0
+        else:
+            # Calculate cosine similarity
+            cosine_similarity = np.dot(peaks_a_vector, peaks_b_vector) / (norm_a * norm_b)
+
+        # Presence/Absence cosine similarity
+        peaks_a_pa_vector = np.array([1 if peaks_a_dict.get(mz, 0) > 0 else 0 for mz in all_mz])
+        peaks_b_pa_vector = np.array([1 if peaks_b_dict.get(mz, 0) > 0 else 0 for mz in all_mz])
+        norm_a_pa = np.linalg.norm(peaks_a_pa_vector)
+        norm_b_pa = np.linalg.norm(peaks_b_pa_vector)
+
+        if norm_a_pa == 0 or norm_b_pa == 0:
+            cosine_similarity_pa = 0.0
+        else:
+            cosine_similarity_pa = np.dot(peaks_a_pa_vector, peaks_b_pa_vector) / (norm_a_pa * norm_b_pa)
+
+        st.write(f"""
+                    Cosine **Similarity**: {cosine_similarity:.2f} \n
+                    Presence/Absence Cosine **Similarity**: {cosine_similarity_pa:.2f} \n
+                    Cosine **Distance**: {1 - cosine_similarity:.2f} \n
+                    Presence/Absence Cosine **Distance**: {1 - cosine_similarity_pa:.2f} \n
+                    """)
 
     # Print the number of matched peaks and the total number of peaks
     if False:

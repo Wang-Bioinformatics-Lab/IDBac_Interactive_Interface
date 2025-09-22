@@ -20,8 +20,6 @@ import matplotlib
 import matplotlib.pyplot as plt
 from urllib.parse import quote
 from urllib.parse import urlencode
-from pages.Plot_Spectra import get_peaks, get_peaks_from_db_result
-
 
 #####
 # A note abote streamlit session states:
@@ -40,7 +38,17 @@ st.set_page_config(
 custom_css()
 
 st.title("Deposition QC")
-st.write("This page is for performing quality control on IDBac Deposition Dry Runs. Switch between pages of the table via the sidebar.")
+st.markdown("""
+    This page is for performing quality control on IDBac Deposition Dry Runs. If you are not looking to perform quality control for IDBac Knowledgebase depositions, this page is not-functional.\
+        
+    Below, pending database contributions are shown in a table with their associated metadata. Spectra are shown as they will be processed by IDBac. They should be checked for the following:
+    * Minimal noise
+    * Minimal baseline gain (high intensity at lower m/z values)
+    * A significant number of peaks (at minimum 5-7 peaks) 
+    \
+
+    You can view additional spectra by changing the page number on the side bar to the left.
+    """)
 
 # get dqc_task_id from URL
 url_task_id = st.query_params.get("task_id", None)
@@ -50,13 +58,13 @@ if 'dqc_task_id' not in st.session_state:
     st.session_state['dqc_task_id'] = url_task_id
 
 # Input box that can override the value
-dqc_task_id_input = st.text_input("Task ID", value=st.session_state['dqc_task_id'] or "")
+dqc_task_id_input = st.text_input("GNPS2 Task ID", value=st.session_state['dqc_task_id'] or "", help="Enter your GNPS2 Task ID here to select a different task. If you're coming from GNPS2, this is automatically populated.")
 
 # Update session state if user types something new
 if dqc_task_id_input != st.session_state['dqc_task_id']:
     st.session_state['dqc_task_id'] = dqc_task_id_input
 # Show the task ID
-st.write(f"Task ID: {st.session_state['dqc_task_id']}")
+st.write(f"Task Loaded: {st.session_state['dqc_task_id']}")
 
 if st.session_state.get('dqc_task_id') is None:
     st.warning("Please enter a task ID to view the metadata.")

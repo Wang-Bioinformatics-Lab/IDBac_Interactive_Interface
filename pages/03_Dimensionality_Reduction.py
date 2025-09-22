@@ -11,9 +11,6 @@ import plotly.graph_objects as go
 import plotly.express as px
 import plotly.colors as pc
 
-from pages.Plot_Spectra import get_peaks, get_peaks_from_db_result
-
-
 #####
 # A note abote streamlit session states:
 # All session states related to this page begin with "dm_" to reduce the 
@@ -32,6 +29,11 @@ custom_css()
 
 
 st.title("Dimensionality Reduction")
+st.markdown("""
+    This page allows you to visualize protein MS spectra in a 3D space using dimensionality reduction techniques such as PCA and t-SNE. Additionally, data points can be colored based on metadata attributes to facilitate pattern recognition and clustering analysis. \
+        
+    To get started, select the spectra you want to include in the analysis, choose a dimensionality reduction method, and adjust the parameters as needed.
+    """)
 dm_n_components = 3
 
 # Get List of Options

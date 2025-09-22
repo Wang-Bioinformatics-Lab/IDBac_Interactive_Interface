@@ -605,10 +605,29 @@ with col2:
 with col3:
     st.write(' ')
 
-st.session_state["task_id"] = st.text_input('GNPS2 Task ID', st.session_state["task_id"])
+# Welcome message
+st.markdown("""
+            Welcome to the IDBac Interactive Interface! Here, you can analyze MALDI-TOF MS data to organize, identify, and visualize bacterial based on protein MS signals;
+            associate clustering and biomarker behavior with metadata (e.g., culture conditions); and explore relationships between taxonomy and specialized metabolite production.\
+            
+            Please see our documenatation [here](https://wang-bioinformatics-lab.github.io/GNPS2_Documentation/idbacanalysisplatform/) for more information on how to use this tool.
+            """)
+
+if st.session_state.get("task_id", '') == DEFAULT_TASK_ID:
+    st.info("""
+    ⚠️ You're currently viewing the demo task to explore the features of this dashboard. ⚠️ \
+    
+    Looking to analyze your own data? [Sign up for an account.](https://wang-bioinformatics-lab.github.io/GNPS2_Documentation/idbac-request-an-account/)
+    """)
+
+st.session_state["task_id"] = st.text_input(
+    'GNPS2 Task ID',
+    st.session_state["task_id"],
+    help="Enter your GNPS2 Task ID here to select a different task. If you're coming from GNPS2, this is automatically populated."
+)
 if st.session_state["task_id"] == '':
     st.error("Please input a valid GNPS2 Task ID")
-st.write(st.session_state["task_id"])
+st.write("Task Loaded:", st.session_state["task_id"])
 
 task_id = st.session_state["task_id"]
 base_url = None
@@ -838,8 +857,8 @@ with st.expander("Clustering Settings", expanded=True):
     st.session_state["clustering_method"] = st.selectbox("Clustering Method", clustering_options, index=0)
     # Add coloring threshold slider
     st.slider("Color code clusters based on a dendrogram cut-height", 0.0, 1.0, step=0.05, key='coloring_threshold',
-            help="Ex: If this value is set to 0.7, all clusters with parent node heights at or below 0.7 will be highlighted\
-                  with different colors. Any branches with a parent node above this threshold will be blue.")
+            help="All branches that split below the specified height will have the same color. Ex: If this value is set to 0.7, all branches\
+                  splitting below 0.7 will have the same color. Above 0.7, all branches will be blue.")
 
 with st.expander("Metadata", expanded=True):
     st.checkbox("Use GenBank IDs to Enrich Metadata", key="enrich_with_genbank", value=False,
@@ -1095,7 +1114,6 @@ def get_taxa_coloring_file(labels, metadata, all_spectra_df):
         data_lines = []
 
         for label in labels:
-            print("label", label, flush=True)
             color = taxa_assignments.get(label)
             if color is not None:
                 data_lines.append(f"{label}\tlabel_background\t{str(color).replace('rgb', 'rgba').replace(')', ', 1.0)')}")  
@@ -1175,7 +1193,5 @@ st.markdown("""
             #### Visualization
             * A flat line between strains along the y-axis of the dendrogram at '0' represents 
             identical spectra between those strains.
-            * Cluster Color: All descendant links below an arbitrary cluster node will be colored the same color as that cluster node if that node is the 
-            first one below the cut threshold. Links between clustering nodes greater than the cut threshold are colored blue. See this 
-            [link](https://docs.scipy.org/doc/scipy/reference/generated/scipy.cluster.hierarchy.dendrogram.html) for more details.
+            * Cluster Color: All branches below the specified height will have the same color.
             """)

@@ -409,6 +409,9 @@ def generate_network(cluster_dict:dict=None, height=1000, width=600)->Tuple[Dict
                                  "Circular": {},
                                  "Spectral": {},
                                  "Kamada-Kawai": {}}
+
+        layout_scale = st.session_state.get("sma_layout_scale", 1.0)
+
         if st.session_state['sma_spectral_similarity_layout'] == 'Yes':
             # Add edges between protein nodes based on clustering of proteins.
             added_edges = []
@@ -433,7 +436,10 @@ def generate_network(cluster_dict:dict=None, height=1000, width=600)->Tuple[Dict
                                 added_edges.append((node1, node2))
         
         # Apply layout
-        pos = layout_fn_mapping[st.session_state.get("sma_network_layout")](nx_G, **layout_default_params[st.session_state.get("sma_network_layout")])
+        layout_fn = layout_fn_mapping[st.session_state.get("sma_network_layout")]
+        layout_params = layout_default_params[st.session_state.get("sma_network_layout")]
+        layout_params['scale'] = layout_scale  # Update scale parameter
+        pos = layout_fn(nx_G, **layout_params)
         
         if st.session_state['sma_spectral_similarity_layout'] == 'Yes':
             # Remove edges between protein nodes, we don't want them displayed
@@ -617,6 +623,15 @@ if st.session_state["metadata_df"] is None:
     st.error("Please upload a metadata file first.")
     st.stop()
 
+st.title("Metabolite Association Network Visualization QC")
+st.markdown("""
+    This page allows you to visualize the associations between proteins and small molecules based on MS data. One analysis approach is to assess patterns of specialized metabolite production as a function of phylogenetic relatedness, 
+    which can provide a means to discriminate between strains at the subspecies level ([Jensen, 2010](https://doi.org/10.1007/s10295-009-0683-z)). \
+            
+    To get started: set a relative intensity and replicate frequency threshold, and select a network layout. You can also choose to color nodes by protein/small molecule type, network community detection, or protein dendrogram clusters.
+    The network is downloadable as a .graphml file for easy import into Cytoscape or other network visualization software. 
+    """)
+
 with st.expander("Small Molecule Filters", expanded=True):
     # Add a slider for the relative intensity threshold
     st.slider("Relative Intensity Threshold", min_value=0.00, max_value=1.0, value=0.15, step=0.01, 
@@ -652,7 +667,7 @@ with st.expander("Metabolite Association Network Options", expanded=True):
             len(st.session_state['spectra_df']) == 0:
                 options = ['No']
                 disabled = True
-        st.selectbox("Incorporate Protein Spectral Similarity into Node Layout", options, key="sma_spectral_similarity_layout", disabled=disabled)
+        st.selectbox("Incorporate Protein Spectral Similarity into Node Layout", options, key="sma_spectral_similarity_layout", disabled=disabled, help="Proteins with similar MS profiles will be placed closer together in the network layout.")
 
     #### Network Coloring Option 
     st.selectbox("Node Coloring", ["Protein/Small Molecule", "Network Community Detection", "Protein Dendrogram Clusters"], key="sma_node_coloring")
@@ -662,6 +677,10 @@ with st.expander("Metabolite Association Network Options", expanded=True):
                                     key="sma_node_color_map", help='See available color maps: \
                                     https://matplotlib.org/stable/users/explain/colors/colormaps.html#qualitative')
     st.selectbox("Node Shapes", ["Circular","Protein/Small Molecule", "Network Community Detection", "Protein Dendrogram Clusters"], key="sma_node_shapes")
+
+    #### Scale
+    # Add a slider to adjust the layout scale
+    st.slider("Adjust Layout Scale", min_value=0.5, max_value=5.0, value=1.0, step=0.1, key="sma_layout_scale")
 
     #### Network Community Detection Options
     # Options for Network Community Detection Node Properties
@@ -749,8 +768,6 @@ with st.expander("Visualize Small Molecule Data", expanded=True):
 small_molecule_dict = None
 nx_G = None
 small_molecule_dict, nx_G = generate_network(cluster_dict)
-
-print("small_molecule_dict", small_molecule_dict.keys(), flush=True)
 
 if nx_G is not None:
     # Write the graphml file to bytesIO
