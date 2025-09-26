@@ -39,11 +39,11 @@ custom_css()
 
 st.title("Deposition QC")
 st.markdown("""
-    This page is for performing quality control on IDBac Deposition Dry Runs. If you are not looking to perform quality control for IDBac Knowledgebase depositions, this page is not-functional.\
+    This page is for performing quality control on IDBac Deposition Dry Runs. If you are not looking to perform quality control for IDBac Knowledgebase depositions, this page is non-functional.\
         
     Below, pending database contributions are shown in a table with their associated metadata. Spectra are shown as they will be processed by IDBac. They should be checked for the following:
     * Minimal noise
-    * Minimal baseline gain (high intensity at lower m/z values)
+    * Minimal baseline slope (high intensity at lower m/z values)
     * A significant number of peaks (at minimum 5-7 peaks) 
     \
 
