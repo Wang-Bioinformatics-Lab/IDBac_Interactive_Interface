@@ -461,7 +461,7 @@ def draw_mirror_plot(all_spectra_df):
         value=(2000, 30000),
         step=10,
         key="mp_mass_range",
-        help="Adjust the mass range for spectra visualization and cosine similarity calculation."
+        help="Adjust the mass range for spectra visualization and cosine calculation."
     )
 
     # Add a checkbox to include the raw spectra in the plot
@@ -537,11 +537,17 @@ def draw_mirror_plot(all_spectra_df):
             cosine_similarity_pa = np.dot(peaks_a_pa_vector, peaks_b_pa_vector) / (norm_a_pa * norm_b_pa)
 
         st.write(f"""
-                    Cosine **Similarity**: {cosine_similarity:.2f} \n
-                    Presence/Absence Cosine **Similarity**: {cosine_similarity_pa:.2f} \n
                     Cosine **Distance**: {1 - cosine_similarity:.2f} \n
                     Presence/Absence Cosine **Distance**: {1 - cosine_similarity_pa:.2f} \n
+                    Cosine **Similarity**: {cosine_similarity:.2f} \n
+                    Presence/Absence Cosine **Similarity**: {cosine_similarity_pa:.2f} \n
                     """)
+        
+        st.write("""
+                 Note: Cosine **distance** ranges from 0 to 1, where 0 indicates identical spectra and 1 indicates no similarity. \
+                 Cosine **similarity** ranges from 0 to 1, where 1 indicates identical spectra and 0 indicates no similarity. \
+                 Cosine **distance** more closely reflects dendrogram distances, while cosine **similarity** is more commonly used in database search settings. \
+                 """)
 
     # Print the number of matched peaks and the total number of peaks
     if False:
