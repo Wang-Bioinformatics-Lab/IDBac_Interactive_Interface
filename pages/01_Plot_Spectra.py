@@ -58,8 +58,8 @@ def get_USI(all_spectra_df: pd.DataFrame, filename: str, task:str):
         return None
     
     db_result = False
-    if filename.startswith("DB Result - "):
-        filename = filename.replace("DB Result - ", "")
+    if filename.startswith("KB Result - "):
+        filename = filename.replace("KB Result - ", "")
         db_result = True
         
     # Attempt to mitigate issues due to duplicate filenames
@@ -67,7 +67,7 @@ def get_USI(all_spectra_df: pd.DataFrame, filename: str, task:str):
 
     if db_result:
         # If it's a database search result, use the database_id to get the USI
-        raise ValueError("Database search results are not supported for this function.")
+        raise ValueError("Knowledgebase search results are not supported for this function.")
         output_USI = build_database_result_USI(row["database_id"].iloc[0], row["filename"].iloc[0])
     else:
         # If it's a query, use the query job to get the USI
@@ -155,8 +155,8 @@ def get_peaks(all_spectra_df: pd.DataFrame, filename: str, task:str, mass_range:
         return None
     
     db_result = False
-    if filename.startswith("DB Result - "):
-        filename = filename.replace("DB Result - ", "")
+    if filename.startswith("KB Result - "):
+        filename = filename.replace("KB Result - ", "")
         db_result = True
         
     # Attempt to mitigate issues due to duplicate filenames
@@ -204,12 +204,12 @@ def get_raw_peaks(filename: str, task:str, mass_range: tuple):
     """
     peaks=None
     is_db_result = False
-    if filename.startswith("DB Result - "):
-        filename = filename.replace("DB Result - ", "")
+    if filename.startswith("KB Result - "):
+        filename = filename.replace("KB Result - ", "")
         is_db_result = True
 
     if is_db_result:
-        st.warning("Raw peaks for database search results are not supported.")
+        st.warning("Raw peaks for knowledgebase search results are not supported.")
 
     else:
         if task.startswith("BETA-") or task.startswith("DEV-"):
@@ -450,9 +450,9 @@ def draw_mirror_plot(all_spectra_df):
     all_options = format_proteins_as_strings(all_spectra_df)
 
     # Select spectrum one
-    st.selectbox("Spectrum One", all_options, key='mirror_spectra_one', help="Select the first spectrum to be plotted. Database search results are denoted by 'DB Result -'.")
+    st.selectbox("Spectrum One", all_options, key='mirror_spectra_one', help="Select the first spectrum to be plotted. Knowledgebase search results are denoted by 'KB Result -'.")
     # Select spectrum two
-    st.selectbox("Spectrum Two", ['None'] + all_options, key='mirror_spectra_two', help="Select the second spectrum to be plotted. Database search results are denoted by 'DB Result -'.")
+    st.selectbox("Spectrum Two", ['None'] + all_options, key='mirror_spectra_two', help="Select the second spectrum to be plotted. Knowledgebase search results are denoted by 'KB Result -'.")
 
     st.slider(
         "Select Mass Range (m/z):",

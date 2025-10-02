@@ -20,8 +20,8 @@ def draw_protein_heatmap(all_spectra_df, bin_size):
                               help="The minimum relative intensity value to display.")
     
     
-    # Remove "DB Result - " from the selected proteins
-    selected_proteins = [x.replace("DB Result - ", "") for x in selected_proteins]
+    # Remove "KB Result - " from the selected proteins
+    selected_proteins = [x.replace("KB Result - ", "") for x in selected_proteins]
        
     # Set index to filename
     all_spectra_df = all_spectra_df.set_index("filename")

@@ -29,13 +29,12 @@ st.set_page_config(page_title="IDBac - Dendrogram", page_icon="assets/idbac_logo
 html('<script async defer data-website-id="4611e28d-c0ff-469d-a2f9-a0b54c0c8ee0" src="https://analytics.gnps2.org/umami.js"></script>', width=0, height=0)
 custom_css()
 
-DEFAULT_TASK_ID = "ecf852538a1b49bf95830c43c125af68"
-# DEFAULT_TASK_ID = "01b20c3c5be840d9af4afb34f83ccbb3"    # DEBUGGING PCA FONT SIZES
+DEFAULT_TASK_ID = "dd792e0180cb4ef2950077a8ba485790"
 # Microbiome Presence: 634aa977f11148da8bada35f1ef2ff06
 
 # Alert banner
 # st.warning(
-#     "⚠️⚠️ **Maintenance Status Update**: The database is currently under maintenance and dependent results may change. "
+#     "⚠️⚠️ **Maintenance Status Update**: The knowledgebase is currently under maintenance and dependent results may change. "
 #     "Workflows executed during this time will be **permanently** affected, even after maintenance is complete. "
 #     "Anticipated completion **has been extended to** to 5/12/2025 at 12:00 Noon PST. If you have any questions, please contact us at nkrull@uic.edu."
 # )
@@ -43,13 +42,13 @@ DEFAULT_TASK_ID = "ecf852538a1b49bf95830c43c125af68"
 class np_data_wrapper():
     def __init__(self, data_np, spectrum_data_df, db_distance_dict):
         """
-        A wrapper around a numpy array that contains metadata and database distance information.
+        A wrapper around a numpy array that contains metadata and knowledgebase distance information.
         
         Parameters:
         - data_np (numpy.ndarray): The input data as a numpy array where each row represents binary binned peaks.
         - spectrum_data_df (pandas.DataFrame): The dataframe containing columns ['filename','db_search_result']. 
             'filename' denotes the name of the id of the spectrum. 'db_search_result' denotes whether the spectrum is a database search result.
-        - db_distance_dict (dict): The dictionary containing the database distance information.
+        - db_distance_dict (dict): The dictionary containing the knowledgebase distance information.
         """
         self.data_np = data_np
         self.spectrum_data_df = spectrum_data_df
@@ -97,7 +96,7 @@ def get_dist_function_wrapper(distfun):
             begins_at_zero = non_db_search_result_indices[0] == 0
             is_contiguous = non_db_search_result_indices == list(range(non_db_search_result_indices[0], non_db_search_result_indices[-1] + 1))
             if not begins_at_zero or not is_contiguous:
-                raise ValueError("To compute distances, database search results should be at the bottom of the dataframe")
+                raise ValueError("To compute distances, knowledgebase search results should be at the bottom of the dataframe")
         
         num_inputs = len(non_db_search_result_indices)
         
@@ -250,11 +249,11 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict,
     # Add metadata for db search results
     if db_label_column != "No Database Search Results" and sum(all_spectra_df["db_search_result"]) > 0:
         # all_spectra_df.loc[all_spectra_df["db_search_result"] == True, db_metadata_column].fillna("No Metadata", inplace=True)
-        # all_spectra_df.loc[all_spectra_df["db_search_result"] == True, "label"] = 'DB Result - ' + all_spectra_df.loc[all_spectra_df["db_search_result"] == True][db_label_column].astype(str)
+        # all_spectra_df.loc[all_spectra_df["db_search_result"] == True, "label"] = 'KB Result - ' + all_spectra_df.loc[all_spectra_df["db_search_result"] == True][db_label_column].astype(str)
         if db_search_columns != 'None':
-            all_spectra_df.loc[all_spectra_df["db_search_result"] == True, "label"] = 'DB Result - ' + all_spectra_df.loc[all_spectra_df["db_search_result"] == True][db_search_columns].astype(str) + ' - ' + all_spectra_df.loc[all_spectra_df["db_search_result"] == True]['db_strain_name'].astype(str)
+            all_spectra_df.loc[all_spectra_df["db_search_result"] == True, "label"] = 'KB Result - ' + all_spectra_df.loc[all_spectra_df["db_search_result"] == True][db_search_columns].astype(str) + ' - ' + all_spectra_df.loc[all_spectra_df["db_search_result"] == True]['db_strain_name'].astype(str)
         else:
-            all_spectra_df.loc[all_spectra_df["db_search_result"] == True, "label"] = 'DB Result - ' + all_spectra_df.loc[all_spectra_df["db_search_result"] == True]['db_strain_name'].astype(str)
+            all_spectra_df.loc[all_spectra_df["db_search_result"] == True, "label"] = 'KB Result - ' + all_spectra_df.loc[all_spectra_df["db_search_result"] == True]['db_strain_name'].astype(str)
         
     # all_spectra_df["label"] = all_spectra_df["label"].astype(str) + " - " + all_spectra_df["filename"].astype(str)
     all_labels_list = all_spectra_df["label"].to_list()
@@ -452,7 +451,7 @@ def collect_database_search_results(task, base_url):
         # Getting the database search results
         # database_search_results_url = f"{base_url}/resultfile?task={task}&file=nf_output/search/enriched_db_results.tsv"
         database_search_results_url = f"{base_url}/resultfile?task={task}&file=nf_output/search/complete_enriched_db_results.tsv"
-        print("Database Search Results URL", database_search_results_url, flush=True)
+        print("Knowledgebase Search Results URL", database_search_results_url, flush=True)
         database_search_results_df = pd.read_csv(database_search_results_url, sep="\t")
     except:
         st.error("This is GNPS task is now out of date. Please clone it to use the interactive dashboard.")
@@ -514,7 +513,7 @@ def integrate_database_search_results(all_spectra_df:pd.DataFrame, database_sear
     # Apply distance Filter
     trimmed_search_results_df = trimmed_search_results_df[trimmed_search_results_df["distance"] <= distance_threshold]
        
-    # Apply Maximum DB Results Filter
+    # Apply Maximum KB Results Filter
     #best_ids = trimmed_search_results_df.sort_values(by="distance", ascending=False).database_id.drop_duplicates(keep="first")
     # Get maximum_db_results database_ids per each query_filename
     if maximum_db_results != -1:
@@ -738,7 +737,7 @@ if False:
 db_search_results, db_db_distance_table = collect_database_search_results(task_id, base_url)
 
 if db_db_distance_table is None and db_search_results is not None:
-    st.warning("""Database-database distances are not available for this task, perhaps this is an old task?  
+    st.warning("""Knowledgebase-knowledgebase distances are not available for this task, perhaps this is an old task?  
                 Please clone and rerun the task on GNPS2 for proper visualization. The distances between these examples
                 will be represented as 1.0 to the dendrogram. """)
 
@@ -778,7 +777,7 @@ elif "db_search_result_label" not in st.session_state and db_search_results is N
     st.session_state["db_search_result_label"] = "No Database Search Results"
 # Create a session state for the db distance threshold
 if "db_distance_threshold" not in st.session_state:
-    st.session_state["db_distance_threshold"] = 0.30
+    st.session_state["db_distance_threshold"] = 0.50
 # Check if db_distance_threshold is greater than the workflow threshold
 if float(st.session_state["db_distance_threshold"]) > float(st.session_state['workflow_params']["database_search_threshold"]):
     st.session_state["db_distance_threshold"] = float(st.session_state['workflow_params']["database_search_threshold"])
@@ -849,7 +848,7 @@ if all_spectra_df is None:
 ##### Add Display Parameters #####
 st.header("Dendrogram Display Options")
 
-with st.expander("Clustering Settings", expanded=True):
+with st.expander("Clustering Settings", expanded=False):
     # Add Clustering Method dropdown
     clustering_options = ["average", "single", "complete", "weighted"]
     if st.session_state['distance_measure'] == "euclidean":
@@ -860,7 +859,7 @@ with st.expander("Clustering Settings", expanded=True):
             help="All branches that split below the specified height will have the same color. Ex: If this value is set to 0.7, all branches\
                   splitting below 0.7 will have the same color. Above 0.7, all branches will be blue.")
 
-with st.expander("Metadata", expanded=True):
+with st.expander("Metadata", expanded=False):
     st.checkbox("Use GenBank IDs to Enrich Metadata", key="enrich_with_genbank", value=False,
                 help="If checked, the metadata will be enriched with GenBank accession numbers.")
 
@@ -889,10 +888,10 @@ with st.expander("Metadata", expanded=True):
         columns_available =[x for x in columns_available if x.lower().strip() not in ['filename', 'scan/coordinate', 'genbank accession', 'ncbi taxid', 'ms collected by', 'isolate collected by', 'sample collected by', 'pi', '16s sequence']]
         st.session_state["metadata_scatter"]  = st.multiselect("Select metadata categories that will be displayed as a scatter plot alongside the dendrogram", columns_available, default=[], max_selections=5)
 
-with st.expander("Database Search Results", expanded=True):
+with st.expander("Knowledgebase Search Results", expanded=False):
     if db_search_results is None:
         # Write a message saying there are no db search results
-        text = "No database search results found for this task."
+        text = "No knowledgebase search results found for this task."
         st.write(f":grey[{text}]")
 
     else:   
@@ -902,30 +901,30 @@ with st.expander("Database Search Results", expanded=True):
         
         
         # Add DB distance threshold slider
-        st.session_state["db_distance_threshold"] = st.slider("Maximum Database Distance Threshold", 0.0, 1.0, st.session_state["db_distance_threshold"], 0.05,
+        st.session_state["db_distance_threshold"] = st.slider("Maximum Knowledgebase Distance Threshold", 0.0, 1.0, st.session_state["db_distance_threshold"], 0.05,
                                                                   help="Note: 0.00 = identical spectra")
         workflow_thresh = float(st.session_state['workflow_params'].get("database_search_threshold", 1.0))
         if st.session_state["db_distance_threshold"] > workflow_thresh:
-            st.warning(f"The database distance threshold is greater than the workflow threshold of {workflow_thresh:.2f}")
-        # Create a box for the maximum number of database results shown
-        st.session_state["max_db_results"] = st.number_input("Maximum Number of Database Results Shown", min_value=-1, max_value=None, value=st.session_state["max_db_results"], help="The maximum number of unique database isolates shown, highest distance is prefered. Enter -1 to show all database results.")  
+            st.warning(f"The knowledgebase distance threshold is greater than the workflow threshold of {workflow_thresh:.2f}")
+        # Create a box for the maximum number of knowledgebase results shown
+        st.session_state["max_db_results"] = st.number_input("Maximum Number of Knowledgebase Results Shown", min_value=-1, max_value=None, value=st.session_state["max_db_results"], help="The maximum number of unique database isolates shown, highest distance is prefered. Enter -1 to show all database results.")  
         # Create a 'select all' box for the db taxonomy filter
         
         col1, col2 = st.columns([0.84, 0.16])
         with col1:
-            st.write("Select Displayed Database Taxonomies")
+            st.write("Select Displayed Knowledgebase Taxonomies")
         
         with col2:
             st.checkbox("Select All", value=True, key="select_all_db_taxonomies")
         if st.session_state["select_all_db_taxonomies"] is True:
             st.session_state["db_taxonomy_filter"] = db_taxonomies
             # Add disabled multiselect to make this less jarring
-            st.multiselect("Select Displayed Database Taxonomies", db_taxonomies, disabled=True, label_visibility="collapsed", placeholder ="Select the taxonomies to display in the dendrogram")
+            st.multiselect("Select Displayed Knowledgebase Taxonomies", db_taxonomies, disabled=True, label_visibility="collapsed", placeholder ="Select the taxonomies to display in the dendrogram")
         else:
             # Add multiselect with update button
-            st.session_state["db_taxonomy_filter"] = st.multiselect("Customize which DB strains are displayed within the dendrogram by taxonomy", db_taxonomies, label_visibility="collapsed", placeholder ="Select the taxonomies to display in the dendrogram")
+            st.session_state["db_taxonomy_filter"] = st.multiselect("Customize which KB strains are displayed within the dendrogram by taxonomy", db_taxonomies, label_visibility="collapsed", placeholder ="Select the taxonomies to display in the dendrogram")
 
-with st.expander("General", expanded=True):
+with st.expander("General", expanded=False):
     # Add a selectbox that hides isolates
     col1, col2 = st.columns([0.84, 0.16])
     with col1:
@@ -947,7 +946,7 @@ with st.expander("General", expanded=True):
     st.session_state["cutoff"] = st.number_input("Add a vertical dendrogram cut-height", min_value=0.0, max_value=1.0, value=None, help="Add a vertical line to the dendrogram at the specified distance.")
     # Add option to show annotations
     st.session_state["show_annotations"] = st.checkbox("Display Dendrogram Distances", value=bool(st.session_state["show_annotations"]), help="The values listed represent dendrogram distance. \
-                                                                                                        To obtain similarity scores, use the 'Database Search Summary' tab within the workflow output.")
+                                                                                                        To obtain similarity scores, use the 'Knowledgebase Search Summary' tab within the workflow output.")
 
 st.session_state['query_only_spectra_df'] = all_spectra_df
 
@@ -1046,7 +1045,7 @@ def get_taxa_annotation_file(labels, metadata, all_spectra_df):
         metadata = all_spectra_df[['filename', 'NCBI taxid', 'db_search_result']].copy(deep=True)
 
         metadata.dropna(subset=['NCBI taxid'], inplace=True)
-        metadata.loc[metadata['db_search_result'], 'filename'] = 'DB Result - ' + metadata.loc[metadata['db_search_result'], 'filename'].astype(str)
+        metadata.loc[metadata['db_search_result'], 'filename'] = 'KB Result - ' + metadata.loc[metadata['db_search_result'], 'filename'].astype(str)
 
         color_assignments = metadata.set_index('filename')['NCBI taxid'].to_dict()
        
@@ -1094,7 +1093,7 @@ def get_taxa_coloring_file(labels, metadata, all_spectra_df):
             metadata['genus'] = metadata['db_genus']
 
         metadata.dropna(subset=['genus'], inplace=True)
-        metadata.loc[metadata['db_search_result'], 'filename'] = 'DB Result - ' + metadata.loc[metadata['db_search_result'], 'filename'].astype(str)
+        metadata.loc[metadata['db_search_result'], 'filename'] = 'KB Result - ' + metadata.loc[metadata['db_search_result'], 'filename'].astype(str)
 
         # Convert taxa to colors using pastel categorical %20
         taxa = metadata['genus'].unique()
@@ -1165,10 +1164,10 @@ if dendro is not None:
     # Add option to download as ete tree
     st.markdown(get_newick_tree_download_link(linkage_matrix, labels), unsafe_allow_html=True)
     st.markdown(get_taxa_annotation_file(labels, metadata_df, all_spectra_df), unsafe_allow_html=True, help="Download an annotation preset for usage in ITOL. \
-                This file will replace database hits with their NCBI taxonomies. \
+                This file will replace knowledgebase hits with their NCBI taxonomies. \
                 Include a column 'NCBI taxid' in your metadata to use this feature for queries")
     st.markdown(get_taxa_coloring_file(labels, metadata_df, all_spectra_df), unsafe_allow_html=True, help="Download a coloring file for usage in ITOL. \
-                For db results, genus will be used. Include a column 'genus' in your metadata to use this feature.\
+                For KB results, genus will be used. Include a column 'genus' in your metadata to use this feature.\
                 To show colors in ITOL after uploading the annotation file, toggle Advanced>Node options>Leaf node symbols. It can be set back to 'Hide' once done.")
 
 # Create a shareable link to this page

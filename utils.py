@@ -57,8 +57,8 @@ def write_job_params(task_id:str):
                 **Description:** {yaml_content.get('description', '')}  
                 **Distance Measure:** {yaml_content.get('distance', 'Unkown Parameter')}  
                 **Distance Calculation Bin Size:** {yaml_content.get('search_bin_size', 'Unkown Parameter')} Da  
-                **Database Search Threshold:** {yaml_content.get('database_search_threshold', 'Unkown Parameter')}  
-                **Protein Database Search Mass Range:** {protein_mass_range}  
+                **Knowledgebase Search Threshold:** {yaml_content.get('database_search_threshold', 'Unkown Parameter')}  
+                **Protein Knowledgebase Search Mass Range:** {protein_mass_range}  
                 **Metadata File Provided:** {metadata_provided}  
                 **Heatmap Bin Size:** {bin_size} Da  
                 """)
@@ -316,7 +316,7 @@ def format_proteins_as_strings(df):
     output = []
     for row in df.to_dict(orient="records"):
         if row['db_search_result']:
-            output.append(f"DB Result - {row['filename']}")
+            output.append(f"KB Result - {row['filename']}")
         else:   
             output.append(row['filename'])
             

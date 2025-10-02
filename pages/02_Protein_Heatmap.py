@@ -64,7 +64,7 @@ def basic_dendrogram(spectrum_df=None, disabled=False, display=True, add_opts=Fa
         return None, None, None
     if query_spectra_numpy_data.shape[0] <= 1:
         st.warning("There are not enough spectra to create a dendrogram. \n \
-                   Please check number of input spectra and database search results file.")
+                   Please check number of input spectra and knowledgebase search results file.")
         logging.debug("Dendrogram disabled (not enough spectra) returning.")
         return None, None, None
 
@@ -375,8 +375,8 @@ def draw_protein_heatmap(all_spectra_df, bin_counts, replicate_counts, bin_size,
     else:
         st.selectbox("Sort strains by", ["Strain Name", "Dendrogram Clustering", "Metadata"], key="phm_sort_proteins_by")
 
-    # Remove "DB Result - " from the selected proteins -- DB Results are currently deprecated
-    selected_proteins = [x.replace("DB Result - ", "") for x in st.session_state['phm_selected_proteins']]
+    # Remove "KB Result - " from the selected proteins -- KB Results are currently deprecated
+    selected_proteins = [x.replace("KB Result - ", "") for x in st.session_state['phm_selected_proteins']]
 
     # Set index to filename
     all_spectra_df = all_spectra_df.set_index("filename")
