@@ -121,22 +121,25 @@ def get_peaks_from_USI(usi:str):
     Returns:
     - peaks (list): The peaks of the spectrum.
     """
-
-    url = f"https://metabolomics-usi.gnps2.org/json/?usi1={usi}"
-
-    r = requests.get(url, timeout=60)
-    retries = 3
-    while r.status_code != 200 and retries > 0:
-        r = requests.get(url, timeout=60)
-        retries -= 1
-    if r.status_code != 200:
-        st.error("GNPS2 USI not found, you may need to rerun the analysis workflow.")
-        st.stop()
-
-    result_dictionary = r.json()
-    peaks = result_dictionary["peaks"]
-
-    return peaks
+    urls = [
+        f"https://metabolomics-usi.gnps2.org/json/?usi1={usi}",
+        f"https://de.metabolomics-usi.gnps2.org/json/?usi1={usi}"
+    ]
+    for url in urls:
+        try:
+            r = requests.get(url, timeout=10)
+            retries = 3
+            while r.status_code != 200 and retries > 0:
+                r = requests.get(url, timeout=10)
+                retries -= 1
+            if r.status_code == 200:
+                result_dictionary = r.json()
+                peaks = result_dictionary["peaks"]
+                return peaks
+        except requests.exceptions.RequestException:
+            continue
+    st.error("GNPS2 USI not found, you may need to rerun the analysis workflow.")
+    st.stop()
 
 def get_peaks(all_spectra_df: pd.DataFrame, filename: str, task:str, mass_range: tuple):
     """
