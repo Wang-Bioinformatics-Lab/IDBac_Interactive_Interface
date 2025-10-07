@@ -112,6 +112,7 @@ def get_USI(all_spectra_df: pd.DataFrame, filename: str, task:str):
     
 #     return return_usi
 
+@st.cache_data(ttl=60*5, max_entries=20, show_spinner=True,)
 def get_peaks_from_USI(usi:str):
     """ Get the peaks from a USI.
 
