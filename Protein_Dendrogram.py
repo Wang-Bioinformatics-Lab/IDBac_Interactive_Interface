@@ -472,10 +472,7 @@ def collect_database_search_results(task, base_url):
                 st.stop()
         
     return database_search_results_df, database_database_distance_table
-        
 
-
-    return database_search_results_df
 
 
 
@@ -753,10 +750,11 @@ if db_search_results is not None:
     db_taxonomies = list(set(db_taxonomies))
     # Sort alphabetically
     db_taxonomies.sort()
+    st.session_state['db_search_results'] = db_search_results
     
 else:
     db_search_columns = []
-
+    st.session_state['db_search_results'] = None
 ##### Create Session States #####
 # Create a session state for the clustering method
 if "clustering_method" not in st.session_state:
