@@ -606,7 +606,7 @@ st.markdown("""
             Welcome to the IDBac Interactive Interface! Here, you can analyze MALDI-TOF MS data to organize, identify, and visualize relationships between bacteria based on protein MS signals;
             associate clustering and biomarker behavior with metadata (e.g., culture conditions); and explore relationships between taxonomy and specialized metabolite production.\
             
-            Please see our documenatation [here](https://wang-bioinformatics-lab.github.io/GNPS2_Documentation/idbacanalysisplatform/) for more information on how to use this tool.
+            Please see our documentation [here](https://wang-bioinformatics-lab.github.io/GNPS2_Documentation/idbacanalysisplatform/) for more information on how to use this tool.
             """)
 
 if st.session_state.get("task_id", '') == DEFAULT_TASK_ID:

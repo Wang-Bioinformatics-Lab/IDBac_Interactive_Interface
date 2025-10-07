@@ -33,7 +33,7 @@ data = data.drop(columns=[x for x in useless_cols if x in data.columns])
 # Rename columns replacing "_" with " ". Capitalize first letter of each word. Replace "Db" with "KB"
 columns = data.columns
 columns = {
-    col: col.replace("_", " ").title().replace("Db ", "KB ").replace(" Id", "ID") for col in columns
+    col: col.replace("_", " ").title().replace("Db ", "KB ").replace(" Id", "ID").replace("Ncbi", "NCBI") for col in columns
 }
 data = data.rename(columns=columns)
 
