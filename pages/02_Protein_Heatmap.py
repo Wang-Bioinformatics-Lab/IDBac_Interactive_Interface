@@ -201,108 +201,108 @@ def draw_protein_heatmap(all_spectra_df, bin_counts, replicate_counts, bin_size,
     """
     
     
-    st.subheader("Build a Protein Heatmap")
-    st.markdown("""
-        Select a set of isolates to build your heatmap based on protein dendrogram clusters or metadata categories. Then, use the arrow to move the selection to the right. You can also directly select individual isolates in the right panel. \
-            
-        After making your selection, click "Apply/Update Filters" to generate the heatmap. \
-    """)
-    add_filters_1, add_filters_2, add_filters_3 = st.columns([0.45, 0.10, 0.45])
-    # Options
-    all_options = all_spectra_df['filename'].values
+    with st.expander("Select Strains", expanded=False):
+        with st.popover(label='Reference protein dendrogram clusters'):
+            all_clusters_dict, dendro, dendro_ordering = basic_dendrogram(add_opts=True)
 
-    # Initialze all protins as selected
-    if 'phm_selected_proteins' not in st.session_state:
-        st.session_state['phm_selected_proteins'] = all_options
+        st.markdown("""
+            Select a set of isolates to build your heatmap based on protein dendrogram clusters or metadata categories. Then, use the arrow to move the selection to the right. You can also directly select individual isolates in the right panel. \
+                
+            After making your selection, click "Apply/Update Filters" to generate the heatmap. \
+        """)
+        add_filters_1, add_filters_2, add_filters_3 = st.columns([0.45, 0.10, 0.45])
+        # Options
+        all_options = all_spectra_df['filename'].values
 
-    #### Create heatmap by strain ####
-    with st.form(key="phm_mz_filters", border=False):
-        # Protein Cluster Selection
-
-        if all_clusters_dict is None:
-            all_clusters_dict = [None]
-            add_filters_1.multiselect("Create heatmap by protein dendrogram clusters", [], disabled=True, key='phm_selected_clusters')
-            
-        else:
-            inverted_cluster_dict = {}
-            for filename, dict_for_filename in all_clusters_dict.items():
-                cluster_id = dict_for_filename['cluster']
-                if inverted_cluster_dict.get(cluster_id) is None:
-                    inverted_cluster_dict[cluster_id] = [filename]
-                else:
-                    inverted_cluster_dict[cluster_id].append(filename)
-            cluster_display_dict = {tuple(set(filenames)): f"Cluster {cluster_id}: {tuple(set(filenames))}".replace(',','') for cluster_id, filenames in inverted_cluster_dict.items()}
-            unclustered_key = inverted_cluster_dict.get(0)
-            if unclustered_key is not None:
-                unclustered_key = tuple(set(unclustered_key))
-                cluster_display_dict[unclustered_key] = cluster_display_dict[unclustered_key].replace("Cluster 0", "Unclustered")
-            
-            add_filters_1.multiselect("Create heatmap by protein dendrogram clusters", 
-                            list(set(cluster_display_dict.keys())),
-                            format_func=cluster_display_dict.get,
-                            key='phm_selected_clusters')
-            
-        # Metadata Selection Options
-        metadata_selection_col1, metadata_selection_col2 = add_filters_1.columns([0.5, 0.5])
-        if st.session_state.get('metadata_df') is None:
-            metadata_selection_col1.selectbox("Create Heatmap by metadata category",
-                                              [None],
-                                              format_func=lambda x: "No Metadata Available",
-                                              key="phm_metadata_criteria",
-                                              disabled=True,)
-            metadata_selection_col2.multiselect("Metadata Values",
-                                                [],
-                                                key="phm_metadata_values",
-                                                disabled=True)
-            # st.session_state['phm_metadata_criteria'] = None
-            
-        else:
-            metadata_selection_col1.selectbox("Create Heatmap by metadata category",
-                                                st.session_state["metadata_df"].columns,
-                                                key="phm_metadata_criteria")
-            metadata_selection_col2.multiselect("Metadata Values",
-                                                st.session_state["metadata_df"][st.session_state["phm_metadata_criteria"]].unique(),
-                                                key="phm_metadata_values")
-                    
-        # Initialize selected proteins and clusters states if not initialized
-        if 'phm_selected_clusters' not in st.session_state:
-            st.session_state['phm_selected_clusters'] = []
+        # Initialze all protins as selected
         if 'phm_selected_proteins' not in st.session_state:
-            st.session_state['phm_selected_proteins'] = []
-        if 'phm_metadata_criteria' not in st.session_state:
-            st.session_state['phm_metadata_criteria'] = None
-        if 'phm_metadata_values' not in st.session_state:
-            st.session_state['phm_metadata_values'] = []
+            st.session_state['phm_selected_proteins'] = all_options
 
-        # Button to Move Clusters to Individual Protein List
-        with st.container():
-            (_, ab, _) =  add_filters_2.columns([1,1,1])    # Allows the arrow button to stay centered
-            ab.markdown('<div class="button-label centered">Add Selection</div>', unsafe_allow_html=True)
-            add_button = ab.button(":arrow_forward:", key="Add")
+        #### Create heatmap by strain ####
+        with st.form(key="phm_mz_filters", border=False):
+            # Protein Cluster Selection
 
-        # Individual Protein Selection
-        try:
-            phm_selected_proteins = add_filters_3.multiselect(
-                "Create heatmap by strain",
-                all_options,
-                default=st.session_state['phm_selected_proteins']
-            )
-        except StreamlitAPIException as _:
-            # This is caused by a task change, so we just reset the selected proteins
-            phm_selected_proteins = []
-            st.session_state['phm_selected_proteins'] = []
-            phm_selected_proteins = add_filters_3.multiselect(
-                "Create heatmap by strain",
-                all_options,
-                default=[]
-            )
+            if all_clusters_dict is None:
+                all_clusters_dict = [None]
+                add_filters_1.multiselect("Create heatmap by protein dendrogram clusters", [], disabled=True, key='phm_selected_clusters')
+                
+            else:
+                inverted_cluster_dict = {}
+                for filename, dict_for_filename in all_clusters_dict.items():
+                    cluster_id = dict_for_filename['cluster']
+                    if inverted_cluster_dict.get(cluster_id) is None:
+                        inverted_cluster_dict[cluster_id] = [filename]
+                    else:
+                        inverted_cluster_dict[cluster_id].append(filename)
+                cluster_display_dict = {tuple(set(filenames)): f"Cluster {cluster_id}: {tuple(set(filenames))}".replace(',','') for cluster_id, filenames in inverted_cluster_dict.items()}
+                unclustered_key = inverted_cluster_dict.get(0)
+                if unclustered_key is not None:
+                    unclustered_key = tuple(set(unclustered_key))
+                    cluster_display_dict[unclustered_key] = cluster_display_dict[unclustered_key].replace("Cluster 0", "Unclustered")
+                
+                add_filters_1.multiselect("Create heatmap by protein dendrogram clusters", 
+                                list(set(cluster_display_dict.keys())),
+                                format_func=cluster_display_dict.get,
+                                key='phm_selected_clusters')
+                
+            # Metadata Selection Options
+            metadata_selection_col1, metadata_selection_col2 = add_filters_1.columns([0.5, 0.5])
+            if st.session_state.get('metadata_df') is None:
+                metadata_selection_col1.selectbox("Create Heatmap by metadata category",
+                                                [None],
+                                                format_func=lambda x: "No Metadata Available",
+                                                key="phm_metadata_criteria",
+                                                disabled=True,)
+                metadata_selection_col2.multiselect("Metadata Values",
+                                                    [],
+                                                    key="phm_metadata_values",
+                                                    disabled=True)
+                # st.session_state['phm_metadata_criteria'] = None
+                
+            else:
+                metadata_selection_col1.selectbox("Create Heatmap by metadata category",
+                                                    st.session_state["metadata_df"].columns,
+                                                    key="phm_metadata_criteria")
+                metadata_selection_col2.multiselect("Metadata Values",
+                                                    st.session_state["metadata_df"][st.session_state["phm_metadata_criteria"]].unique(),
+                                                    key="phm_metadata_values")
+                        
+            # Initialize selected proteins and clusters states if not initialized
+            if 'phm_selected_clusters' not in st.session_state:
+                st.session_state['phm_selected_clusters'] = []
+            if 'phm_selected_proteins' not in st.session_state:
+                st.session_state['phm_selected_proteins'] = []
+            if 'phm_metadata_criteria' not in st.session_state:
+                st.session_state['phm_metadata_criteria'] = None
+            if 'phm_metadata_values' not in st.session_state:
+                st.session_state['phm_metadata_values'] = []
 
-            
-        phm_selected_prot_submitted = st.form_submit_button("Apply/Update Filters")
+            # Button to Move Clusters to Individual Protein List
+            with st.container():
+                (_, ab, _) =  add_filters_2.columns([1,1,1])    # Allows the arrow button to stay centered
+                ab.markdown('<div class="button-label centered">Add Selection</div>', unsafe_allow_html=True)
+                add_button = ab.button(":arrow_forward:", key="Add")
 
-    # Horizontal line
-    st.markdown(f"---")
-        
+            # Individual Protein Selection
+            try:
+                phm_selected_proteins = add_filters_3.multiselect(
+                    "Create heatmap by strain",
+                    all_options,
+                    default=st.session_state['phm_selected_proteins']
+                )
+            except StreamlitAPIException as _:
+                # This is caused by a task change, so we just reset the selected proteins
+                phm_selected_proteins = []
+                st.session_state['phm_selected_proteins'] = []
+                phm_selected_proteins = add_filters_3.multiselect(
+                    "Create heatmap by strain",
+                    all_options,
+                    default=[]
+                )
+
+                
+            phm_selected_prot_submitted = st.form_submit_button("Apply/Update Filters")
+       
     if phm_selected_prot_submitted:
         st.session_state['phm_selected_proteins'] = phm_selected_proteins
         st.rerun()
@@ -328,52 +328,53 @@ def draw_protein_heatmap(all_spectra_df, bin_counts, replicate_counts, bin_size,
         st.rerun()  # Refresh the UI to reflect the updated selection
     #########################
     
-    st.subheader("Heatmap Parameters")
-    # Add option to filter down by number of replicates
-    st.selectbox("Replicate Tolerance Mode", ['ppm', 'm/z'], key="phm_replicate_tolerance_mode")
-    if st.session_state["phm_replicate_tolerance_mode"] == "ppm":
-        st.session_state["phm_ppm_tolerance"] = st.number_input("ppm tolerance", min_value=0.0, max_value=None, value=1000.0)
-    else:
-        st.session_state["phm_mz_tolerance"] = None
-    if st.session_state["phm_replicate_tolerance_mode"] == "m/z":
-        st.session_state["phm_mz_tolerance"] = st.number_input("m/z tolerance", min_value=0.0, max_value=None, value=1.0)
-    else:
-        st.session_state["phm_mz_tolerance"] = None
-    st.slider("Required Presence Percentage", min_value=0.0, max_value=1.0, value=0.5, key="phm_replicate_threshold")
-
-    min_count = st.slider("Minimum m/z Count", min_value=0, max_value=max(1,len(st.session_state['phm_selected_proteins'])), step=1, value=1,
-                         help="The minimum number of times an m/z value must be present \
-                               in the selected strains to be displayed.")
-    min_intensity = st.slider("Minimum Relative Intensity", min_value=0.0, max_value=1.0, step=0.01, value=0.40,
-                              help="The minimum relative intensity value to display.")
-    
-    # m/z range slection
-    st.text_input("Search for specific m/z's", key="phm_selected_mzs", help="Enter m/z values seperated by commas. Ranges can be entered as [125.0-130.0] or as open ended (e.g., [127.0-]). \n \
-                                                                If either end of the range falls within the heatmap bin, the bin will be displayed. \n \
-                                                                No value will show all m/z values.")
-    try:
-        if st.session_state.get("phm_selected_mzs"):
-            st.session_state["phm_parsed_selected_mzs"] = parse_numerical_input(st.session_state["phm_selected_mzs"])
+    with st.expander("Heatmap Parameters", expanded=False):
+        # Add option to filter down by number of replicates
+        st.selectbox("Replicate Tolerance Mode", ['ppm', 'm/z'], key="phm_replicate_tolerance_mode")
+        if st.session_state["phm_replicate_tolerance_mode"] == "ppm":
+            st.session_state["phm_ppm_tolerance"] = st.number_input("ppm tolerance", min_value=0.0, max_value=None, value=1000.0)
         else:
-            st.session_state["phm_parsed_selected_mzs"] = []
-    except Exception as e:
-        st.error("Please enter valid m/z values." + str(e))
-        st.stop()
+            st.session_state["phm_mz_tolerance"] = None
+        if st.session_state["phm_replicate_tolerance_mode"] == "m/z":
+            st.session_state["phm_mz_tolerance"] = st.number_input("m/z tolerance", min_value=0.0, max_value=None, value=1.0)
+        else:
+            st.session_state["phm_mz_tolerance"] = None
+        st.slider("Required Presence Percentage", min_value=0.0, max_value=1.0, value=0.5, key="phm_replicate_threshold")
 
-    # Whether to overlay dendrogram
-    st.checkbox("Overlay Dendrogram", key="phm_overlay_dendrogram")
-    
-    metadata_options = ["None", "Dendrogram Cluster"]
-    metadata_options += st.session_state["metadata_df"].columns.tolist() if st.session_state.get("metadata_df") is not None else []
-    if st.session_state['phm_overlay_dendrogram']:
-        st.selectbox("Select metadata to be listed as text next to the strain ID", ['Dendrogram Cluster'], key="phm_display_metadata", disabled=True)
-    else:
-        st.selectbox("Select metadata to be listed as text next to the strain ID", metadata_options, key="phm_display_metadata")
+        min_count = st.slider("Minimum m/z Count", min_value=0, max_value=max(1,len(st.session_state['phm_selected_proteins'])), step=1, value=1,
+                            help="The minimum number of times an m/z value must be present \
+                                in the selected strains to be displayed.")
+        min_intensity = st.slider("Minimum Relative Intensity", min_value=0.0, max_value=1.0, step=0.01, value=0.40,
+                                help="The minimum relative intensity value to display.")
+        
+        # m/z range slection
+        st.text_input("Search for specific m/z's", key="phm_selected_mzs", help="Enter m/z values seperated by commas. Ranges can be entered as [125.0-130.0] or as open ended (e.g., [127.0-]). \n \
+                                                                    If either end of the range falls within the heatmap bin, the bin will be displayed. \n \
+                                                                    No value will show all m/z values.")
+        try:
+            if st.session_state.get("phm_selected_mzs"):
+                st.session_state["phm_parsed_selected_mzs"] = parse_numerical_input(st.session_state["phm_selected_mzs"])
+            else:
+                st.session_state["phm_parsed_selected_mzs"] = []
+        except Exception as e:
+            st.error("Please enter valid m/z values." + str(e))
+            st.stop()
 
-    if st.session_state['phm_overlay_dendrogram']:
-        st.selectbox("Sort strains by", ["Dendrogram Clustering"], key="phm_sort_proteins_by", disabled=True)
-    else:
-        st.selectbox("Sort strains by", ["Strain Name", "Dendrogram Clustering", "Metadata"], key="phm_sort_proteins_by")
+    with st.expander("Display Options", expanded=False):
+        # Whether to overlay dendrogram
+        st.checkbox("Overlay Dendrogram", key="phm_overlay_dendrogram")
+        
+        metadata_options = ["None", "Dendrogram Cluster"]
+        metadata_options += st.session_state["metadata_df"].columns.tolist() if st.session_state.get("metadata_df") is not None else []
+        if st.session_state['phm_overlay_dendrogram']:
+            st.selectbox("Select metadata to be listed as text next to the strain ID", ['Dendrogram Cluster'], key="phm_display_metadata", disabled=True)
+        else:
+            st.selectbox("Select metadata to be listed as text next to the strain ID", metadata_options, key="phm_display_metadata")
+
+        if st.session_state['phm_overlay_dendrogram']:
+            st.selectbox("Sort strains by", ["Dendrogram Clustering"], key="phm_sort_proteins_by", disabled=True)
+        else:
+            st.selectbox("Sort strains by", ["Strain Name", "Dendrogram Clustering", "Metadata"], key="phm_sort_proteins_by")
 
     # Remove "KB Result - " from the selected proteins -- KB Results are currently deprecated
     selected_proteins = [x.replace("KB Result - ", "") for x in st.session_state['phm_selected_proteins']]
@@ -631,9 +632,6 @@ def check_preconditions():
 check_preconditions()
 
 all_clusters_dict = None
-
-with st.popover(label='Reference protein dendrogram clusters'):
-    all_clusters_dict, dendro, dendro_ordering = basic_dendrogram(add_opts=True)
 
 # Use "heatmap_binned_spectra" because query/database spectra may be binned to a different size
 draw_protein_heatmap(st.session_state['heatmap_binned_spectra'],
