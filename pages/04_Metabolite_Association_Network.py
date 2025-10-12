@@ -623,7 +623,7 @@ if st.session_state["metadata_df"] is None:
     st.error("Please upload a metadata file first.")
     st.stop()
 
-st.title("Metabolite Association Network Visualization QC")
+st.title("Metabolite Association Network Visualization")
 st.markdown("""
     This page allows you to visualize the associations between proteins and small molecules based on MS data. One analysis approach is to assess patterns of specialized metabolite production as a function of phylogenetic relatedness, 
     which can provide a means to discriminate between strains at the subspecies level ([Jensen, 2010](https://doi.org/10.1007/s10295-009-0683-z)). \
