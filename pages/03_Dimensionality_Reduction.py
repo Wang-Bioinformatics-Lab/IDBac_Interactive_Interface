@@ -39,11 +39,14 @@ st.markdown("""
     """)
 dm_n_components = 3
 
+metadata_df = st.session_state.get('metadata_df', pd.DataFrame())
+
 st.session_state.dm_mode = st.selectbox(
     "Select Mode",
     options=["Proteins", "Small Molecules"],
     index=0,
-    help="Select whether you want to analyze protein or small molecule spectra."
+    help="Select whether you want to analyze protein or small molecule spectra.",
+    disabled=metadata_df.empty
 )
 
 # Get List of Options
@@ -101,8 +104,10 @@ else:
     )
 
     spectra_df = load_small_molecule_dict_as_dataframe(small_mol_dict, bin_size=bin_size)
-
-metadata_df = st.session_state.get('metadata_df', pd.DataFrame())
+    spectra_df.rename(columns={"filename": "Small molecule file name"}, inplace=True)
+    # Use metadata column to map "Small molecule file name" to Protein "filename"
+    mapping = metadata_df.set_index('Small molecule file name')['Filename'].to_dict()
+    spectra_df['filename'] = spectra_df['Small molecule file name'].map(mapping)
 
 if spectra_df is None:
     st.error("No spectra data available.")
@@ -171,6 +176,7 @@ if not metadata_df.empty:
         help="Select a metadata column to color the spectra in the plot."
     )
     if st.session_state.dm_metadata_coloring != "None":
+        print('metadata_df', metadata_df, flush=True)
         plot_colors = metadata_df.loc[st.session_state.dm_selected_spectra, st.session_state.dm_metadata_coloring]
 
         # Convert plot_colors to a list of hex values
@@ -403,7 +409,7 @@ def plot_reduced_data(reduced_data, selected_spectra, display_filename, n_compon
         }
     }
 
-    st.plotly_chart(fig, use_container_width=True, height=800, config=config)
+    st.plotly_chart(fig, use_container_width=True, height=1200, config=config)
 
 # Apply relevant clustering method
 if st.session_state.dm_method == "PCA":
