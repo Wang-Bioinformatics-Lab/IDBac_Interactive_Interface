@@ -18,6 +18,8 @@ from utils import convert_to_mzml
 from typing import Dict, List, Tuple
 import io
 
+from Small_Molecule_Utils import get_small_molecule_dict, filter_small_molecule_dict
+
 #####
 # A note abote streamlit session states:
 # All session states related to this page begin with "sma_" to reduce the 
@@ -98,117 +100,14 @@ def basic_dendrogram(disabled=False):
     
     return cluster_dict, dendro
 
-def get_small_molecule_dict():
-    if st.session_state['task_id'].startswith("DEV-"):
-        base_url = "http://ucr-lemon.duckdns.org:4000"
-        task_id = st.session_state['task_id'].replace("DEV-", "")
-    elif st.session_state['task_id'].startswith('BETA-'):
-        base_url = "https://beta.gnps2.org"
-        task_id = st.session_state['task_id'].replace("BETA-", "")
-    else:
-        base_url = "https://gnps2.org"
-        task_id = st.session_state['task_id']
-    url = f"{base_url}/resultfile?task={task_id}&file=nf_output/small_molecule/summary.json"
-    
-    response = requests.get(url, timeout=(120,120))
-    if response.status_code != 200:
-        st.error(f"Error loading small molecule summary file: {response.status_code}")
-        st.stop()
-    
-    response_dict = json.loads(response.content)
-    
-    output_dict = {}
-    
-    all_filenames = [d['filename'] for d in response_dict]
-    
-    # Map scans to their filenames
-    for scan in response_dict:
-        if output_dict.get(scan['filename']) is None:
-            output_dict[scan['filename']] = [scan]
-        else: 
-            output_dict[scan['filename']].append(scan)
-            
-    # For each filename, combine the m/z and intensity arrays
-    for filename, scan_list in output_dict.items():
-        mz_intensity_dict = {}
-        mz_frequency_dict = {}  # For each m/z, what percent of scans is it in?
-        for scan in scan_list:
-            mz_array        = scan['m/z array']
-            intensity_array = scan['intensity array']
-            
-            for mz, intensity in zip(mz_array, intensity_array):
-                _mz = np.round(float(mz), 0)
-                if _mz in mz_intensity_dict:
-                    mz_intensity_dict[_mz].append(float(intensity))
-                else:
-                    mz_intensity_dict[_mz] = [float(intensity)]
-            
-        for mz, intensities in mz_intensity_dict.items():
-            mz_intensity_dict[mz] = sum(intensities) / len(intensities)
-            mz_frequency_dict[mz] = len(intensities) / len(scan_list)
-                
-        mz_array           = sorted(list(mz_intensity_dict.keys()))
-        intensity_array    = [mz_intensity_dict[mz] for mz in mz_array]
-        mz_frequency_array = [mz_frequency_dict[mz] for mz in mz_array]
-        
-        output_dict[filename] = {
-            'm/z array': mz_array,
-            'intensity array': intensity_array,
-            'frequency array': mz_frequency_array
-        }
-    
-    return output_dict
-
-def filter_small_molecule_dict(small_molecule_dict)->Dict[str, Dict[str, List[float]]]:
-    """ Applies intensity and frequency filters to the small molecule dictionary. Note that the replicate frequency is applied
-    independently of the intensity filter.
-    
-    Session State Parameters:
-    sma_relative_intensity_threshold: Relative intensity threshold required to pass filtering
-    sma_replicate_frequency_threshold: Frequency threshold required to pass filtering
-    sma_parsed_selected_mzs: List of m/z values to filter by
-
-    Parameters:
-    small_molecule_dict (dict): A dictionary of small molecule data
-
-    Returns:
-    dict: A filtered dictionary of small molecule data {filename: {m/z array: [float], intensity array: [float], frequency array: [float]}}
-    """
-    
-    output = {}
-    
-    for k, d in small_molecule_dict.items():
-        mz_array        = [float(x) for x in d['m/z array']]
-        intensity_array = [float(x) for x in d['intensity array']]
-        frequency_array = [float(x) for x in d['frequency array']]
-        
-        # Get indices where intensity is above threshold
-        indices = [i for i, (intensity, frequency) in enumerate(zip(intensity_array, frequency_array)) if intensity > st.session_state.get("sma_relative_intensity_threshold", 0.1) and frequency > st.session_state.get("sma_replicate_frequency_threshold", 0.7)]
-        # Get indices where m/z is within tolerance
-        if len(st.session_state.get("sma_parsed_selected_mzs")) > 0:
-            mz_filtered_indices = set()
-            
-            for i, mz in enumerate(mz_array):
-                for filter in st.session_state.get("sma_parsed_selected_mzs"):
-                    if isinstance(filter, float):
-                        if abs(mz - filter) <= st.session_state.get("sma_mz_tolerance", 0.1):
-                            mz_filtered_indices.add(i)
-                    else:
-                        start, end = filter
-                        if start <= mz <= end:
-                            mz_filtered_indices.add(i)
-                            
-            indices = list(set(indices).intersection(mz_filtered_indices))
-        
-        # Filter mz_array and intensity_array
-        mz_array = [mz_array[i] for i in indices]
-        intensity_array = [intensity_array[i] for i in indices]
-        
-        d['m/z array'] = mz_array
-        d['intensity array'] = intensity_array
-    
-        output[k] = d
-    return output
+def filter_small_molecule_dict_wrapper(small_molecule_dict)->Dict[str, Dict[str, List[float]]]:
+    return filter_small_molecule_dict(
+        small_molecule_dict,
+        st.session_state.get("sma_relative_intensity_threshold", 0.1),
+        st.session_state.get("sma_replicate_frequency_threshold", 0.7),
+        st.session_state.get("sma_parsed_selected_mzs", []),
+        st.session_state.get("sma_mz_tolerance", 0.1),
+    )
 
 class ShapeMap():
     def __init__(self):
@@ -274,7 +173,7 @@ def generate_network(cluster_dict:dict=None, height=1000, width=600)->Tuple[Dict
     # for small_molecule_filename in all_small_molecule_filenames:
     #     graph.add_node(small_molecule_filename, title=small_molecule_filename)
         
-    small_mol_dict = filter_small_molecule_dict(get_small_molecule_dict())
+    small_mol_dict = filter_small_molecule_dict_wrapper(get_small_molecule_dict())
     all_mzs = [small_mol_dict.get('m/z array', []) for small_mol_dict in small_mol_dict.values()]
     all_mzs = [mz for sublist in all_mzs for mz in sublist] # Flatten
     mz_value_counts = pd.Series(all_mzs).value_counts()
@@ -477,34 +376,34 @@ def generate_network(cluster_dict:dict=None, height=1000, width=600)->Tuple[Dict
                        )
     for edge in nx_G.edges:
         graph.add_edge(edge[0], edge[1])
-        
+
     # Generate HTML code for the graph
     html_graph = graph.generate_html()
-    
+
     # html_graph = update_graph_html(html_graph)
     # print(html_graph)
-    
+
     components.html(html_graph, height=height)
 
     return small_mol_dict, nx_G
-    
+
 def make_heatmap():
     """
     Make a heatmap that shows which m/z values are associated with each protein file with which intensity
     """
-    
+
     mapping = st.session_state["metadata_df"]
-          
-    small_mol_dict = filter_small_molecule_dict(get_small_molecule_dict())
-    
+
+    small_mol_dict = filter_small_molecule_dict_wrapper(get_small_molecule_dict())
+
     all_mzs = [small_mol_dict.get('m/z array', []) for small_mol_dict in small_mol_dict.values()]
     all_mzs = [mz for sublist in all_mzs for mz in sublist] # Flatten
     all_mzs = np.sort(np.unique(all_mzs))
-       
+
     heatmap = np.ones((len(st.session_state["sma_selected_proteins"]), len(all_mzs))) * np.nan
-    
+
     df = pd.DataFrame(heatmap, columns=all_mzs, index=st.session_state["sma_selected_proteins"])
-    
+
     for filename in st.session_state["sma_selected_proteins"]:
         relevant_mapping = mapping[mapping['Filename'] == filename]
         all_small_molecule_filenames = relevant_mapping['Small molecule file name'].tolist()
