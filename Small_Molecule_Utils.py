@@ -3,7 +3,7 @@ import requests
 import json
 import numpy as np
 from typing import Dict, List, Tuple
-
+from pandas import DataFrame
 
 def get_small_molecule_dict():
     if st.session_state['task_id'].startswith("DEV-"):
@@ -117,3 +117,18 @@ def filter_small_molecule_dict(
     
         output[k] = d
     return output
+
+def load_small_molecule_dict_as_dataframe(small_molecule_dict, bin_size=1.0):
+    data = []
+    for filename, data_dict in small_molecule_dict.items():
+        row = {'filename': filename, 'db_search_result': False}
+        mz_array = data_dict['m/z array']
+        for mz in mz_array:
+            bin_key = f'BIN_{int(mz // bin_size * bin_size)}_{int(mz // bin_size * bin_size + bin_size)}'
+            row[bin_key] = row.get(bin_key, 0) + 1
+        data.append(row)
+    
+    df = DataFrame(data)
+    # Fill BIN_ columns with 0 where NaN
+    df.fillna(0, inplace=True)
+    return df

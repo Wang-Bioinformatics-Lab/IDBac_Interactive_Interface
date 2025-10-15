@@ -11,6 +11,9 @@ import plotly.graph_objects as go
 import plotly.express as px
 import plotly.colors as pc
 
+from Small_Molecule_Utils import get_small_molecule_dict, load_small_molecule_dict_as_dataframe, filter_small_molecule_dict
+from utils import parse_numerical_input
+
 #####
 # A note abote streamlit session states:
 # All session states related to this page begin with "dm_" to reduce the 
@@ -30,16 +33,76 @@ custom_css()
 
 st.title("Dimensionality Reduction")
 st.markdown("""
-    This page allows you to visualize protein MS spectra in a 3D space using dimensionality reduction techniques such as PCA and t-SNE. Additionally, data points can be colored based on metadata attributes to facilitate pattern recognition and clustering analysis. \
+    This page allows you to visualize MS spectra in a 3D space using dimensionality reduction techniques such as PCA and t-SNE. Additionally, data points can be colored based on metadata attributes to facilitate pattern recognition and clustering analysis. \
         
     To get started, select the spectra you want to include in the analysis, choose a dimensionality reduction method, and adjust the parameters as needed.
     """)
 dm_n_components = 3
 
+st.session_state.dm_mode = st.selectbox(
+    "Select Mode",
+    options=["Proteins", "Small Molecules"],
+    index=0,
+    help="Select whether you want to analyze protein or small molecule spectra."
+)
+
 # Get List of Options
-spectra_df = st.session_state.get('query_only_spectra_df')
+if st.session_state.dm_mode == "Proteins":
+    spectra_df = st.session_state.get('query_only_spectra_df')
+    bin_size = st.session_state['workflow_params'].get('bin_size')
+
+else:
+    small_mol_dict = get_small_molecule_dict()
+
+    with st.expander("Small Molecule Filters", expanded=True):
+        # Add a slider for the relative intensity threshold
+        dm_small_mol_relative_intensity_threshold = st.slider("Relative Intensity Threshold", min_value=0.00, max_value=1.0, value=0.15, step=0.01)
+        dm_small_mol_replicate_frequency_threshold = st.slider(
+            "Replicate Frequency Threshold",
+            min_value=0.00,
+            max_value=1.0,
+            value=0.70,
+            step=0.05, 
+            help="Only show m/z values that occur in at least this percentage of replicates."
+        )
+
+        # Add text input to select certain m/z's (comma-seperated)
+        mz_col1, mz_col2 = st.columns([3, 1])
+        dm_small_mol_selected_mzs = mz_col1.text_input(
+            "Search for specific m/z's",
+            value="[200-2000]",
+            help="Enter m/z values seperated by commas. Ranges can be entered as [125.0-130.0] or as open ended (e.g., [127.0-]). No value will show all m/z values."
+        )
+        dm_small_mol_mz_tolerance = mz_col2.number_input("Tolerance (m/z)", value=0.1, help="Tolerance for the selected m/z values. Does not apply to ranges.")
+        try:
+            if dm_small_mol_selected_mzs:
+                dm_small_mol_selected_mzs = parse_numerical_input(dm_small_mol_selected_mzs)
+            else:
+                dm_small_mol_selected_mzs = []
+        except:
+            st.error("Please enter valid m/z values.")
+            st.stop()
+
+        bin_size = st.slider(
+            "Binning Size (m/z)",
+            min_value=1.0,
+            max_value=10.0,
+            value=1.0,
+            step=0.1,
+            help="Binning size for small molecule spectra.",
+        )
+
+    small_mol_dict = filter_small_molecule_dict(
+        small_mol_dict,
+        relative_intensity_threshold=dm_small_mol_relative_intensity_threshold,
+        replicate_frequency_threshold=dm_small_mol_replicate_frequency_threshold,
+        parsed_selected_mzs=dm_small_mol_selected_mzs,
+        sma_mz_tolerance=dm_small_mol_mz_tolerance,
+    )
+
+    spectra_df = load_small_molecule_dict_as_dataframe(small_mol_dict, bin_size=bin_size)
+
 metadata_df = st.session_state.get('metadata_df', pd.DataFrame())
-bin_size = st.session_state['workflow_params'].get('bin_size')
 
 if spectra_df is None:
     st.error("No spectra data available.")
