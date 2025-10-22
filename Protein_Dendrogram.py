@@ -630,7 +630,7 @@ base_url = None
 
 # Now we will get all the relevant data from GNPS2 for plotting
 if st.session_state["task_id"].startswith("DEV-"):
-    base_url = "http://ucr-lemon.duckdns.org:4000"
+    base_url = "http://dev.gnps2.org:4000"
     task_id = st.session_state['task_id'][4:]
 elif st.session_state["task_id"].startswith("BETA-"):
     base_url = "https://beta.gnps2.org"
@@ -821,7 +821,7 @@ if st.checkbox("Upload Metadata", help="If left unchecked, the metadata associat
 else:
     # Getting the metadata
     if st.session_state['task_id'].startswith("DEV-"):
-        base_url = "http://ucr-lemon.duckdns.org:4000"
+        base_url = "http://dev.gnps2.org:4000"
     elif st.session_state['task_id'].startswith("BETA-"):
         base_url = "https://beta.gnps2.org"
     else:

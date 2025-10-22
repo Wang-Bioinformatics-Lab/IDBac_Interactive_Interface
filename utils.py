@@ -11,7 +11,7 @@ from io import BytesIO
 
 def write_job_params(task_id:str):
     if task_id.startswith("DEV-"):
-        base_url = "http://ucr-lemon.duckdns.org:4000"
+        base_url = "http://dev.gnps2.org:4000"
         task_id = task_id.replace("DEV-", "")
     elif task_id.startswith("BETA-"):
         base_url = "https://beta.gnps2.org"

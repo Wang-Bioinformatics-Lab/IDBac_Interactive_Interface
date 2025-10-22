@@ -7,7 +7,7 @@ from pandas import DataFrame
 
 def get_small_molecule_dict():
     if st.session_state['task_id'].startswith("DEV-"):
-        base_url = "http://ucr-lemon.duckdns.org:4000"
+        base_url = "http://dev.gnps2.org:4000"
         task_id = st.session_state['task_id'].replace("DEV-", "")
     elif st.session_state['task_id'].startswith('BETA-'):
         base_url = "https://beta.gnps2.org"
