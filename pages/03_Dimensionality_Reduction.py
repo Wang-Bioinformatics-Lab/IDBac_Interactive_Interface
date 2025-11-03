@@ -5,7 +5,9 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from utils import custom_css, format_proteins_as_strings
 from sklearn.decomposition import PCA
-from sklearn.manifold import MDS
+from skbio.stats.distance import DistanceMatrix
+from skbio.stats.ordination import pcoa
+from sklearn.metrics.pairwise import cosine_distances, euclidean_distances
 from sklearn.manifold import TSNE
 import plotly.graph_objects as go
 import plotly.express as px
@@ -133,10 +135,17 @@ st.session_state.dm_selected_spectra = st.multiselect(
 st.subheader("Select Method Parameters")
 st.session_state.dm_method = st.selectbox(  
                                             "Select Method",
-                                            options=["PCA", "t-SNE"],   # "PCOA"
+                                            options=["PCA", "t-SNE", "PCoA"],
                                             index=0,
                                             help="Select the method you want to use for dimensionality reduction."
                                         )
+
+st.session_state.dm_n_components = st.selectbox(
+    "Select Number of Components",
+    options=[2, 3],
+    index=0,
+    help="Select the number of components to reduce the data to (2 or 3)."
+)
 
 if st.session_state.dm_method == "t-SNE":
     st.session_state.dm_perplexity = st.slider(
@@ -162,6 +171,13 @@ if st.session_state.dm_method == "t-SNE":
         value=500,
         step=10,
         help="Number of iterations for t-SNE. Higher values lead to more accurate results."
+    )
+if st.session_state.dm_method == "PCoA":
+    st.session_state.dm_distance_metric = st.selectbox(
+        "Select Distance Metric",
+        options=["cosine", "presence/absence", "euclidean"],
+        index=0,
+        help="Select the distance metric to use for PCoA.",
     )
 
 # Dropdown for metadata coloring options (any column in metadata_df)
@@ -415,7 +431,7 @@ def plot_reduced_data(reduced_data, selected_spectra, display_filename, n_compon
 if st.session_state.dm_method == "PCA":
     try:
         # Perform PCA
-        pca = PCA(n_components=dm_n_components)
+        pca = PCA(n_components=st.session_state.dm_n_components)
         reduced_data = pca.fit_transform(spectra)
 
         # Display PCA results
@@ -430,7 +446,7 @@ if st.session_state.dm_method == "PCA":
                             reduced_data=reduced_data,
                             selected_spectra=st.session_state.dm_selected_spectra,
                             display_filename=st.session_state.dm_display_filename,
-                            n_components=dm_n_components,
+                            n_components=st.session_state.dm_n_components,
                             method="PCA",
                             metadata_df=metadata_df
                         )
@@ -442,7 +458,7 @@ if st.session_state.dm_method == "PCA":
 elif st.session_state.dm_method == "t-SNE":
     try:
         tsne = TSNE(
-            n_components=dm_n_components,
+            n_components=st.session_state.dm_n_components,
             perplexity=st.session_state.dm_perplexity,
             learning_rate=st.session_state.dm_learning_rate,
             max_iter=st.session_state.dm_max_iter
@@ -452,20 +468,70 @@ elif st.session_state.dm_method == "t-SNE":
         # Display t-SNE results
         st.subheader("t-SNE Results")
         st.write("Reduced Data:")
-        st.dataframe(pd.DataFrame(reduced_data, columns=[f"t-SNE{i+1}" for i in range(dm_n_components)]))
+        st.dataframe(pd.DataFrame(reduced_data, columns=[f"t-SNE{i+1}" for i in range(st.session_state.dm_n_components)]))
 
         # Plot t-SNE results
         plot_reduced_data(
                     reduced_data=reduced_data,
                     selected_spectra=st.session_state.dm_selected_spectra,
                     display_filename=st.session_state.dm_display_filename,
-                    n_components=dm_n_components,
+                    n_components=st.session_state.dm_n_components,
                     method="t-SNE",
                     metadata_df=metadata_df
                 )
 
     except Exception as e:
         st.error(f"An error occurred during t-SNE: {e}")
+elif st.session_state.dm_method == "PCoA":
+    try:
+        # distances = st.session_state.get('db_db_distance_table')
+        # if distances is None:
+        #     st.error("Distance table not available for PCoA.")
+        #     st.stop()
+
+        print('spectra', spectra, flush=True)
+
+        if st.session_state.dm_distance_metric == "cosine":
+            distance_matrix = cosine_distances(spectra)
+        elif st.session_state.dm_distance_metric == "presence/absence":
+            binary_spectra = (spectra > 0).astype(int)
+            distance_matrix = cosine_distances(binary_spectra)
+        elif st.session_state.dm_distance_metric == "euclidean":
+            distance_matrix = euclidean_distances(spectra)
+        else:
+            st.error("Invalid distance metric selected.")
+            st.stop()
+
+        dist_matrix = DistanceMatrix(distance_matrix, ids=st.session_state.dm_selected_spectra)
+        pcoa_results = pcoa(dist_matrix, number_of_dimensions=st.session_state.dm_n_components)
+        reduced_data = pcoa_results.samples.values
+
+        # Display PCoA results
+        st.subheader("PCoA Results")
+        st.write("Reduced Data:")
+        st.dataframe(pd.DataFrame(reduced_data, columns=[f"PCoA{i+1}" for i in range(st.session_state.dm_n_components)]))
+
+        # Show explained variance if available
+        if pcoa_results.proportion_explained is not None:
+            explained_variance = pd.DataFrame(pcoa_results.proportion_explained)
+            explained_variance.index = [f'PCoA{i+1}' for i in range(len(explained_variance))]
+            explained_variance.columns = ['Explained Variance Ratio']
+            st.write("Explained Variance Ratio:")
+            st.write(explained_variance)
+
+        # Plot PCoA results
+        plot_reduced_data(
+                    reduced_data=reduced_data,
+                    selected_spectra=st.session_state.dm_selected_spectra,
+                    display_filename=st.session_state.dm_display_filename,
+                    n_components=st.session_state.dm_n_components,
+                    method="PCoA",
+                    metadata_df=metadata_df
+                )
+
+    except Exception as e:
+        st.error(f"An error occurred during PCoA: {e}")
+        
 
 else:
     st.error("Invalid method selected.")

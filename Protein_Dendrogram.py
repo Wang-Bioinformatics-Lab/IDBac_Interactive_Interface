@@ -653,7 +653,7 @@ if st.checkbox("Show Warnings", value=True, key="show_warnings"):
 # If workflow parameters specfiy a similarity function, use it. Otherwise, default to cosine
 if "distance" in st.session_state['workflow_params'] and st.session_state['workflow_params'] is not None:
     given_distance_measure = st.session_state['workflow_params'].get('distance', 'cosine')
-    assert given_distance_measure in {'presence', 'cosine', 'euclidean'}
+    assert given_distance_measure in {'presence', 'cosine', 'euclidean', 'reverse_cosine', 'reverse_presence'}
     st.session_state['given_distance_measure'] = given_distance_measure
     if given_distance_measure == 'cosine':
         st.session_state['distance_measure'] = cosine_distances
@@ -661,6 +661,8 @@ if "distance" in st.session_state['workflow_params'] and st.session_state['workf
         st.session_state['distance_measure'] = euclidean_distances
     elif given_distance_measure == 'presence':
         st.session_state['distance_measure'] = cosine_distances # TODO: Ensure array is binary
+    else:
+        st.session_state['distance_measure'] = None
 else:
     st.warning("**Warning:** Unable to find a distance function in the workflow parameters. This may be an old task. Please rerun it. \
                Defaulting to cosine similarity.")
@@ -1129,44 +1131,45 @@ def get_taxa_coloring_file(labels, metadata, all_spectra_df):
 
 
 # Creating the dendrogram
-dendro, linkage_matrix, labels = create_dendrogram(     numpy_array,
-                                                        all_spectra_df,
-                                                        db_distance_dict,
-                                                        plotted_metadata=st.session_state["metadata_scatter"],
-                                                        db_label_column=st.session_state["db_search_result_label"],
-                                                        metadata_df=metadata_df,
-                                                        db_search_columns=st.session_state["db_search_result_label"] ,
-                                                        cluster_method=st.session_state["clustering_method"],
-                                                        coloring_threshold=st.session_state["coloring_threshold"],
-                                                        cutoff=st.session_state["cutoff"],
-                                                        show_annotations=st.session_state["show_annotations"]
-                                                    )
-if dendro is not None:
-    # DEBUG
-    # Save the dendrogram to a 400 DPI PNG file
-    # plotly.io.write_image(dendro, "dendrogram.png", scale=2, width=1200, height=800, format="png")
+if st.session_state['distance_measure'] is not None:
+    dendro, linkage_matrix, labels = create_dendrogram(     numpy_array,
+                                                            all_spectra_df,
+                                                            db_distance_dict,
+                                                            plotted_metadata=st.session_state["metadata_scatter"],
+                                                            db_label_column=st.session_state["db_search_result_label"],
+                                                            metadata_df=metadata_df,
+                                                            db_search_columns=st.session_state["db_search_result_label"] ,
+                                                            cluster_method=st.session_state["clustering_method"],
+                                                            coloring_threshold=st.session_state["coloring_threshold"],
+                                                            cutoff=st.session_state["cutoff"],
+                                                            show_annotations=st.session_state["show_annotations"]
+                                                        )
+    if dendro is not None:
+        # DEBUG
+        # Save the dendrogram to a 400 DPI PNG file
+        # plotly.io.write_image(dendro, "dendrogram.png", scale=2, width=1200, height=800, format="png")
 
-    config = {
-        'toImageButtonOptions': {
-        'format': 'png', # one of png, svg, jpeg, webp
-        'filename': 'IDBac_Protein_Dendrogram',
-        'scale':5 # Multiply title/legend/axis/canvas sizes by this factor
+        config = {
+            'toImageButtonOptions': {
+            'format': 'png', # one of png, svg, jpeg, webp
+            'filename': 'IDBac_Protein_Dendrogram',
+            'scale':5 # Multiply title/legend/axis/canvas sizes by this factor
+            }
         }
-    }
 
-    st.plotly_chart(dendro, use_container_width=True, config=config)
-    # Display number of strains
-    st.write(f"Number of Strains: {len(labels)}")
-    # Add option to download as svg
-    st.markdown(get_svg_download_link(dendro), unsafe_allow_html=True, help="Currently, this feature only officially supports the dendrogram _without_ metadata.")
-    # Add option to download as ete tree
-    st.markdown(get_newick_tree_download_link(linkage_matrix, labels), unsafe_allow_html=True)
-    st.markdown(get_taxa_annotation_file(labels, metadata_df, all_spectra_df), unsafe_allow_html=True, help="Download an annotation preset for usage in ITOL. \
-                This file will replace knowledgebase hits with their NCBI taxonomies. \
-                Include a column 'NCBI taxid' in your metadata to use this feature for queries")
-    st.markdown(get_taxa_coloring_file(labels, metadata_df, all_spectra_df), unsafe_allow_html=True, help="Download a coloring file for usage in ITOL. \
-                For KB results, genus will be used. Include a column 'genus' in your metadata to use this feature.\
-                To show colors in ITOL after uploading the annotation file, toggle Advanced>Node options>Leaf node symbols. It can be set back to 'Hide' once done.")
+        st.plotly_chart(dendro, use_container_width=True, config=config)
+        # Display number of strains
+        st.write(f"Number of Strains: {len(labels)}")
+        # Add option to download as svg
+        st.markdown(get_svg_download_link(dendro), unsafe_allow_html=True, help="Currently, this feature only officially supports the dendrogram _without_ metadata.")
+        # Add option to download as ete tree
+        st.markdown(get_newick_tree_download_link(linkage_matrix, labels), unsafe_allow_html=True)
+        st.markdown(get_taxa_annotation_file(labels, metadata_df, all_spectra_df), unsafe_allow_html=True, help="Download an annotation preset for usage in ITOL. \
+                    This file will replace knowledgebase hits with their NCBI taxonomies. \
+                    Include a column 'NCBI taxid' in your metadata to use this feature for queries")
+        st.markdown(get_taxa_coloring_file(labels, metadata_df, all_spectra_df), unsafe_allow_html=True, help="Download a coloring file for usage in ITOL. \
+                    For KB results, genus will be used. Include a column 'genus' in your metadata to use this feature.\
+                    To show colors in ITOL after uploading the annotation file, toggle Advanced>Node options>Leaf node symbols. It can be set back to 'Hide' once done.")
 
 # Create a shareable link to this page
 st.write("Shareable Link: ")
