@@ -8,6 +8,7 @@ import time
 import numpy as np
 from psims.mzml.writer import MzMLWriter
 from io import BytesIO
+import logging
 
 def write_job_params(task_id:str):
     if task_id.startswith("DEV-"):
@@ -73,9 +74,17 @@ def write_warnings(param_url:str)->None:
     
     # No warnings
     if r.text == '':
+        st.info("✅ No warnings or errors were found in the input files.")
         return None
     
     warnings_df = pd.read_csv(io.StringIO(r.text), index_col=0)
+    total_warnings = len(warnings_df)
+    logging.info(f"Total warnings/errors found: {total_warnings}")
+    print(f"Total warnings/errors found: {total_warnings}", flush=True)
+    if total_warnings == 0:
+        
+        return None
+    
     if 'Error_Level' in warnings_df.columns:    # For backwards compatability
         errors_df   = warnings_df.loc[warnings_df['Error_Level'] == 'critical']
         warnings_df = warnings_df.loc[warnings_df['Error_Level'] != 'critical']
