@@ -859,9 +859,29 @@ with st.expander("Clustering Settings", expanded=False):
             help="All branches that split below the specified height will have the same color. Ex: If this value is set to 0.7, all branches\
                   splitting below 0.7 will have the same color. Above 0.7, all branches will be blue.")
 
-with st.expander("Metadata", expanded=False):
+# Only include columns that contain any non-empty values
+def _col_has_data(col_series):
+    non_na = col_series.dropna()
+    if non_na.empty:
+        return False
+    if non_na.dtype == object:
+        return non_na.astype(str).str.strip().ne('').any()
+    return non_na.notna().any()
+
+with st.expander("Incorporate Metadata into Analysis", expanded=False):
     st.checkbox("Use GenBank IDs to Enrich Metadata", key="enrich_with_genbank", value=False,
                 help="If checked, the metadata will be enriched with GenBank accession numbers.")
+
+    # Add Metadata dropdown for scatter plots
+    if metadata_df is None:
+        # If there is no metadata, then we will disable the dropdown
+        st.session_state["metadata_scatter"] = st.multiselect("Select metadata categories that will be displayed as a scatter plot alongside the dendrogram",
+                                                               ["No Metadata Available"], default="No Metadata Available", disabled=True, max_selections=5)
+    else:
+        columns_available = [c for c in metadata_df.columns if _col_has_data(metadata_df[c])]
+        # Remove forbidden columns
+        columns_available =[x for x in columns_available if x.lower().strip() not in ['filename', 'scan/coordinate', 'genbank accession', 'ncbi taxid', 'ms collected by', 'isolate collected by', 'sample collected by', 'pi', '16s sequence', 'small molecule file name', 'blank filename']]
+        st.session_state["metadata_scatter"]  = st.multiselect("Select metadata categories that will be displayed as a scatter plot alongside the dendrogram", sorted(columns_available), default=[], max_selections=5)
 
     # Add Metadata dropdown for text
     if metadata_df is None:
@@ -872,21 +892,11 @@ with st.expander("Metadata", expanded=False):
         if st.session_state["enrich_with_genbank"]:
             metadata_df = enrich_genbank_metadata(metadata_df)
         
-        columns_available = ["None"] + list(metadata_df.columns)
+        filtered_cols = [c for c in metadata_df.columns if _col_has_data(metadata_df[c])]
+        columns_available = ["None"] + filtered_cols
         # Remove filename and scan from the metadata
-        columns_available =[x for x in columns_available if x.lower().strip() not in ['filename', 'scan/coordinate', 'small molecule file name']]
-        st.session_state["metadata_label"] = st.selectbox("Select a metadata category that will be displayed as text next to the strain ID", columns_available)
-
-    # Add Metadata dropdown for scatter plots
-    if metadata_df is None:
-        # If there is no metadata, then we will disable the dropdown
-        st.session_state["metadata_scatter"] = st.multiselect("Select metadata categories that will be displayed as a scatter plot alongside the dendrogram",
-                                                               ["No Metadata Available"], default="No Metadata Available", disabled=True, max_selections=5)
-    else:
-        columns_available = list(metadata_df.columns)
-        # Remove forbidden columns
-        columns_available =[x for x in columns_available if x.lower().strip() not in ['filename', 'scan/coordinate', 'genbank accession', 'ncbi taxid', 'ms collected by', 'isolate collected by', 'sample collected by', 'pi', '16s sequence']]
-        st.session_state["metadata_scatter"]  = st.multiselect("Select metadata categories that will be displayed as a scatter plot alongside the dendrogram", columns_available, default=[], max_selections=5)
+        columns_available =[x for x in columns_available if x.lower().strip() not in ['filename', 'scan/coordinate', 'small molecule file name', 'blank filename']]
+        st.session_state["metadata_label"] = st.selectbox("Select a metadata category that will be displayed as text next to the strain ID", sorted(columns_available))
 
 with st.expander("Knowledgebase Search Results", expanded=False):
     if db_search_results is None:
@@ -894,28 +904,28 @@ with st.expander("Knowledgebase Search Results", expanded=False):
         text = "No knowledgebase search results found for this task."
         st.write(f":grey[{text}]")
 
-    else:   
-        # Add DB Search Result dropdown
-        db_search_columns_for_selection = ['None'] + [x for x in db_search_columns.copy() if x != 'db_strain_name']
-        st.session_state["db_search_result_label"] = st.selectbox("Select a metadata category that will be displayed as text alongside the DB strain ID", db_search_columns_for_selection)
-        
-        
+    else:
         # Add DB distance threshold slider
         st.session_state["db_distance_threshold"] = st.slider("Maximum Knowledgebase Distance Threshold", 0.0, 1.0, st.session_state["db_distance_threshold"], 0.05,
-                                                                  help="Note: 0.00 = identical spectra")
+                                                                  help="To insert known KB strains into the dendrogram, adjust the distance threshold. Note: 0.00 = identical spectra.")
         workflow_thresh = float(st.session_state['workflow_params'].get("database_search_threshold", 1.0))
         if st.session_state["db_distance_threshold"] > workflow_thresh:
             st.warning(f"The knowledgebase distance threshold is greater than the workflow threshold of {workflow_thresh:.2f}")
         # Create a box for the maximum number of knowledgebase results shown
         st.session_state["max_db_results"] = st.number_input("Maximum Number of Knowledgebase Results Shown", min_value=-1, max_value=None, value=st.session_state["max_db_results"], help="The maximum number of unique database isolates shown, highest distance is prefered. Enter -1 to show all database results.")  
         # Create a 'select all' box for the db taxonomy filter
+        # Add DB Search Result dropdown
+        db_search_columns_for_selection = ['None'] + [x for x in db_search_columns.copy() if x != 'db_strain_name']
+        st.session_state["db_search_result_label"] = st.selectbox("Select a metadata category that will be displayed as text alongside the DB strain ID", db_search_columns_for_selection)
+        
+
         
         col1, col2 = st.columns([0.84, 0.16])
         with col1:
-            st.write("Select Displayed Knowledgebase Taxonomies")
+            st.write("Filter results by taxonomic category")
         
         with col2:
-            st.checkbox("Select All", value=True, key="select_all_db_taxonomies")
+            st.checkbox("Show All", value=True, key="select_all_db_taxonomies")
         if st.session_state["select_all_db_taxonomies"] is True:
             st.session_state["db_taxonomy_filter"] = db_taxonomies
             # Add disabled multiselect to make this less jarring
