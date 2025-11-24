@@ -11,7 +11,7 @@ services:
       - default
       - nginx-net
     restart: unless-stopped
-    command: /app/run_server.sh
+    command: /bin/bash -c "source activate python312 && /app/run_server.sh"
     environment:
       VIRTUAL_HOST: analysis.idbac.org
       VIRTUAL_PORT: 5000
