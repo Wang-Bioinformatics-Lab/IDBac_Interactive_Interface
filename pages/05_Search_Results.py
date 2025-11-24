@@ -26,6 +26,15 @@ data = st.session_state['db_search_results']
 non_bin_cols = [x for x in data.columns if not x.startswith("BIN_")]
 data = data[non_bin_cols]
 
+# Use "USer SUbmitted 16S" in db_taxonomy to enrich 'db_genus' and 'db_species' columns
+_16s_rows = data['db_taxonomy'].str.contains("(User Submitted 16S)", na=False)
+
+data['User Submitted 16S Annotation'] = 'No'
+data.loc[_16s_rows & (data['db_genus'].isna() | data['db_species'].isna()), 'User Submitted 16S Annotation'] = 'Yes'
+
+data.loc[_16s_rows, 'db_genus'] = data.loc[_16s_rows, 'db_genus'].fillna(data.loc[_16s_rows]['db_taxonomy'].str.split().str[0])
+data.loc[_16s_rows, 'db_species'] = data.loc[_16s_rows, 'db_species'].fillna(data.loc[_16s_rows]['db_taxonomy'].str.replace("(User Submitted 16S)", "").str.strip().str.split().str[1])
+
 # Drop useless columns:
 useless_cols = ['query_index', 'database_index', 'row_count', 'database_scan', 'db_taxonomy']
 data = data.drop(columns=[x for x in useless_cols if x in data.columns])
