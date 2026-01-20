@@ -1,4 +1,5 @@
 import base64
+from copy import deepcopy
 import streamlit as st
 import pandas as pd
 import requests
@@ -15,11 +16,13 @@ import textwrap
 import traceback
 
 import plotly.graph_objects as go
+from plotly.graph_objs import graph_objs
+
 
 import numpy as np
 
 from utils import write_job_params, write_warnings, enrich_genbank_metadata, metadata_validation, custom_css
-from Protein_Dendrogram_Components import draw_protein_heatmap
+from Protein_Dendrogram_Components import draw_protein_heatmap, _Dendrogram
 from streamlit.components.v1 import html
 import ete3
 
@@ -29,6 +32,7 @@ st.set_page_config(page_title="IDBac - Dendrogram", page_icon="assets/idbac_logo
 html('<script async defer data-website-id="4611e28d-c0ff-469d-a2f9-a0b54c0c8ee0" src="https://analytics.gnps2.org/umami.js"></script>', width=0, height=0)
 custom_css()
 
+# DEFAULT_TASK_ID = "b06ac61f27e346e3a443234d80e16ced"    # ML TASK
 DEFAULT_TASK_ID = "8e0cb0c6a3c04ae1991bbc1dca2882b5"
 # DEFAULT_TASK_ID = "dd792e0180cb4ef2950077a8ba485790"
 # Microbiome Presence: 634aa977f11148da8bada35f1ef2ff06
@@ -40,155 +44,56 @@ DEFAULT_TASK_ID = "8e0cb0c6a3c04ae1991bbc1dca2882b5"
 #     "Anticipated completion **has been extended to** to 5/12/2025 at 12:00 Noon PST. If you have any questions, please contact us at nkrull@uic.edu."
 # )
 
-class np_data_wrapper():
-    def __init__(self, data_np, spectrum_data_df, db_distance_dict):
-        """
-        A wrapper around a numpy array that contains metadata and knowledgebase distance information.
-        
-        Parameters:
-        - data_np (numpy.ndarray): The input data as a numpy array where each row represents binary binned peaks.
-        - spectrum_data_df (pandas.DataFrame): The dataframe containing columns ['filename','db_search_result']. 
-            'filename' denotes the name of the id of the spectrum. 'db_search_result' denotes whether the spectrum is a database search result.
-        - db_distance_dict (dict): The dictionary containing the knowledgebase distance information.
-        """
-        self.data_np = data_np
-        self.spectrum_data_df = spectrum_data_df
-        self.db_distance_dict = db_distance_dict
 
-    def __getitem__(self, index):
-        return self.data_np[index]
-    
-    def __getattr__(self, name):
-        return getattr(self.data_np, name)
-
-def get_dist_function_wrapper(distfun):
-    """
-    A function that returns a wrapper around the distance function that allows us to pass in a numpy array with metadata and a dictionary of database 
-    distance information. The goal here is we want to use precomputed distances when given a database search result, but want to compute distances
-    between non-database search results.
+def assemble_complete_distance_matrix(
+    db_distance_dict,
+    labels
+):
+    """Generate a complete distance matrix of (n+m) x (n+m) size from the three distance matrices.
     
     Parameters:
-    - distfun (function): The distance function to be used for calculating distances between data points.
-    
+    - db_distance_dict (dict): The dictionary containing the database distance information.
+    - all_spectra_df (pandas.DataFrame): The dataframe containing all spectra data relevant to what we're plotting.
+
     Returns:
-    - dist_function_wrapper (function): The wrapped distance function.
+    - complete_distance_matrix (numpy.ndarray): The complete distance matrix.
     """
-    def dist_function_wrapper(wrapped_np_array):
-        """
-        A wrapper around the distance function that allows us to pass in a numpy array with metadata and a dictionary of database distance information.
-        
-        Parameters:
-        - wrapped_np_array (np_data_wrapper): The numpy array with metadata and database distance information. Contains 
-            a numpy array, a dataframe with columns ['filename','db_search_result'], and a dictionary of database distance information.
-        
-        Returns:
-        - distance_matrix (numpy.ndarray): The distance matrix.
-        """
-        data_np = wrapped_np_array.data_np
-        spectrum_data_df = wrapped_np_array.spectrum_data_df
-        db_distance_dict = wrapped_np_array.db_distance_dict
-        
-        # Select rows that are not databse search results and send to the distance function
-        non_db_search_result_filenames = spectrum_data_df.filename[spectrum_data_df['db_search_result'] == False].tolist()
-        non_db_search_result_indices   = spectrum_data_df.index[spectrum_data_df['db_search_result'] == False].tolist()
-        
-        # Note that this is only going to work if the database search results are in the bottom of the dataframe
-        if len(non_db_search_result_indices) != 0:  # Allows us to hide all queries and ignore this check
-            begins_at_zero = non_db_search_result_indices[0] == 0
-            is_contiguous = non_db_search_result_indices == list(range(non_db_search_result_indices[0], non_db_search_result_indices[-1] + 1))
-            if not begins_at_zero or not is_contiguous:
-                raise ValueError("To compute distances, knowledgebase search results should be at the bottom of the dataframe")
-        
-        num_inputs = len(non_db_search_result_indices)
-        
-        if len(non_db_search_result_indices) != 0:
-            if st.session_state['given_distance_measure'] == 'presence':
-                _data_np = data_np[non_db_search_result_indices].copy()
-                _data_np[_data_np > 0] = 1.0
+    # all_spectra_df = deepcopy(all_spectra_df)
+    # num_inputs = all_spectra_df[all_spectra_df['db_search_result'] == False].shape[0]
+    # num_db_search_results = all_spectra_df[all_spectra_df['db_search_result'] == True].shape[0]
+    # complete_distance_matrix = np.ones((num_inputs + num_db_search_results, num_inputs + num_db_search_results)) * np.inf    # Multiply by inf to allow for a sanity check
+    
+    # # 'filename' contains database_id for db search results
+    # all_filenames = all_spectra_df['filename']
+
+    num_labels = np.unique(labels).shape[0]
+    complete_distance_matrix = np.ones((num_labels, num_labels)) * np.inf
+
+    # Fill in input-input distances
+    for i in range(len(labels)):
+        fi = labels[i]
+        for j in range(i, len(labels)):  # Start from i to cover the diagonal and upper triangle
+            fj = labels[j]
+            
+            if i == j:
+                dist = 0.0
             else:
-                _data_np = data_np[non_db_search_result_indices].copy()
-            computed_distances = distfun(_data_np)
-        else:
-            computed_distances = np.zeros((0, num_inputs))
-        
-        # Add database search results
-        db_search_result_filenames = spectrum_data_df.filename[spectrum_data_df['db_search_result'] == True].tolist()
-        num_db_search_results = len(db_search_result_filenames)
-        
-        # Shortcut out to speed up computation
-        if num_db_search_results == 0:
-            # Quantize distance matrix to 1e-6 to prevent symetric errors
-            computed_distances = np.round(computed_distances, 6)
-            return squareform(computed_distances, force='tovector')
-        
-        # In theory this should never happen, but it's a good sanity check
-        if num_db_search_results + num_inputs != spectrum_data_df.shape[0]:
-            raise Exception("Error in creating distance matrix")
-        
-        start_tile = time.time()
-        db_distance_matrix = np.ones((num_inputs, num_db_search_results))
-        for i, filename in enumerate(non_db_search_result_filenames):
-            db_dist_dict = db_distance_dict.get(filename)
-            if db_dist_dict is None:
-                # It's missing from our queries for some reason, which is fine
-                continue
-            for j, db_filename in enumerate(db_search_result_filenames):
-                this_dist = db_dist_dict.get(db_filename)
-                if this_dist is not None:
-                    # Deal with numerical percision error due to subtractive cancellation
-                    if this_dist > 0.999 and st.session_state['given_distance_measure'] != 'euclidean':
-                        db_distance_matrix[i, j] = 1
-                    else:
-                        db_distance_matrix[i, j] = this_dist # 1-sim because we want distance
-                else:
-                    raise ValueError(f"Missing Query-DB distance for {filename} and {db_filename} in {db_dist_dict.keys()}")
-        print("Time to compute db distances", time.time() - start_tile, flush=True)
-        
-        start_time = time.time()
-        db_db_distance_matrix = np.ones((num_db_search_results, num_db_search_results))
-        if 'database_id' in spectrum_data_df.columns: # Only included when there are database search results present
-            db_search_database_ids = spectrum_data_df.database_id[spectrum_data_df['db_search_result'] == True].tolist()     
-            for i, db_id_1 in enumerate(db_search_database_ids):
-                db_dist_dict = db_distance_dict.get(db_id_1)
-                if db_dist_dict is None:
-                    continue    # Should only happen for old jobs
-                for j in range(i+1, len(db_search_database_ids)):
-                    db_id_2 = db_search_database_ids[j]
-                    this_dist = db_dist_dict.get(db_id_2)
-                    if this_dist is not None:
-                        # Deal with numerical percision error due to subtractive cancellation
-                        if this_dist > 0.999 and st.session_state['given_distance_measure'] != 'euclidean':
-                            db_db_distance_matrix[i, j] = 1
-                            db_db_distance_matrix[j, i] = 1
-                        else:
-                            db_db_distance_matrix[i, j] = this_dist
-                            db_db_distance_matrix[j, i] = this_dist
-                    else:
-                        raise ValueError("Missing", db_id_1, db_id_2, db_dist_dict, flush=True)
-        print("Time to compute db-db distances", time.time() - start_time, flush=True)
+                # Check both directions in the dict efficiently
+                dist = db_distance_dict.get(fi, {}).get(fj)
+                if dist is None:
+                    dist = db_distance_dict.get(fj, {}).get(fi)
 
-        # Create a single matrix to join everything together
-        distance_matrix = np.ones((num_inputs + num_db_search_results, num_inputs + num_db_search_results)) * np.inf    # Multiply by inf to allow for a sanity check
-        distance_matrix[:num_inputs, :num_inputs] = computed_distances
-        distance_matrix[:num_inputs, num_inputs:] = db_distance_matrix
-        distance_matrix[num_inputs:, :num_inputs] = db_distance_matrix.T
-        distance_matrix[num_inputs:, num_inputs:] = db_db_distance_matrix
-        
-        for i in range(num_inputs + num_db_search_results):
-            distance_matrix[i,i] = 0
-        
-        
-        if np.max(distance_matrix) > 1 and st.session_state['given_distance_measure'] != 'euclidean':
-            raise ValueError("Something went wrong during distance caluclation")
-        
-        # Quantize distance matrix to 1e-6 to prevent symetric errors
-        distance_matrix = np.round(distance_matrix, 6)
+            if dist is None:
+                raise ValueError(f"Missing distance for {fi} and {fj}")
 
-        # The bottom right corner is all ones
-        # assert np.max(distance_matrix) < 1.000001, f"Maximum distnace is {np.max(distance_matrix)}"
-        return squareform(distance_matrix, force='tovector')
+            complete_distance_matrix[i, j] = dist
+            complete_distance_matrix[j, i] = dist
 
-    return dist_function_wrapper
+    # Ensure no inf vals left
+    if np.isinf(complete_distance_matrix).any():
+        raise ValueError("Some distances are missing in the complete distance matrix")
+
+    return complete_distance_matrix
 
 def create_dendrogram(data_np, all_spectra_df, db_distance_dict, 
                       plotted_metadata=[],
@@ -252,9 +157,12 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict,
         # all_spectra_df.loc[all_spectra_df["db_search_result"] == True, db_metadata_column].fillna("No Metadata", inplace=True)
         # all_spectra_df.loc[all_spectra_df["db_search_result"] == True, "label"] = 'KB Result - ' + all_spectra_df.loc[all_spectra_df["db_search_result"] == True][db_label_column].astype(str)
         if db_search_columns != 'None':
-            all_spectra_df.loc[all_spectra_df["db_search_result"] == True, "label"] = 'KB Result - ' + all_spectra_df.loc[all_spectra_df["db_search_result"] == True][db_search_columns].astype(str) + ' - ' + all_spectra_df.loc[all_spectra_df["db_search_result"] == True]['db_strain_name'].astype(str)
+            all_spectra_df.loc[all_spectra_df["db_search_result"] == True, "label"] = 'KB Result - ' \
+                + all_spectra_df.loc[all_spectra_df["db_search_result"] == True][db_search_columns].astype(str) \
+                + ' - ' + all_spectra_df.loc[all_spectra_df["db_search_result"] == True]['db_strain_name'].astype(str)
         else:
-            all_spectra_df.loc[all_spectra_df["db_search_result"] == True, "label"] = 'KB Result - ' + all_spectra_df.loc[all_spectra_df["db_search_result"] == True]['db_strain_name'].astype(str)
+            all_spectra_df.loc[all_spectra_df["db_search_result"] == True, "label"] = 'KB Result - ' \
+                + all_spectra_df.loc[all_spectra_df["db_search_result"] == True]['db_strain_name'].astype(str)
         
     # all_spectra_df["label"] = all_spectra_df["label"].astype(str) + " - " + all_spectra_df["filename"].astype(str)
     all_labels_list = all_spectra_df["label"].to_list()
@@ -273,19 +181,27 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict,
         return None, None, None
 
     selected_distance_fun = st.session_state['distance_measure']
-        
-    # Creating Dendrogram  
-    wrapped_np_data = np_data_wrapper(data_np, all_spectra_input, db_distance_dict)
-    wrapped_distance_fn = get_dist_function_wrapper(selected_distance_fun)
-    dendro = ff.create_dendrogram(wrapped_np_data,
-                                  orientation='left',
-                                  labels=all_spectra_df.index.values, # We will use the labels as a unique identifier
-                                  distfun=wrapped_distance_fn,
-                                  linkagefun=lambda x: linkage(x, method=cluster_method),
-                                  color_threshold=coloring_threshold)
 
-    dist_matrix = wrapped_distance_fn(wrapped_np_data)
-    linkage_matrix = linkage(dist_matrix,
+
+    complete_distance_matrix = assemble_complete_distance_matrix(
+        db_distance_dict,
+        all_spectra_df.filename.values
+    )
+    complete_distance_matrix = squareform(complete_distance_matrix, force='tovector')
+    _dendro = _Dendrogram(
+            complete_distance_matrix, 
+            orientation='left',
+            labels=all_spectra_df.index.values, # We will use the labels as a unique identifier
+            distfun=None,                       # This is a distance matrix
+            linkagefun=lambda x: linkage(x, method=cluster_method),
+            color_threshold=coloring_threshold
+        )
+    dendro = graph_objs.Figure(
+        data = _dendro.data,
+        layout = _dendro.layout
+    )
+
+    linkage_matrix = linkage(complete_distance_matrix,
                             method=cluster_method)
     dist_matrix_relative_labels = all_spectra_df.index.values
 
@@ -471,13 +387,28 @@ def collect_database_search_results(task, base_url):
             if 'distance' not in database_search_results_df.columns:
                 st.warning("This is GNPS task is now out of date. Please clone it to use the interactive dashboard.")
                 st.stop()
+
+    try:
+        # Get the query-query distances
+        query_query_distance_url = f"{base_url}/resultfile?task={task}&file=nf_output/search/query_query_distances.tsv"
+        print("Query-Query Distance URL", query_query_distance_url, flush=True)
+        query_query_distance_table = pd.read_csv(query_query_distance_url, sep="\t")
+    except Exception:
+        st.warning("This is GNPS task is now out of date. Please clone it to use the interactive dashboard.")
+        st.stop()
         
-    return database_search_results_df, database_database_distance_table
+    return database_search_results_df, database_database_distance_table, query_query_distance_table
 
 
 
 
-def integrate_database_search_results(all_spectra_df:pd.DataFrame, database_search_results_df:pd.DataFrame, database_database_distances:pd.DataFrame, session_state, db_label_column="db_strain_name"):
+def integrate_database_search_results(
+        all_spectra_df:pd.DataFrame,
+        database_search_results_df:pd.DataFrame,
+        query_query_distances:pd.DataFrame,
+        database_database_distances:pd.DataFrame,
+        session_state,
+    ):
     """
     Integrate the database search results into the original data. Adds unique database search results to the original data and returns a dictionary of database distances.
     Only the database_id column is considered for uniqueness.
@@ -486,7 +417,6 @@ def integrate_database_search_results(all_spectra_df:pd.DataFrame, database_sear
     - all_spectra_df (pandas.DataFrame): The dataframe containing all spectra data.
     - database_search_results_df (pandas.DataFrame): The dataframe containing the database search results.
     - session_state (dict): The session state containing the display parameters.
-    - db_label_column (str, optional): The column name to be used for displaying database search result metadata. Defaults to "db_strain_name".
     
     Returns:
     - all_spectra_df (pandas.DataFrame): The dataframe containing all spectra data with database search results added.
@@ -495,11 +425,23 @@ def integrate_database_search_results(all_spectra_df:pd.DataFrame, database_sear
     db_taxonomy_filter   = session_state["db_taxonomy_filter"]
     distance_threshold = session_state["db_distance_threshold"]
     maximum_db_results   = session_state["max_db_results"]
-    
+
+    filtered_filenames = set(all_spectra_df.filename)
+
+    # Holds ((n+m) * (n+m) / 2 size) matrix of distances
+    distances_dict = {}
+    ## Query - Query Distances
+    for _, row in query_query_distances.iterrows():
+        if distances_dict.get(row['query_filename_left']) is None:
+            distances_dict[row['query_filename_left']] = {row["query_filename_right"]: row['distance']}
+        else:
+            distances_dict[row['query_filename_left']][row["query_filename_right"]] = row['distance']
+
+
     # If there are no database search results, mark everything as not a database search result and return
     if database_search_results_df is None:
         all_spectra_df["db_search_result"] = False
-        return all_spectra_df, None
+        return all_spectra_df, distances_dict
     
     # Apply DB Taxonomy Filter
     split_taxonomy = database_search_results_df['db_taxonomy'].str.split(";")
@@ -529,32 +471,34 @@ def integrate_database_search_results(all_spectra_df:pd.DataFrame, database_sear
                                                                             (database_database_distances["database_id_right"].isin(best_ids))]
     
     # We will abuse filename because during display, we display "metadata - filename"
-    trimmed_search_results_df["filename"] = trimmed_search_results_df[db_label_column].astype(str)
+    trimmed_search_results_df["filename"] = trimmed_search_results_df["database_id"].astype(str)
     
     all_spectra_df["db_search_result"] = False
     trimmed_search_results_df["db_search_result"] = True
     
     # Concatenate DB search results
-    to_concat = trimmed_search_results_df.drop_duplicates(subset=["database_id"])   # Get unique database hits, assuming databsae_id is unique
-    to_concat = to_concat.drop(columns=['query_filename','distance'])             # Remove distance info 
+    to_concat = trimmed_search_results_df.drop_duplicates(subset=["database_id"])   # Get unique database hits, assuming database_id is unique
+    to_concat = to_concat.drop(columns=['query_filename','distance'])               # Remove distance info 
     all_spectra_df = pd.concat((all_spectra_df, to_concat), axis=0)
     
-    # Build a distance dict for the database hits (build off full matrix, some may just not get used all-pairs distances are required)
-    database_distance_dict = {}
-    for index, row in database_search_results_df.iterrows():
-        if database_distance_dict.get(row['query_filename']) is None:
-            database_distance_dict[row['query_filename']] = {row[db_label_column]: row['distance']}
+
+    ## Query - DB HitsDistances
+    for _, row in database_search_results_df.iterrows():
+        if distances_dict.get(row['query_filename']) is None:
+            distances_dict[row['query_filename']] = {row["database_id"]: row['distance']}
         else:
-            database_distance_dict[row['query_filename']][row[db_label_column]] = row['distance']
+            distances_dict[row['query_filename']][row["database_id"]] = row['distance']
+    
+    ## DB Hits - DB Hits Distances
     if database_database_distances is not None:    
         # Add the DB-DB distances to the distance dictionary
-        for index, row in database_database_distances.iterrows():    # This is known to be square, no need to flip the indices
-            if database_distance_dict.get(row['database_id_left']) is None:
-                database_distance_dict[row['database_id_left']] = {row['database_id_right']: row['distance']}
+        for _, row in database_database_distances.iterrows():    # This is known to be square, no need to flip the indices
+            if distances_dict.get(row['database_id_left']) is None:
+                distances_dict[row['database_id_left']] = {row['database_id_right']: row['distance']}
             else:
-                database_distance_dict[row['database_id_left']][row['database_id_right']] = row['distance']
+                distances_dict[row['database_id_left']][row['database_id_right']] = row['distance']
     
-    return all_spectra_df, database_distance_dict
+    return all_spectra_df, distances_dict
 
 
 # Here we will add an input field for the GNPS2 task ID
@@ -734,7 +678,7 @@ if False:
     st.write(all_spectra_df) # Currently, we're not displaying db search results
 
 # Collect the database search results
-db_search_results, db_db_distance_table = collect_database_search_results(task_id, base_url)
+db_search_results, db_db_distance_table, query_query_distance_table = collect_database_search_results(task_id, base_url)
 
 if db_db_distance_table is None and db_search_results is not None:
     st.warning("""Knowledgebase-knowledgebase distances are not available for this task, perhaps this is an old task?  
@@ -962,7 +906,13 @@ with st.expander("General", expanded=False):
 st.session_state['query_only_spectra_df'] = all_spectra_df
 
 # Process the db search results (it's done in this order to allow for db_search parameters)
-all_spectra_df, db_distance_dict = integrate_database_search_results(all_spectra_df, db_search_results, db_db_distance_table, st.session_state)
+all_spectra_df, db_distance_dict = integrate_database_search_results(
+    all_spectra_df,
+    db_search_results,
+    query_query_distance_table,
+    db_db_distance_table,
+    st.session_state
+    )
 st.session_state['spectra_df'] = all_spectra_df
 
 # Remove selected ones from all_spectra_df (believe it or not, we want to remove this after integrating the database search results. This will allow users to hide the queries)
@@ -1053,6 +1003,8 @@ def get_taxa_annotation_file(labels, metadata, all_spectra_df):
 
     """)
     try:
+        if set(['filename', 'NCBI taxid', 'db_search_result']).issubset(all_spectra_df.columns) is False:
+            return "NCBI TaxID information not available for this task."
         metadata = all_spectra_df[['filename', 'NCBI taxid', 'db_search_result']].copy(deep=True)
 
         metadata.dropna(subset=['NCBI taxid'], inplace=True)
