@@ -17,6 +17,8 @@ from utils import custom_css, format_proteins_as_strings
 from streamlit.errors import StreamlitAPIException
 from collections import defaultdict
 import plotly.graph_objects as go
+from urllib.parse import quote
+import logging
 
 # TODO:
 # [ ] Get processed spectra from DB, rather than raw
@@ -122,12 +124,26 @@ def get_peaks_from_USI(usi:str):
     Returns:
     - peaks (list): The peaks of the spectrum.
     """
+
+    # Escape reserved characters in USI
+    try:
+        portion_prior_to_task = usi.split("TASK-", 1)[0]
+        task_id_and_beyond = usi.split("TASK-", 1)[1]
+        task_id_and_path = task_id_and_beyond.split(':scan:', 1)[0]
+        task_id_and_path = quote(task_id_and_path)
+        scan = task_id_and_beyond.split(':scan:', 1)[1]
+        quoted_usi = f"{portion_prior_to_task}TASK-{task_id_and_path}:scan:{scan}"
+    except Exception as e:
+        st.error(f"Not a valid USI format: '{usi}'. Error: {str(e)}")
+        
     urls = [
-        f"https://metabolomics-usi.gnps2.org/json/?usi1={usi}",
-        f"https://de.metabolomics-usi.gnps2.org/json/?usi1={usi}"
+        f"https://metabolomics-usi.gnps2.org/json/?usi1={quoted_usi}",
+        f"https://de.metabolomics-usi.gnps2.org/json/?usi1={quoted_usi}"
     ]
+
     for url in urls:
         try:
+            logging.warning(f"Fetching peaks from USI: {usi} using URL: {url}")
             r = requests.get(url, timeout=10)
             retries = 3
             while r.status_code != 200 and retries > 0:
