@@ -325,7 +325,7 @@ def format_proteins_as_strings(df):
     output = []
     for row in df.to_dict(orient="records"):
         if row['db_search_result']:
-            output.append(f"KB Result - {row['filename']}")
+            output.append(f"KB Result - {row['db_strain_name']}")
         else:   
             output.append(row['filename'])
             

@@ -42,6 +42,8 @@ st.markdown("""
 dm_n_components = 3
 
 metadata_df = st.session_state.get('metadata_df', pd.DataFrame())
+if metadata_df is None:
+    metadata_df = pd.DataFrame()
 
 st.session_state.dm_mode = st.selectbox(
     "Select Mode",

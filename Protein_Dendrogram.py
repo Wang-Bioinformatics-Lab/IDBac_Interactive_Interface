@@ -33,8 +33,8 @@ html('<script async defer data-website-id="4611e28d-c0ff-469d-a2f9-a0b54c0c8ee0"
 custom_css()
 
 # DEFAULT_TASK_ID = "b06ac61f27e346e3a443234d80e16ced"    # ML TASK
-OLD_DEFAULT_TASK_IDS = ["8e0cb0c6a3c04ae1991bbc1dca2882b5", ]
-DEFAULT_TASK_ID = "4c43a2ca6f3541938e491b3c52442721"
+OLD_DEFAULT_TASK_IDS = ["8e0cb0c6a3c04ae1991bbc1dca2882b5",]
+DEFAULT_TASK_ID = "a8a6aa82900645afad55f99111259943"
 # DEFAULT_TASK_ID = "dd792e0180cb4ef2950077a8ba485790"
 # Microbiome Presence: 634aa977f11148da8bada35f1ef2ff06
 
@@ -354,6 +354,7 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict,
         return dendro, linkage_matrix, dist_matrix_relative_labels
 
 
+@st.cache_data
 def collect_database_search_results(task, base_url):
     """
     Collect the database search results from the IDBAC Database. If the database search results are not available, then None is returned.
@@ -508,11 +509,10 @@ url_parameters = st.query_params
 if "task" in url_parameters and "task_id" not in st.session_state:
     task_id = url_parameters["task"]
     if task_id in OLD_DEFAULT_TASK_IDS: # Redirect Old Default Task to New Default Task
-        st.query_params["task_id"] = DEFAULT_TASK_ID
         st.session_state["task_id"] = DEFAULT_TASK_ID
         st.rerun()
     else:
-        st.query_params["task_id"] = task_id
+        st.session_state["task_id"] = task_id
 
 elif "task_id" not in st.session_state:
     st.session_state["task_id"] = DEFAULT_TASK_ID

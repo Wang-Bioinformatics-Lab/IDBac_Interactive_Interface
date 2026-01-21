@@ -178,16 +178,16 @@ def get_peaks(all_spectra_df: pd.DataFrame, filename: str, task:str, mass_range:
     if filename.startswith("KB Result - "):
         filename = filename.replace("KB Result - ", "")
         db_result = True
-        
-    # Attempt to mitigate issues due to duplicate filenames
-    row = all_spectra_df.loc[(all_spectra_df["filename"] == filename) & (all_spectra_df["db_search_result"] == db_result)]
 
     if db_result:
         # If it's a database search result, use the database_id to get the USI
+        row = all_spectra_df.loc[(all_spectra_df["db_strain_name"] == filename) & (all_spectra_df["db_search_result"] == db_result)]
+
         peaks = get_peaks_from_db_result(row["database_id"].iloc[0])
     else:
         # If it's a query, use the query job to get the USI
         _task = task.strip("BETA-").strip("DEV-")
+        row = all_spectra_df.loc[(all_spectra_df["filename"] == filename) & (all_spectra_df["db_search_result"] == db_result)]
         USI = f"mzspec:GNPS2:TASK-{_task}-nf_output/search/query_spectra/{row['filename'].iloc[0]}:scan:1"
 
         peaks = get_peaks_from_USI(USI)
@@ -271,6 +271,8 @@ def get_peaks_from_db_result(database_id:str):
     Returns:
     - peaks (list): The peaks of the database search result.
     """
+    print(f"get_peaks_from_db_result database_id:", database_id, flush=True)
+
     url = f"https://idbac.org/api/spectrum/filtered?database_id={database_id}"
 
     r = requests.get(url, timeout=60)
@@ -470,9 +472,18 @@ def draw_mirror_plot(all_spectra_df):
     all_options = format_proteins_as_strings(all_spectra_df)
 
     # Select spectrum one
-    st.selectbox("Spectrum One", all_options, key='mirror_spectra_one', help="Select the first spectrum to be plotted. Knowledgebase search results are denoted by 'KB Result -'.")
+    st.selectbox(
+        "Spectrum One",
+        all_options,
+        key='mirror_spectra_one',
+        help="Select the first spectrum to be plotted. Knowledgebase search results are denoted by 'KB Result -'."
+    )
     # Select spectrum two
-    st.selectbox("Spectrum Two", ['None'] + all_options, key='mirror_spectra_two', help="Select the second spectrum to be plotted. Knowledgebase search results are denoted by 'KB Result -'.")
+    st.selectbox(
+        "Spectrum Two", ['None'] + all_options,
+        key='mirror_spectra_two',
+        help="Select the second spectrum to be plotted. Knowledgebase search results are denoted by 'KB Result -'."
+    )
 
     st.slider(
         "Select Mass Range (m/z):",
