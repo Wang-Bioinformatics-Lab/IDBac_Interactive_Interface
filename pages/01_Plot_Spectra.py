@@ -1,3 +1,4 @@
+import uuid
 import streamlit as st
 import streamlit.components.v1 as components
 from pyvis import network as net
@@ -43,7 +44,7 @@ st.markdown("""
     To get started, select the spectra you want to visualize, choose whether to include raw spectra, and adjust the plot settings as needed.
     """)
 
-@st.cache_data(ttl=60*5, max_entries=20, show_spinner=True,)
+@st.cache_data(ttl=60*5, max_entries=3000, show_spinner=True,)
 def get_USI(all_spectra_df: pd.DataFrame, filename: str, task:str):
     """
     Get the USI of a given filename.
@@ -114,7 +115,7 @@ def get_USI(all_spectra_df: pd.DataFrame, filename: str, task:str):
     
 #     return return_usi
 
-@st.cache_data(ttl=60*5, max_entries=20, show_spinner=True,)
+@st.cache_data(ttl=60*5, max_entries=3000, show_spinner=True,)
 def get_peaks_from_USI(usi:str):
     """ Get the peaks from a USI.
 
@@ -158,7 +159,80 @@ def get_peaks_from_USI(usi:str):
     st.error("GNPS2 USI not found, you may need to rerun the analysis workflow.")
     st.stop()
 
-def get_peaks(all_spectra_df: pd.DataFrame, filename: str, task:str, mass_range: tuple):
+def _format_db_rows_as_options(list_val: 'pandas.core.frame.Pandas'):
+    format  = f"Database ID: {list_val.database_id}"
+    if list_val.db_culture_collection:
+        format = f"Collection: {list_val.db_culture_collection} | " + format
+    if list_val.db_sample_name:
+        format = f"Sample: {list_val.db_sample_name} | " + format
+    return format
+
+
+def _get_db_rows(all_spectra_df: pd.DataFrame, filename: str) -> pd.DataFrame:
+    row = all_spectra_df.loc[
+        (all_spectra_df["db_strain_name"] == filename)
+        & (all_spectra_df["db_search_result"] == True)
+    ]
+    return row
+
+
+def _select_db_result(all_spectra_df: pd.DataFrame, filename: str, key: str, label_prefix: str) -> str | None:
+    row = _get_db_rows(all_spectra_df, filename)
+    options = list(row.itertuples())
+    if len(options) == 0:
+        st.warning(f"No database search results found for {filename}.")
+        return None
+
+    disabled = len(options) == 1
+    label = f"{label_prefix}: {filename}"
+    if disabled:
+        label = f"{label_prefix}: {filename} (only one found)"
+
+    with st.container(border=True):
+        specific_selection = st.selectbox(
+            label,
+            options=options,
+            format_func=_format_db_rows_as_options,
+            key=key,
+            disabled=disabled
+        )
+    return specific_selection.database_id
+
+
+def _ensure_form_defaults(all_options: list[str]) -> None:
+    if "mp_selected_spectrum_one" not in st.session_state and all_options:
+        st.session_state["mp_selected_spectrum_one"] = all_options[0]
+    if "mp_selected_spectrum_two" not in st.session_state:
+        st.session_state["mp_selected_spectrum_two"] = "None"
+
+    if "mp_selected_mass_range" not in st.session_state:
+        st.session_state["mp_selected_mass_range"] = (2000, 30000)
+    if "mp_selected_include_raw" not in st.session_state:
+        st.session_state["mp_selected_include_raw"] = False
+    if "mp_selected_gridlines" not in st.session_state:
+        st.session_state["mp_selected_gridlines"] = "None"
+    if "mp_selected_font_size_multiplier" not in st.session_state:
+        st.session_state["mp_selected_font_size_multiplier"] = 1.0
+
+    if "mp_form_spectrum_one" not in st.session_state and all_options:
+        st.session_state["mp_form_spectrum_one"] = st.session_state["mp_selected_spectrum_one"]
+    if "mp_form_spectrum_two" not in st.session_state:
+        st.session_state["mp_form_spectrum_two"] = st.session_state["mp_selected_spectrum_two"]
+    if "mp_form_mass_min" not in st.session_state:
+        st.session_state["mp_form_mass_min"] = st.session_state["mp_selected_mass_range"][0]
+    if "mp_form_mass_max" not in st.session_state:
+        st.session_state["mp_form_mass_max"] = st.session_state["mp_selected_mass_range"][1]
+    if "mp_form_include_raw" not in st.session_state:
+        st.session_state["mp_form_include_raw"] = st.session_state["mp_selected_include_raw"]
+    if "mp_form_gridlines" not in st.session_state:
+        st.session_state["mp_form_gridlines"] = st.session_state["mp_selected_gridlines"]
+    if "mp_form_font_size_multiplier" not in st.session_state:
+        st.session_state["mp_form_font_size_multiplier"] = st.session_state["mp_selected_font_size_multiplier"]
+    if "mp_form_plot_title" not in st.session_state:
+        st.session_state["mp_form_plot_title"] = st.session_state.get("mp_selected_plot_title", "")
+
+
+def get_peaks_a(all_spectra_df: pd.DataFrame, filename: str, task:str, mass_range: tuple, db_id: str | None = None):
     """
     Get the peaks of a given filename.
     
@@ -180,8 +254,15 @@ def get_peaks(all_spectra_df: pd.DataFrame, filename: str, task:str, mass_range:
         db_result = True
 
     if db_result:
-        # If it's a database search result, use the database_id to get the USI
-        row = all_spectra_df.loc[(all_spectra_df["db_strain_name"] == filename) & (all_spectra_df["db_search_result"] == db_result)]
+        row = _get_db_rows(all_spectra_df, filename)
+        if db_id is not None:
+            row = row.loc[row["database_id"] == db_id]
+        elif len(row) > 1:
+            st.warning(f"Multiple database search results found for {filename}. Please select one below.")
+            return None
+        if len(row) == 0:
+            st.warning(f"No database search results found for {filename}.")
+            return None
 
         peaks = get_peaks_from_db_result(row["database_id"].iloc[0])
     else:
@@ -210,6 +291,67 @@ def get_peaks(all_spectra_df: pd.DataFrame, filename: str, task:str, mass_range:
     peaks = [[peak[0], peak[1]] for peak in peaks if mass_range[0] <= peak[0] <= mass_range[1]]
 
     return peaks
+    
+def get_peaks_b(all_spectra_df: pd.DataFrame, filename: str, task:str, mass_range: tuple, db_id: str | None = None):
+    """
+    Get the peaks of a given filename.
+    
+    Parameters:
+    - all_spectra_df (pandas.DataFrame): The dataframe containing all spectra data.
+    - filename (str): The filename of the spectrum.
+    - task (str): The IDBAc_analysis task number
+    - mass_range (tuple): The mass range for filtering peaks (min_mz, max_mz)
+    
+    Returns:
+    - usi (str): The USI of the spectrum.
+    """
+    if filename == 'None':
+        return None
+    
+    db_result = False
+    if filename.startswith("KB Result - "):
+        filename = filename.replace("KB Result - ", "")
+        db_result = True
+
+    if db_result:
+        row = _get_db_rows(all_spectra_df, filename)
+        if db_id is not None:
+            row = row.loc[row["database_id"] == db_id]
+        elif len(row) > 1:
+            st.warning(f"Multiple database search results found for {filename}. Please select one below.")
+            return None
+        if len(row) == 0:
+            st.warning(f"No database search results found for {filename}.")
+            return None
+
+        peaks = get_peaks_from_db_result(row["database_id"].iloc[0])
+    else:
+        # If it's a query, use the query job to get the USI
+        _task = task.strip("BETA-").strip("DEV-")
+        row = all_spectra_df.loc[(all_spectra_df["filename"] == filename) & (all_spectra_df["db_search_result"] == db_result)]
+        USI = f"mzspec:GNPS2:TASK-{_task}-nf_output/search/query_spectra/{row['filename'].iloc[0]}:scan:1"
+
+        peaks = get_peaks_from_USI(USI)
+
+    # Discretize peaks to two decimal points and add intensities for the same m/z
+    peaks_dict = {}
+    for peak in peaks:
+        mz = round(peak[0], DECIMAL_PLACES)
+        if mz not in peaks_dict:
+            peaks_dict[mz] = peak[1]
+        else:
+            peaks_dict[mz] += peak[1]
+    peaks = [[mz, intensity] for mz, intensity in peaks_dict.items()]
+
+    # Normalize intensities
+    max_intensity = max([peak[1] for peak in peaks])
+    peaks = [[peak[0], peak[1] / max_intensity] for peak in sorted(peaks)]
+
+    # Filter peaks based on the selected mass range
+    peaks = [[peak[0], peak[1]] for peak in peaks if mass_range[0] <= peak[0] <= mass_range[1]]
+
+    return peaks
+    
 
 def get_raw_peaks(filename: str, task:str, mass_range: tuple):
     """ Get the raw peaks of a given filename.
@@ -271,7 +413,6 @@ def get_peaks_from_db_result(database_id:str):
     Returns:
     - peaks (list): The peaks of the database search result.
     """
-    print(f"get_peaks_from_db_result database_id:", database_id, flush=True)
 
     url = f"https://idbac.org/api/spectrum/filtered?database_id={database_id}"
 
@@ -412,9 +553,9 @@ def stick_plot(peaks_a, peaks_b=None, raw_peaks_a=None, raw_peaks_b=None, title=
     if peaks_b is not None:
         tickvals = np.concatenate([np.arange(-1.0, 0.0, 0.1), tickvals])
     updated_ticktext = [f'{abs(val):.1f}' for val in tickvals]
-    
+
     # Compute lower and upper bound for range
-    lower_range = max(min([peak[0] for peak in peaks_a]) - 100,0)
+    lower_range = max(min([peak[0] for peak in peaks_a]) - 100, 0)
     upper_range = max([peak[0] for peak in peaks_a]) + 100
 
     if peaks_b is not None:
@@ -467,71 +608,135 @@ def stick_plot(peaks_a, peaks_b=None, raw_peaks_a=None, raw_peaks_b=None, title=
 
     st.plotly_chart(fig, config=config)
 
-def draw_mirror_plot(all_spectra_df):
-    # Add a dropdown allowing for mirror plots:
+def show_mirror_plot_options(all_spectra_df):
     all_options = format_proteins_as_strings(all_spectra_df)
+    _ensure_form_defaults(all_options)
 
-    # Select spectrum one
-    st.selectbox(
-        "Spectrum One",
-        all_options,
-        key='mirror_spectra_one',
-        help="Select the first spectrum to be plotted. Knowledgebase search results are denoted by 'KB Result -'."
-    )
-    # Select spectrum two
-    st.selectbox(
-        "Spectrum Two", ['None'] + all_options,
-        key='mirror_spectra_two',
-        help="Select the second spectrum to be plotted. Knowledgebase search results are denoted by 'KB Result -'."
-    )
+    current_one = st.session_state.get("mp_selected_spectrum_one", all_options[0] if all_options else "None")
+    current_two = st.session_state.get("mp_selected_spectrum_two", "None")
 
-    st.slider(
-        "Select Mass Range (m/z):",
-        min_value=2000,
-        max_value=30000,
-        value=(2000, 30000),
-        step=10,
-        key="mp_mass_range",
-        help="Adjust the mass range for spectra visualization and cosine calculation."
-    )
+    with st.form("mirror_plot_form"):
+        if all_options and st.session_state.get("mp_form_spectrum_one") not in all_options:
+            st.session_state["mp_form_spectrum_one"] = all_options[0]
+        st.selectbox(
+            "Spectrum One",
+            all_options,
+            key="mp_form_spectrum_one",
+            help="Select the first spectrum to be plotted. Knowledgebase search results are denoted by 'KB Result -'."
+        )
+        if st.session_state.get("mp_form_spectrum_two") not in (['None'] + all_options):
+            st.session_state["mp_form_spectrum_two"] = "None"
+        st.selectbox(
+            "Spectrum Two", ['None'] + all_options,
+            key="mp_form_spectrum_two",
+            help="Select the second spectrum to be plotted. Knowledgebase search results are denoted by 'KB Result -'."
+        )
 
-    # Add a checkbox to include the raw spectra in the plot
-    st.checkbox("Include Raw Spectra", key='include_raw_spectra', value=False,
-                help="If checked, the raw spectra will be included in the plot.")
-    # Gridlines (horizontal, horizontal & vertical, or none)
-    st.selectbox("Gridlines", ['None', 'Horizontal', 'Grid'], key='gridlines')
+        st.markdown("**Select Mass Range (m/z):**")
+        col_min, col_max = st.columns(2)
+        with col_min:
+            st.number_input(
+                "Min m/z",
+                min_value=2000,
+                max_value=30000,
+                step=10,
+                key="mp_form_mass_min",
+                help="Set the minimum m/z for spectra visualization and cosine calculation."
+            )
+        with col_max:
+            st.number_input(
+                "Max m/z",
+                min_value=2000,
+                max_value=30000,
+                step=10,
+                key="mp_form_mass_max",
+                help="Set the maximum m/z for spectra visualization and cosine calculation."
+            )
 
-    # Font size multiplier
-    st.slider("Font Size Multiplier", min_value=0.5, max_value=15.0, value=1.0, step=0.1, key='font_size_multiplier',
-              help="Adjust the font size of the plot. This is a multiplier, so a value of 1.0 will use the default font size, while a value of 2.0 will double the font size.")
-    
-    
-    # For Local Plot
-    if st.session_state['mirror_spectra_two'] == 'None':
-        default_title = f"{st.session_state['mirror_spectra_one']}"
+        st.checkbox(
+            "Include Raw Spectra",
+            key='mp_form_include_raw',
+            help="If checked, the raw spectra will be included in the plot."
+        )
+        st.selectbox("Gridlines", ['None', 'Horizontal', 'Grid'], key='mp_form_gridlines')
+
+        st.slider(
+            "Font Size Multiplier",
+            min_value=0.5,
+            max_value=15.0,
+            step=0.1,
+            key='mp_form_font_size_multiplier',
+            help="Adjust the font size of the plot. This is a multiplier, so a value of 1.0 will use the default font size, while a value of 2.0 will double the font size."
+        )
+
+        st.text_input("Set Title:", key="mp_form_plot_title")
+
+        submitted = st.form_submit_button("Update plot")
+
+    if submitted:
+        st.session_state["mp_selected_spectrum_one"] = st.session_state["mp_form_spectrum_one"]
+        st.session_state["mp_selected_spectrum_two"] = st.session_state["mp_form_spectrum_two"]
+        st.session_state["mp_selected_mass_range"] = (
+            st.session_state["mp_form_mass_min"],
+            st.session_state["mp_form_mass_max"]
+        )
+        st.session_state["mp_selected_include_raw"] = st.session_state["mp_form_include_raw"]
+        st.session_state["mp_selected_gridlines"] = st.session_state["mp_form_gridlines"]
+        st.session_state["mp_selected_font_size_multiplier"] = st.session_state["mp_form_font_size_multiplier"]
+        st.session_state["mp_selected_plot_title"] = st.session_state.get("mp_form_plot_title")
+        st.session_state["mp_run_plot"] = True
+
+@st.fragment
+def draw_mirror_plot(all_spectra_df):
+    all_options = format_proteins_as_strings(all_spectra_df)
+    _ensure_form_defaults(all_options)
+
+    if not st.session_state.get("mp_run_plot"):
+        st.info("Adjust settings and click **Update plot** to render the spectra.")
+        return
+
+    selected_one = st.session_state.get("mp_selected_spectrum_one", all_options[0] if all_options else "None")
+    selected_two = st.session_state.get("mp_selected_spectrum_two", "None")
+
+    db_id_a = None
+    db_id_b = None
+    if selected_one.startswith("KB Result - "):
+        db_id_a = _select_db_result(all_spectra_df, selected_one.replace("KB Result - ", ""), "db_result_selection_a", "⚠️ Spectrum One: Multiple strains with that strain name exist, please select one")
+    if selected_two != 'None' and selected_two.startswith("KB Result - "):
+        db_id_b = _select_db_result(all_spectra_df, selected_two.replace("KB Result - ", ""), "db_result_selection_b", "⚠️ Spectrum Two: Multiple strains with that strain name exist, please select one")
+
+    if selected_two == 'None':
+        default_title = f"{selected_one}"
     else:
-        default_title = f"{st.session_state['mirror_spectra_one']} vs {st.session_state['mirror_spectra_two']}"
-    plot_title = st.text_input("Set Title:", value=default_title)
+        default_title = f"{selected_one} vs {selected_two}"
+    plot_title = st.session_state.get("mp_selected_plot_title") or default_title
 
-    peaks_a = get_peaks(all_spectra_df, st.session_state['mirror_spectra_one'], st.session_state["task_id"], st.session_state["mp_mass_range"])
+    selected_mass_range = st.session_state.get("mp_selected_mass_range", (2000, 30000))
+    selected_include_raw = st.session_state.get("mp_selected_include_raw", False)
+    selected_gridlines = st.session_state.get("mp_selected_gridlines", "None")
+    selected_font_size = st.session_state.get("mp_selected_font_size_multiplier", 1.0)
+
+    peaks_a = get_peaks_a(all_spectra_df, selected_one, st.session_state["task_id"], selected_mass_range, db_id=db_id_a)
     peaks_b = None
-    if st.session_state['mirror_spectra_two'] != 'None':
-        peaks_b = get_peaks(all_spectra_df, st.session_state['mirror_spectra_two'], st.session_state["task_id"], st.session_state["mp_mass_range"])
+    if selected_two != 'None':
+        peaks_b = get_peaks_b(all_spectra_df, selected_two, st.session_state["task_id"], selected_mass_range, db_id=db_id_b)
 
     raw_peaks_a = None
     raw_peaks_b = None
-    if st.session_state['include_raw_spectra']:
-        raw_peaks_a = get_raw_peaks(st.session_state['mirror_spectra_one'], st.session_state["task_id"], st.session_state["mp_mass_range"])
-        if st.session_state['mirror_spectra_two'] != 'None':
-            raw_peaks_b = get_raw_peaks(st.session_state['mirror_spectra_two'], st.session_state["task_id"], st.session_state["mp_mass_range"])
+    if selected_include_raw:
+        raw_peaks_a = get_raw_peaks(selected_one, st.session_state["task_id"], selected_mass_range)
+        if selected_two != 'None':
+            raw_peaks_b = get_raw_peaks(selected_two, st.session_state["task_id"], selected_mass_range)
 
-    stick_plot(peaks_a,
-               peaks_b,
-               raw_peaks_a,
-               raw_peaks_b,
-               title=plot_title,
-               font_size_multiplier=st.session_state['font_size_multiplier'],
-               gridlines=st.session_state['gridlines'])
+    stick_plot(
+        peaks_a,
+        peaks_b,
+        raw_peaks_a,
+        raw_peaks_b,
+        title=plot_title,
+        font_size_multiplier=selected_font_size,
+        gridlines=selected_gridlines
+    )
     
     if peaks_b is not None:
         # Create dictionaries from the peaks
@@ -599,6 +804,7 @@ def draw_mirror_plot(all_spectra_df):
     
 if st.session_state.get('spectra_df') is not None and \
     len(st.session_state['spectra_df']) > 0:
+        show_mirror_plot_options(st.session_state['spectra_df'])
         draw_mirror_plot(st.session_state['spectra_df'])
 else:
     st.warning("No protein spectra data found. Please check that this task contains protein spectra data.")
