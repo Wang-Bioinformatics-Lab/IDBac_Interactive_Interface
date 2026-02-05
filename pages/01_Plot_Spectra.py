@@ -161,9 +161,9 @@ def get_peaks_from_USI(usi:str):
 
 def _format_db_rows_as_options(list_val: 'pandas.core.frame.Pandas'):
     format  = f"Database ID: {list_val.database_id}"
-    if list_val.db_culture_collection:
+    if list_val.db_culture_collection and str(list_val.db_culture_collection).lower() != "nan":
         format = f"Collection: {list_val.db_culture_collection} | " + format
-    if list_val.db_sample_name:
+    if list_val.db_sample_name and str(list_val.db_sample_name).lower() != "nan":
         format = f"Sample: {list_val.db_sample_name} | " + format
     return format
 
@@ -186,7 +186,7 @@ def _select_db_result(all_spectra_df: pd.DataFrame, filename: str, key: str, lab
     disabled = len(options) == 1
     label = f"{label_prefix}: {filename}"
     if disabled:
-        label = f"{label_prefix}: {filename} (only one found)"
+        label = f"Only one spectrum found for strain name '{filename}', automatically selecting it."
 
     with st.container(border=True):
         specific_selection = st.selectbox(
