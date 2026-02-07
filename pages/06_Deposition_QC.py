@@ -45,10 +45,25 @@ st.markdown("""
     * Minimal noise
     * Minimal baseline slope (high intensity at lower m/z values)
     * A significant number of peaks (at minimum 5-7 peaks) 
+            
+    \
+    
+    To help you with this task, numerical QC scores are provided: "Total QC Score", "Peaks Score", "Noise Score", and "Resolving Power Score". The best score in any category is 100.
+    * "Total QC Score": A weighted average of "Peaks Score", "Noise Score", and "Resolving Power Score".
+    * "Peaks Score": A score based on the number of peaks in the spectrum.
+    * "Noise Score": A score estimating the amount of noise in the baseline of a spectrum.
+    * "Resolving Power Score": A score estimating the average resolving power of the spectrum based on the m/z and full-width half maximum value of the top 10 peaks.
+    * "Status": A categorical score of "Green", "Yellow", or "Red" based on the "Total QC Score".
+
     \
 
-    You can view additional spectra by changing the page number on the side bar to the left.
-    """)
+    These metrics are inspired by the methodology introduced [here](https://www.nature.com/articles/s41597-025-04504-z), but are not identical.
+            
+    \
+            
+    You can view additional spectra by changing the page number on the side bar to the left. Below this table, you can find per-scan metrics and links to visualize individual replicate spectra.
+
+""")
 
 # get dqc_task_id from URL
 url_task_id = st.query_params.get("task_id", None)
@@ -71,19 +86,33 @@ if st.session_state.get('dqc_task_id') is None:
     st.stop()
 
 # Get Metadata
+dbc_task_id = st.session_state['dqc_task_id']
 if st.session_state['dqc_task_id'].startswith("DEV-"):
-        base_url = "http://dev.gnps2.org:4000"
+    base_url = "http://dev.gnps2.org:4000"
+    dbc_task_id = st.session_state['dqc_task_id'].replace("DEV-", "")
 elif st.session_state['dqc_task_id'].startswith("BETA-"):
     base_url = "https://beta.gnps2.org"
+    dbc_task_id = st.session_state['dqc_task_id'].replace("BETA-", "")
 else:
     base_url = "https://gnps2.org"
+
+metadata_url = f"{base_url}/resultfile?task={dbc_task_id}&file=metadata_converted/converted_metadata.tsv"
 try:
-    metadata_url = f"{base_url}/resultfile?task={st.session_state['dqc_task_id']}&file=metadata_converted/converted_metadata.tsv"
     metadata_df = pd.read_csv(metadata_url, sep="\t", index_col=False)
 except Exception as e:
+    print("Error loading metadata from URL:", metadata_url, flush=True)
     st.error("Error: Unable to load metadata. Please check the task ID.")
     st.write(f"Error: {e}")
     st.stop()
+
+qc_url = f"{base_url}/resultfile?task={dbc_task_id}&file=nf_output/qc/combined_output.tsv"
+qc_df = None
+try:
+    qc_df = pd.read_csv(qc_url, sep=",", index_col=False)
+except Exception as e:
+    print("Error loading QC data from URL:", qc_url, flush=True)
+    st.error("Error: Unable to load QC data. Is this an old task?")
+    st.write(f"Error: {e}")
 
 # Get all spectra
 filenames = metadata_df["Filename"].unique()
@@ -160,10 +189,37 @@ def request_img_cache_wrapper(usi: str):
         return None
 
 # Add USI to metadata_df
-metadata_df["USI"] = metadata_df.apply(lambda x: get_USI(x["Filename"], st.session_state['dqc_task_id']), axis=1)
+metadata_df["USI"] = metadata_df.apply(lambda x: get_USI(x["Filename"], dbc_task_id), axis=1)
+
+def aggregate_qc_data(df):
+    """For each "Filename", get the lowest "Total QC Score" (note value "Error" is lower than zero). Then,
+    get the ["Status", "Peaks Score", "Noise Score", "Baseline Score", "Resolving Power Score"]
+    associated with that value. 
+    """
+
+    aggregated_df = df.groupby("Filename").apply(lambda group: group.loc[group["Total QC Score"].replace("Error", -1).astype(float).idxmin()]).reset_index(drop=True)
+    
+    aggregated_df.rename(columns={
+        "scan": "Scan with Worst QC Score",
+        "Total QC Score": "Worst Total QC Score",
+    }, inplace=True)
+
+    return aggregated_df
+
+if qc_df is not None:
+    # Drop "Baseline Score" since it's not being used in the total equation
+    if "Baseline Score" in qc_df.columns:
+        qc_df.drop(columns=["Baseline Score"], inplace=True)
+    qc_df.rename(columns={"original_filename": "Filename"}, inplace=True)
+
+    aggregated_qc_df = aggregate_qc_data(qc_df)
+    qc_and_metadata_df = aggregated_qc_df.merge(metadata_df, on="Filename", how="right")
+else:
+    qc_and_metadata_df = metadata_df.copy()
+
 
 # Display pagenated dataframe
-def display_dataframe(df,):
+def display_dataframe(df):
     page_size = 10  # Number of rows per page
     total_rows = len(df)
     total_pages = (total_rows // page_size) + int(total_rows % page_size != 0)
@@ -223,4 +279,31 @@ def display_dataframe(df,):
 
 
 # Display the metadata dataframe
-display_dataframe(metadata_df)
+display_dataframe(qc_and_metadata_df)
+
+# Give the option to select a filename and view the per-scan QC results
+if qc_df is not None:
+    st.subheader("Per-Scan QC Results")
+    qc_df['View Raw Scan'] = qc_df.apply(
+        lambda row: f"https://metabolomics-usi.gnps2.org/dashinterface/?usi1=mzspec:GNPS2:TASK-{dbc_task_id}-input_spectra_folder/{row['Filename']}:scan:{row['scan']}",
+        axis=1
+    )
+    try:
+        selected_filename = st.selectbox(
+            "Select a filename to view per-scan QC results:",
+            options=qc_df["Filename"].unique()
+        )
+        if selected_filename:
+            selected_qc_data = qc_df[qc_df["Filename"] == selected_filename]
+            st.write(f"QC results for {selected_filename}:")
+            st.dataframe(
+                selected_qc_data,
+                column_config={
+                    "View Raw Scan": st.column_config.LinkColumn("View Raw Scan")
+                },
+                use_container_width=True,
+                hide_index=True
+            )
+    except Exception as e:
+        print("Error displaying per-scan QC results:", e, flush=True)
+        st.error("Error: Unable to display per-scan QC results. Is the QC data properly formatted?")
