@@ -181,9 +181,6 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict,
         st.error("There are not enough spectra to create a dendrogram. Please check number of input spectra and database search results file.")
         return None, None, None
 
-    selected_distance_fun = st.session_state['distance_measure']
-
-
     complete_distance_matrix = assemble_complete_distance_matrix(
         db_distance_dict,
         all_spectra_df.filename.values
@@ -674,8 +671,10 @@ st.session_state['heatmap_binned_spectra'] = heatmap_binned_spectra
 
 
 # read pandas dataframe from url
+st.session_state['all_spectra_df'] = None
 try:
     all_spectra_df = pd.read_csv(labels_url, sep="\t")
+    st.session_state['all_spectra_df'] = all_spectra_df
 except:
     if numpy_array is not None:
         st.warning("No Spectra found for this task. Please check the workflow inputs.")
@@ -921,6 +920,7 @@ all_spectra_df, db_distance_dict = integrate_database_search_results(
     db_db_distance_table,
     st.session_state
     )
+st.session_state['db_distance_dict'] = db_distance_dict
 st.session_state['spectra_df'] = all_spectra_df
 
 # Remove selected ones from all_spectra_df (believe it or not, we want to remove this after integrating the database search results. This will allow users to hide the queries)

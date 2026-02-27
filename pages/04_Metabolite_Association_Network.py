@@ -18,7 +18,11 @@ from utils import convert_to_mzml
 from typing import Dict, List, Tuple
 import io
 
+from plotly.graph_objs import graph_objs
+
 from Small_Molecule_Utils import get_small_molecule_dict, filter_small_molecule_dict
+from Protein_Dendrogram import assemble_complete_distance_matrix
+from Protein_Dendrogram_Components import _Dendrogram
 
 #####
 # A note abote streamlit session states:
@@ -41,40 +45,40 @@ def basic_dendrogram(disabled=False):
     st.selectbox("Clustering Method", clustering_options, key="sma_clustering_method")
 
     if disabled:
-        return None, None
+        return None, None, None
     if st.session_state['query_spectra_numpy_data'].shape[0] <= 1:
         st.warning("There are not enough spectra to create a dendrogram. \n \
                    Please check number of input spectra and database search results file.")
-        return None, None
+        return None, None, None
+    
+    complete_distance_matrix = assemble_complete_distance_matrix(
+        st.session_state['db_distance_dict'],
+        st.session_state['all_spectra_df'].filename.values
+    )
+    complete_distance_matrix = squareform(complete_distance_matrix, force='tovector')
+    _dendro = _Dendrogram(
+        complete_distance_matrix,
+        orientation='bottom',
+        labels=st.session_state['all_spectra_df'].filename.values,
+        distfun=None,
+        linkagefun=lambda x: linkage(x, method=st.session_state["sma_clustering_method"],),
+        color_threshold=st.session_state["sma_coloring_threshold"]
+    )
 
-    def _dist_fun(x):
-        distances = st.session_state['distance_measure'](x)
-        if distances.shape[0] != distances.shape[1]:
-            raise ValueError("Distance matrix must be square.")
-        # Quantize distance matrix to 1e-6 to prevent symetric errors
-        distances = np.round(distances, 6)
-        dist_matrix = squareform(distances, force='tovector')
-        
-        return dist_matrix
-
-    dendro = ff.create_dendrogram(st.session_state['query_spectra_numpy_data'],
-                                orientation='bottom',
-                                labels=st.session_state['query_only_spectra_df'].filename.values, # We will use the labels as a unique identifier
-                                distfun=_dist_fun,
-                                linkagefun=lambda x: linkage(x, method=st.session_state["sma_clustering_method"],),
-                                color_threshold=st.session_state["sma_coloring_threshold"])
+    dendro = graph_objs.Figure(
+        data = _dendro.data,
+        layout = _dendro.layout
+    )
        
     st.plotly_chart(dendro, use_container_width=True)
     # Sadly the only way to get the actual clusters (to plot the graph) is to recompute the linkage with scipy
-    # (TODO: Just used scipy to plot it)
-    dist_matrix = _dist_fun(st.session_state['query_spectra_numpy_data'])
-    linkage_matrix = linkage(dist_matrix,
+    linkage_matrix = linkage(complete_distance_matrix,
                             method=st.session_state["sma_clustering_method"])
     sch_dendro = dendrogram(linkage_matrix,
-                            labels=st.session_state['query_only_spectra_df'].filename.values,
+                            labels=st.session_state['all_spectra_df'].filename.values,
                             no_plot=True,
                             color_threshold=st.session_state["sma_coloring_threshold"])
-    
+        
     cluster_dict = {}
     filenames    = sch_dendro['ivl']
     colors_list  = sch_dendro['leaves_color_list']
@@ -98,7 +102,8 @@ def basic_dendrogram(disabled=False):
         if cluster_dict[filename]['color'] >= 1:
             cluster_dict[filename]['color'] += 1
     
-    return cluster_dict, dendro
+    print("filenames in basic_dendorgram", filenames, flush=True)
+    return cluster_dict, dendro, filenames
 
 def filter_small_molecule_dict_wrapper(small_molecule_dict)->Dict[str, Dict[str, List[float]]]:
     return filter_small_molecule_dict(
@@ -434,34 +439,39 @@ def make_heatmap():
         # Draw Heatmap
         dynamic_height = max(500, len(df.columns) * 24) # Dyanmic height based on number of m/z values
         
-        # If we're suppled a dendrogram, use it to reorder the heatmap
+        # If we're supplied a dendrogram, use it to reorder the heatmap
         x = None
-        if st.session_state['sma_show_dendrogram'] == 'Yes':
-            # Remove any rows where the filename is not currently selected
-            all_filenames = st.session_state['query_only_spectra_df'].filename.values
-            all_data      = st.session_state['query_spectra_numpy_data']
-            
-            # Get the indices of the selected proteins
-            selected_indices = [i for i, filename in enumerate(all_filenames) if filename in st.session_state["sma_selected_proteins"]]
-            # Get the data for the selected proteins
-            numpy_data = all_data[selected_indices]
-            
-            # Unfortunately, we have to recalculate the dendrogram, because things may cluster differently 
-            # depending on the selected proteins.
-            # Note though, that we share parameters with the above dendrogram.
-            dendro = ff.create_dendrogram(numpy_data,
-                                orientation='bottom',
-                                labels=st.session_state["sma_selected_proteins"],
-                                distfun=st.session_state['distance_measure'],
-                                linkagefun=lambda x: linkage(x, method=st.session_state["sma_clustering_method"],),
-                                color_threshold=st.session_state["sma_coloring_threshold"])
-            
+        if st.session_state['sma_show_dendrogram'] == 'Yes':           
+            # Filter for the selected proteins
+            filtered_indices = [i for i, filename in enumerate(st.session_state['all_spectra_df'].filename.values) if filename in st.session_state["sma_selected_proteins"]]
+            filtered_names   = st.session_state['all_spectra_df'].filename.values[filtered_indices]
+
+            complete_distance_matrix = assemble_complete_distance_matrix(
+                st.session_state['db_distance_dict'],
+                st.session_state['all_spectra_df'].filename.values
+            )
+            complete_distance_matrix = squareform(complete_distance_matrix, force='tovector')
+        
+            _dendro = _Dendrogram(
+                complete_distance_matrix,
+                orientation='bottom',
+                labels = filtered_names,
+                distfun=None,
+                linkagefun=lambda x: linkage(x, method=st.session_state["sma_clustering_method"]),
+                color_threshold=st.session_state["sma_coloring_threshold"]
+            )
+            dendro = graph_objs.Figure(
+                data = _dendro.data,
+                layout = _dendro.layout
+            )
+
+
             # Reorder the dataframe based on the dendrogram
-            reordered_df = df.reindex(index=dendro.layout.xaxis.ticktext)
-            reordered_df = reordered_df.reindex(columns=dendro.layout.yaxis.ticktext)
-            df = reordered_df
-            # Also us the X values from the dendrogram
+            df = df.reindex(index=dendro.layout.xaxis.ticktext)
             x = dendro.layout.xaxis.tickvals
+
+        else:
+            x = list(df.index.values)
         
         heatmap = plotly.express.imshow(df.values.T,
                                         x=x,
@@ -471,7 +481,7 @@ def make_heatmap():
                                         color_continuous_scale='Bluered',)
         # Update axis text (we do this here otherwise spacing is not even)
         heatmap.update_layout(
-            xaxis=dict(title="Protein", ticktext=list(df.index.values), tickvals=list(range(len(df.index))), side='top'),
+            xaxis=dict(title="Protein", ticktext=list(x), tickvals=list(range(len(x))), side='top'),
             yaxis=dict(title="m/z", ticktext=[str(x) for x in df.columns], tickvals=list(range(len(df.columns)))),
             margin=dict(t=5, pad=0),
         )
@@ -598,9 +608,9 @@ with st.expander("Metabolite Association Network Options", expanded=True):
 with st.expander("Visualize Small Molecule Data", expanded=True):
     with st.popover(label='Reference Protein Dendrogram Clusters'):
         if st.session_state.get("query_spectra_numpy_data") is not None:
-            cluster_dict, _ = basic_dendrogram()
+            cluster_dict, _, leaf_names = basic_dendrogram()
         else:
-            cluster_dict, _ = basic_dendrogram(disabled=True) 
+            cluster_dict, _, leaf_names = basic_dendrogram(disabled=True) 
                 
     # Options to show only certain proteins/clusters
     add_filters_1, add_filters_2, add_filters_3 = st.columns([0.46, 0.08, 0.46])
