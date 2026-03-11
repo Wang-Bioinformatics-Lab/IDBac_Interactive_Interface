@@ -96,12 +96,39 @@ elif st.session_state['dqc_task_id'].startswith("BETA-"):
 else:
     base_url = "https://gnps2.org"
 
+task_status_url = f"{base_url}/status.json?task={dbc_task_id}"
 metadata_url = f"{base_url}/resultfile?task={dbc_task_id}&file=metadata_converted/converted_metadata.tsv"
+
+
+#### Verify that we can access the data before proceeding with plotting ####
+try:
+    gnps2_task_status = requests.get(task_status_url, timeout=60)
+    if gnps2_task_status.status_code != 200:
+        st.error("Unable to access the data for this task. Please check the Task ID and try again.")
+        st.stop()
+    else:
+        gnps2_task_status_json = gnps2_task_status.json()
+        gnps2_task_status = gnps2_task_status_json.get("task_status", "unknown")
+        gnps2_task_status = str(gnps2_task_status).lower().strip()
+        if gnps2_task_status in ["pending", "running"]:
+            st.warning("This task is still running. Please check again later.")
+            st.stop()
+        elif gnps2_task_status in ["failed", "error"]:
+            st.error("This task has failed. Please check the workflow and try again.")
+            st.stop()
+        elif gnps2_task_status == "unknown":
+            st.warning("Unable to determine task status. Proceed with caution.")
+        else:
+            pass
+except Exception as e:
+    st.warning("Unable to determine task status. Proceed with caution.")
+
+#### Load the metadata and QC data ####
 try:
     metadata_df = pd.read_csv(metadata_url, sep="\t", index_col=False)
 except Exception as e:
     print("Error loading metadata from URL:", metadata_url, flush=True)
-    st.error("Error: Unable to load metadata. Please check the task ID.")
+    st.error("Error: Unable to load metadata. Is this a IDBac Deposition Task? Please check the task ID.")
     st.write(f"Error: {e}")
     st.stop()
 

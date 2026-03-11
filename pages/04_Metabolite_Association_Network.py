@@ -48,7 +48,7 @@ def basic_dendrogram(disabled=False):
         return None, None, None
     if st.session_state['query_spectra_numpy_data'].shape[0] <= 1:
         st.warning("There are not enough spectra to create a dendrogram. \n \
-                   Please check number of input spectra and database search results file.")
+                   Please check number of input spectra.")
         return None, None, None
     
     complete_distance_matrix = assemble_complete_distance_matrix(
@@ -155,7 +155,7 @@ def generate_network(cluster_dict:dict=None, height=1000, width=600)->Tuple[Dict
     """
     # TODO: Right now we don't integrate all_spectra_df which means there could be nodes that aren't truly in the network
     if st.session_state.get("metadata_df") is None:
-        st.error("Please upload a metadata file first.")
+        st.error("Small molecule analysis requires a metadata file. Please ensure your metadata file is uploaded.")
         st.stop()
     
     df = st.session_state["metadata_df"]
@@ -529,7 +529,7 @@ def make_heatmap():
         st.download_button("Download Current Heatmap Data", df.T.to_csv(), "small_molecule_heatmap.csv", help="Download the data used to generate the heatmap.")
 
 if st.session_state["metadata_df"] is None:
-    st.error("Please upload a metadata file first.")
+    st.error("Small molecule analysis requires a metadata file. Please upload a metadata file first.")
     st.stop()
 
 st.title("Metabolite Association Network Visualization")

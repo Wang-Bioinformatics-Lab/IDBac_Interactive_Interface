@@ -150,10 +150,15 @@ st.session_state.dm_n_components = st.selectbox(
 )
 
 if st.session_state.dm_method == "t-SNE":
+    min_value = 1
+    max_value = max(2, len(st.session_state.dm_selected_spectra) - 1)  # Perplexity must be less than the number of samples
+    if min_value >= max_value:
+        st.error("Not enough spectra selected for t-SNE. Please select at least 3 spectra.")
+        st.stop()
     st.session_state.dm_perplexity = st.slider(
         "Perplexity",
-        min_value=1,
-        max_value=len(st.session_state.dm_selected_spectra) - 1,
+        min_value=min_value,
+        max_value=max_value,
         value=min(30, len(st.session_state.dm_selected_spectra) - 1),
         step=1,
         help="Perplexity parameter for t-SNE. Higher values lead to more global structure being preserved."
@@ -433,6 +438,10 @@ def plot_reduced_data(reduced_data, selected_spectra, display_filename, n_compon
 if st.session_state.dm_method == "PCA":
     try:
         # Perform PCA
+        if st.session_state.dm_n_components >= len(st.session_state.dm_selected_spectra):
+            st.error("Number of components must be less than the number of selected spectra for PCA.")
+            st.stop()
+
         pca = PCA(n_components=st.session_state.dm_n_components)
         reduced_data = pca.fit_transform(spectra)
 
@@ -454,7 +463,6 @@ if st.session_state.dm_method == "PCA":
                         )
 
     except Exception as e:
-        raise e
         st.error(f"An error occurred during PCA: {e}")
 
 elif st.session_state.dm_method == "t-SNE":
@@ -486,13 +494,6 @@ elif st.session_state.dm_method == "t-SNE":
         st.error(f"An error occurred during t-SNE: {e}")
 elif st.session_state.dm_method == "PCoA":
     try:
-        # distances = st.session_state.get('db_db_distance_table')
-        # if distances is None:
-        #     st.error("Distance table not available for PCoA.")
-        #     st.stop()
-
-        print('spectra', spectra, flush=True)
-
         if st.session_state.dm_distance_metric == "cosine":
             distance_matrix = cosine_distances(spectra)
         elif st.session_state.dm_distance_metric == "presence/absence":
@@ -504,6 +505,13 @@ elif st.session_state.dm_method == "PCoA":
             st.error("Invalid distance metric selected.")
             st.stop()
 
+        max_coords = len(st.session_state.dm_selected_spectra) - 1
+
+        if st.session_state.dm_n_components > max_coords:
+            st.error(f"Too many components requested. For {len(st.session_state.dm_selected_spectra)} spectra, "
+                    f"the number of components must be {max_coords} or fewer.")
+            st.stop()
+            
         dist_matrix = DistanceMatrix(distance_matrix, ids=st.session_state.dm_selected_spectra)
         pcoa_results = pcoa(dist_matrix, number_of_dimensions=st.session_state.dm_n_components)
         reduced_data = pcoa_results.samples.values
@@ -533,7 +541,7 @@ elif st.session_state.dm_method == "PCoA":
 
     except Exception as e:
         st.error(f"An error occurred during PCoA: {e}")
-        
+        st.stop()
 
 else:
     st.error("Invalid method selected.")

@@ -588,6 +588,8 @@ elif st.session_state["task_id"].startswith("BETA-"):
 else:
     base_url = "https://gnps2.org"
     task_id = st.session_state['task_id']
+
+task_status_url = f"{base_url}/status.json?task={task_id}"
 labels_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/output_histogram_data_directory/labels_spectra.tsv"
 numpy_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/output_histogram_data_directory/numerical_spectra.npy"
 bin_counts_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/bin_counts/bin_counts.csv"
@@ -595,6 +597,28 @@ replicate_count_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/bin_
 protein_heatmap_binned_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/bin_counts/binned_spectra.csv"
 warnings_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/errors.csv"
 
+#### Verify that we can access the data before proceeding with plotting ####
+try:
+    gnps2_task_status = requests.get(task_status_url, timeout=60)
+    if gnps2_task_status.status_code != 200:
+        st.error("Unable to access the data for this task. Please check the Task ID and try again.")
+        st.stop()
+    else:
+        gnps2_task_status_json = gnps2_task_status.json()
+        gnps2_task_status = gnps2_task_status_json.get("task_status", "unknown")
+        gnps2_task_status = str(gnps2_task_status).lower().strip()
+        if gnps2_task_status in ["pending", "running"]:
+            st.warning("This task is still running. Please check again later.")
+            st.stop()
+        elif gnps2_task_status in ["failed", "error"]:
+            st.error("This task has failed. Please check the workflow and try again.")
+            st.stop()
+        elif gnps2_task_status == "unknown":
+            st.warning("Unable to determine task status. Proceed with caution.")
+        else:
+            pass
+except Exception as e:
+    st.warning("Unable to determine task status. Proceed with caution.")
 
 st.session_state['workflow_params'] = write_job_params(st.session_state['task_id'])
 if st.checkbox("Show Warnings", value=True, key="show_warnings"):

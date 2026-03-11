@@ -64,7 +64,7 @@ def basic_dendrogram(spectrum_df=None, disabled=False, display=True, add_opts=Fa
         return None, None, None
     if query_spectra_numpy_data.shape[0] <= 1:
         st.warning("There are not enough spectra to create a dendrogram. \n \
-                   Please check number of input spectra and knowledgebase search results file.")
+                   Please check number of input spectra.")
         logging.debug("Dendrogram disabled (not enough spectra) returning.")
         return None, None, None
 
