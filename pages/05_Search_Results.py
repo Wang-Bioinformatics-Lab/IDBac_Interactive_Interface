@@ -23,6 +23,11 @@ st.markdown("""
 
 
 data = st.session_state['db_search_results']
+
+if data is None:
+    st.warning("No search results found.")
+    st.stop()
+
 non_bin_cols = [x for x in data.columns if not x.startswith("BIN_")]
 data = data[non_bin_cols]
 

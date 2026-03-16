@@ -1,3 +1,5 @@
+import traceback
+
 import streamlit as st
 import requests
 import yaml
@@ -26,7 +28,7 @@ def load_task_data(task_id:str):
     task_status_url = f"{base_url}/status.json?task={task_id}"
     labels_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/output_histogram_data_directory/labels_spectra.tsv"
     numpy_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/output_histogram_data_directory/numerical_spectra.npy"
-    bin_counts_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/bin_counts/bin_counts.csv"
+    bin_counts_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/bin_counts/el"
     replicate_count_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/bin_counts/replicates.csv"
     protein_heatmap_binned_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/bin_counts/binned_spectra.csv"
     warnings_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/errors.csv"
@@ -62,7 +64,7 @@ def load_task_data(task_id:str):
         numpy_file.raise_for_status()
         numpy_array = np.load(io.BytesIO(numpy_file.content))
     except:
-        st.warning("No Spectra found for this task. Please check the workflow inputs.")
+        st.warning("No protein spectra found for this task.")
         numpy_array = None
     st.session_state['query_spectra_numpy_data'] = numpy_array
 
@@ -85,7 +87,12 @@ def load_task_data(task_id:str):
         bin_counts_df = pd.read_csv(io.StringIO(bin_counts_csv.text), index_col=0)
     except:
         if st.session_state['query_spectra_numpy_data'] is not None:
-            st.warning("Unable to retrieve bin counts, this may be an old task.")
+            if st.session_state['query_spectra_numpy_data'].shape == (1, 0):
+                # Just a non-protein task
+                pass
+            else:
+                print(st.session_state['query_spectra_numpy_data'].shape, flush=True)
+                st.warning("Unable to retrieve bin counts, this may be an old task.")
         bin_counts_df = None
     st.session_state['bin_counts_df'] = bin_counts_df
 
@@ -97,7 +104,11 @@ def load_task_data(task_id:str):
         replicate_count_df = pd.read_csv(io.StringIO(replicate_count_csv.text), index_col=1)
     except:
         if st.session_state['query_spectra_numpy_data'] is not None:
-            st.warning("Unable to retrieve replicate counts, this may be an old task.")
+            if st.session_state['query_spectra_numpy_data'].shape == (1, 0):
+                # Just a non-protein task
+                pass
+            else:
+                st.warning("Unable to retrieve replicate counts, this may be an old task.")
         replicate_count_df = None
     st.session_state['replicate_count_df'] = replicate_count_df
 
@@ -119,6 +130,7 @@ def load_task_data(task_id:str):
 
     st.session_state['workflow_params'] = write_job_params(st.session_state['task_id'])
 
+    print("st.session_state['workflow_params']", st.session_state['workflow_params'], flush=True)
 
     ############ Database search results ############
     try:
@@ -127,7 +139,12 @@ def load_task_data(task_id:str):
         database_search_results_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/search/complete_enriched_db_results.tsv"
         print("Knowledgebase Search Results URL", database_search_results_url, flush=True)
         database_search_results_df = pd.read_csv(database_search_results_url, sep="\t")
-    except:
+
+    except pd.errors.EmptyDataError:
+        database_search_results_df = None
+
+    except Exception as e:
+        print(traceback.format_exc(), flush=True)
         st.error("This is GNPS task is now out of date. Please clone it to use the interactive dashboard.")
         st.stop()
         database_search_results_df = None
@@ -137,7 +154,14 @@ def load_task_data(task_id:str):
         database_distance_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/search/db_db_distance.tsv"
         print("Database Distance URL", database_distance_url, flush=True)
         database_database_distance_table = pd.read_csv(database_distance_url, sep="\t")
-    except Exception:
+    
+    except pd.errors.EmptyDataError:
+        database_database_distance_table = None
+
+    
+    except Exception as e:
+        print(traceback.format_exc(), flush=True)
+
         database_database_distance_table = None
         
         if database_search_results_df is not None:
@@ -150,7 +174,13 @@ def load_task_data(task_id:str):
         query_query_distance_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/search/query_query_distances.tsv"
         print("Query-Query Distance URL", query_query_distance_url, flush=True)
         query_query_distance_table = pd.read_csv(query_query_distance_url, sep="\t")
-    except Exception:
+    
+    except pd.errors.EmptyDataError:
+        query_query_distance_table = None
+    
+    except Exception as e:
+        print(traceback.format_exc(), flush=True)
+
         st.warning("This is GNPS task is now out of date. Please clone it to use the interactive dashboard.")
         st.stop()
 
@@ -169,6 +199,7 @@ def load_task_data(task_id:str):
 
 
 def write_job_params(task_id:str):
+
     if task_id.startswith("DEV-"):
         base_url = "http://dev.gnps2.org:4000"
         task_id = task_id.replace("DEV-", "")
@@ -570,3 +601,53 @@ def convert_to_mzml(spectrum_dict:dict):
                 scan += 1
 
     return output_bytes
+
+def assemble_complete_distance_matrix(
+    db_distance_dict,
+    labels
+):
+    """Generate a complete distance matrix of (n+m) x (n+m) size from the three distance matrices.
+    
+    Parameters:
+    - db_distance_dict (dict): The dictionary containing the database distance information.
+    - all_spectra_df (pandas.DataFrame): The dataframe containing all spectra data relevant to what we're plotting.
+
+    Returns:
+    - complete_distance_matrix (numpy.ndarray): The complete distance matrix.
+    """
+    # all_spectra_df = deepcopy(all_spectra_df)
+    # num_inputs = all_spectra_df[all_spectra_df['db_search_result'] == False].shape[0]
+    # num_db_search_results = all_spectra_df[all_spectra_df['db_search_result'] == True].shape[0]
+    # complete_distance_matrix = np.ones((num_inputs + num_db_search_results, num_inputs + num_db_search_results)) * np.inf    # Multiply by inf to allow for a sanity check
+    
+    # # 'filename' contains database_id for db search results
+    # all_filenames = all_spectra_df['filename']
+
+    num_labels = np.unique(labels).shape[0]
+    complete_distance_matrix = np.ones((num_labels, num_labels)) * np.inf
+
+    # Fill in input-input distances
+    for i in range(len(labels)):
+        fi = labels[i]
+        for j in range(i, len(labels)):  # Start from i to cover the diagonal and upper triangle
+            fj = labels[j]
+            
+            if i == j:
+                dist = 0.0
+            else:
+                # Check both directions in the dict efficiently
+                dist = db_distance_dict.get(fi, {}).get(fj)
+                if dist is None:
+                    dist = db_distance_dict.get(fj, {}).get(fi)
+
+            if dist is None:
+                raise ValueError(f"Missing distance for {fi} and {fj}")
+
+            complete_distance_matrix[i, j] = dist
+            complete_distance_matrix[j, i] = dist
+
+    # Ensure no inf vals left
+    if np.isinf(complete_distance_matrix).any():
+        raise ValueError("Some distances are missing in the complete distance matrix")
+
+    return complete_distance_matrix

@@ -21,7 +21,7 @@ from plotly.graph_objs import graph_objs
 
 import numpy as np
 
-from utils import write_job_params, write_warnings, enrich_genbank_metadata, metadata_validation, custom_css, load_task_data
+from utils import write_job_params, write_warnings, enrich_genbank_metadata, metadata_validation, custom_css, load_task_data, assemble_complete_distance_matrix
 from Protein_Dendrogram_Components import draw_protein_heatmap, _Dendrogram
 from streamlit.components.v1 import html
 import ete3
@@ -44,57 +44,6 @@ DEFAULT_TASK_ID = "4c43a2ca6f3541938e491b3c52442721"
 #     "Workflows executed during this time will be **permanently** affected, even after maintenance is complete. "
 #     "Anticipated completion **has been extended to** to 5/12/2025 at 12:00 Noon PST. If you have any questions, please contact us at nkrull@uic.edu."
 # )
-
-
-def assemble_complete_distance_matrix(
-    db_distance_dict,
-    labels
-):
-    """Generate a complete distance matrix of (n+m) x (n+m) size from the three distance matrices.
-    
-    Parameters:
-    - db_distance_dict (dict): The dictionary containing the database distance information.
-    - all_spectra_df (pandas.DataFrame): The dataframe containing all spectra data relevant to what we're plotting.
-
-    Returns:
-    - complete_distance_matrix (numpy.ndarray): The complete distance matrix.
-    """
-    # all_spectra_df = deepcopy(all_spectra_df)
-    # num_inputs = all_spectra_df[all_spectra_df['db_search_result'] == False].shape[0]
-    # num_db_search_results = all_spectra_df[all_spectra_df['db_search_result'] == True].shape[0]
-    # complete_distance_matrix = np.ones((num_inputs + num_db_search_results, num_inputs + num_db_search_results)) * np.inf    # Multiply by inf to allow for a sanity check
-    
-    # # 'filename' contains database_id for db search results
-    # all_filenames = all_spectra_df['filename']
-
-    num_labels = np.unique(labels).shape[0]
-    complete_distance_matrix = np.ones((num_labels, num_labels)) * np.inf
-
-    # Fill in input-input distances
-    for i in range(len(labels)):
-        fi = labels[i]
-        for j in range(i, len(labels)):  # Start from i to cover the diagonal and upper triangle
-            fj = labels[j]
-            
-            if i == j:
-                dist = 0.0
-            else:
-                # Check both directions in the dict efficiently
-                dist = db_distance_dict.get(fi, {}).get(fj)
-                if dist is None:
-                    dist = db_distance_dict.get(fj, {}).get(fi)
-
-            if dist is None:
-                raise ValueError(f"Missing distance for {fi} and {fj}")
-
-            complete_distance_matrix[i, j] = dist
-            complete_distance_matrix[j, i] = dist
-
-    # Ensure no inf vals left
-    if np.isinf(complete_distance_matrix).any():
-        raise ValueError("Some distances are missing in the complete distance matrix")
-
-    return complete_distance_matrix
 
 def create_dendrogram(data_np, all_spectra_df, db_distance_dict, 
                       plotted_metadata=[],

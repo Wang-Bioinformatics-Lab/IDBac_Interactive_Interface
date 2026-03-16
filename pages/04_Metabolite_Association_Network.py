@@ -21,7 +21,7 @@ import io
 from plotly.graph_objs import graph_objs
 
 from Small_Molecule_Utils import get_small_molecule_dict, filter_small_molecule_dict
-from Protein_Dendrogram import assemble_complete_distance_matrix
+from utils import assemble_complete_distance_matrix
 from Protein_Dendrogram_Components import _Dendrogram
 
 #####
