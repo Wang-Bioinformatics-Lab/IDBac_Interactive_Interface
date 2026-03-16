@@ -402,7 +402,7 @@ def make_heatmap():
     Make a heatmap that shows which m/z values are associated with each protein file with which intensity
     """
 
-    mapping = st.session_state["metadata_df"]
+    mapping = st.session_state.get("metadata_df")
 
     small_mol_dict = filter_small_molecule_dict_wrapper(get_small_molecule_dict())
 
@@ -415,9 +415,13 @@ def make_heatmap():
     df = pd.DataFrame(heatmap, columns=all_mzs, index=st.session_state["sma_selected_proteins"])
 
     for filename in st.session_state["sma_selected_proteins"]:
-        relevant_mapping = mapping[mapping['Filename'] == filename]
-        all_small_molecule_filenames = relevant_mapping['Small molecule file name'].tolist()
-        
+        if mapping:
+            relevant_mapping = mapping[mapping['Filename'] == filename]
+            all_small_molecule_filenames = relevant_mapping['Small molecule file name'].tolist()
+        else:
+            # Just use the filename to find the small molecule data, this is for when we don't have a metadata file
+            all_small_molecule_filenames = [filename]
+
         for small_molecule_filename in all_small_molecule_filenames:
             mz_array = small_mol_dict[small_molecule_filename]['m/z array']
             intensity_array = small_mol_dict[small_molecule_filename]['intensity array']

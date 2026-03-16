@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import json
 import numpy as np
+from collections import defaultdict
 from typing import Dict, List, Tuple
 from pandas import DataFrame
 
@@ -52,23 +53,30 @@ def get_small_molecule_dict():
     for filename, scan_list in output_dict.items():
         mz_intensity_dict = {}
         mz_frequency_dict = {}  # For each m/z, what percent of scans is it in?
+        mz_presence_count = {}  # For each m/z, in how many scans does it appear?
         for scan in scan_list:
             mz_array        = scan['m/z array']
             intensity_array = scan['intensity array']
             ms_level        = int(scan['ms_level'])
             if ms_level != 1:
                 continue
+
+            per_scan_binned_intensity = defaultdict(float)
             
             for mz, intensity in zip(mz_array, intensity_array):
                 _mz = np.round(float(mz), 0)
-                if _mz in mz_intensity_dict:
-                    mz_intensity_dict[_mz].append(float(intensity))
+                per_scan_binned_intensity[_mz] += float(intensity)
+
+            for binned_mz, summed_intensity in per_scan_binned_intensity.items():
+                if binned_mz in mz_intensity_dict:
+                    mz_intensity_dict[binned_mz].append(summed_intensity)
                 else:
-                    mz_intensity_dict[_mz] = [float(intensity)]
+                    mz_intensity_dict[binned_mz] = [summed_intensity]
+                mz_presence_count[binned_mz] = mz_presence_count.get(binned_mz, 0) + 1
             
         for mz, intensities in mz_intensity_dict.items():
             mz_intensity_dict[mz] = sum(intensities) / len(intensities)
-            mz_frequency_dict[mz] = len(intensities) / len(scan_list)
+            mz_frequency_dict[mz] = mz_presence_count[mz] / len(scan_list)
                 
         mz_array           = sorted(list(mz_intensity_dict.keys()))
         intensity_array    = [mz_intensity_dict[mz] for mz in mz_array]
