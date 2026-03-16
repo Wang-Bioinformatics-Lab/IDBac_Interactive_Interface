@@ -21,7 +21,7 @@ from plotly.graph_objs import graph_objs
 
 import numpy as np
 
-from utils import write_job_params, write_warnings, enrich_genbank_metadata, metadata_validation, custom_css
+from utils import write_job_params, write_warnings, enrich_genbank_metadata, metadata_validation, custom_css, load_task_data
 from Protein_Dendrogram_Components import draw_protein_heatmap, _Dendrogram
 from streamlit.components.v1 import html
 import ete3
@@ -350,57 +350,6 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict,
         
         return dendro, linkage_matrix, dist_matrix_relative_labels
 
-
-@st.cache_data
-def collect_database_search_results(task, base_url):
-    """
-    Collect the database search results from the IDBAC Database. If the database search results are not available, then None is returned.
-
-    Parameters:
-    - task (str): The GNPS2 task ID.
-
-    Returns:
-    - database_search_results_df (pandas.DataFrame): The dataframe containing the database search results.
-    - database_distance_table (pandas.DataFrame): The dataframe containing the database distance tabl (contains original fikle)
-    """
-    try:
-        # Getting the database search results
-        # database_search_results_url = f"{base_url}/resultfile?task={task}&file=nf_output/search/enriched_db_results.tsv"
-        database_search_results_url = f"{base_url}/resultfile?task={task}&file=nf_output/search/complete_enriched_db_results.tsv"
-        print("Knowledgebase Search Results URL", database_search_results_url, flush=True)
-        database_search_results_df = pd.read_csv(database_search_results_url, sep="\t")
-    except:
-        st.error("This is GNPS task is now out of date. Please clone it to use the interactive dashboard.")
-        st.stop()
-        database_search_results_df = None
-        
-    try:
-        # Get the DB-DB distances
-        database_distance_url = f"{base_url}/resultfile?task={task}&file=nf_output/search/db_db_distance.tsv"
-        print("Database Distance URL", database_distance_url, flush=True)
-        database_database_distance_table = pd.read_csv(database_distance_url, sep="\t")
-    except Exception:
-        database_database_distance_table = None
-        
-        if database_search_results_df is not None:
-            if 'distance' not in database_search_results_df.columns:
-                st.warning("This is GNPS task is now out of date. Please clone it to use the interactive dashboard.")
-                st.stop()
-
-    try:
-        # Get the query-query distances
-        query_query_distance_url = f"{base_url}/resultfile?task={task}&file=nf_output/search/query_query_distances.tsv"
-        print("Query-Query Distance URL", query_query_distance_url, flush=True)
-        query_query_distance_table = pd.read_csv(query_query_distance_url, sep="\t")
-    except Exception:
-        st.warning("This is GNPS task is now out of date. Please clone it to use the interactive dashboard.")
-        st.stop()
-        
-    return database_search_results_df, database_database_distance_table, query_query_distance_table
-
-
-
-
 def integrate_database_search_results(
         all_spectra_df:pd.DataFrame,
         database_search_results_df:pd.DataFrame,
@@ -578,51 +527,8 @@ st.write("Task Loaded:", st.session_state["task_id"])
 task_id = st.session_state["task_id"]
 base_url = None
 
-# Now we will get all the relevant data from GNPS2 for plotting
-if st.session_state["task_id"].startswith("DEV-"):
-    base_url = "http://dev.gnps2.org:4000"
-    task_id = st.session_state['task_id'][4:]
-elif st.session_state["task_id"].startswith("BETA-"):
-    base_url = "https://beta.gnps2.org"
-    task_id = st.session_state['task_id'][5:]
-else:
-    base_url = "https://gnps2.org"
-    task_id = st.session_state['task_id']
-
-task_status_url = f"{base_url}/status.json?task={task_id}"
-labels_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/output_histogram_data_directory/labels_spectra.tsv"
-numpy_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/output_histogram_data_directory/numerical_spectra.npy"
-bin_counts_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/bin_counts/bin_counts.csv"
-replicate_count_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/bin_counts/replicates.csv"
-protein_heatmap_binned_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/bin_counts/binned_spectra.csv"
-warnings_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/errors.csv"
-
-#### Verify that we can access the data before proceeding with plotting ####
-try:
-    gnps2_task_status = requests.get(task_status_url, timeout=60)
-    if gnps2_task_status.status_code != 200:
-        st.error("Unable to access the data for this task. Please check the Task ID and try again.")
-        st.stop()
-    else:
-        gnps2_task_status_json = gnps2_task_status.json()
-        gnps2_task_status = gnps2_task_status_json.get("task_status", "unknown")
-        gnps2_task_status = str(gnps2_task_status).lower().strip()
-        if gnps2_task_status in ["pending", "running"]:
-            st.warning("This task is still running. Please check again later.")
-            st.stop()
-        elif gnps2_task_status in ["failed", "error"]:
-            st.error("This task has failed. Please check the workflow and try again.")
-            st.stop()
-        elif gnps2_task_status == "unknown":
-            st.warning("Unable to determine task status. Proceed with caution.")
-        else:
-            pass
-except Exception as e:
-    st.warning("Unable to determine task status. Proceed with caution.")
-
-st.session_state['workflow_params'] = write_job_params(st.session_state['task_id'])
-if st.checkbox("Show Warnings", value=True, key="show_warnings"):
-    write_warnings(warnings_url)
+# TODO: Deprecate every one of these in favor of session state
+all_spectra_df, db_search_results, db_db_distance_table, query_query_distance_table  = load_task_data(task_id)
 
 # If workflow parameters specfiy a similarity function, use it. Otherwise, default to cosine
 if "distance" in st.session_state['workflow_params'] and st.session_state['workflow_params'] is not None:
@@ -642,74 +548,6 @@ else:
                Defaulting to cosine similarity.")
     st.session_state['given_distance_measure'] = 'cosine'
     st.session_state['distance_measure'] = cosine_distances
-# By request, no longer displaying labels url
-if False:
-    st.write(labels_url)
-
-# read numpy from url into a numpy array
-try:
-    numpy_file = requests.get(numpy_url, 60)
-    numpy_file.raise_for_status()
-    numpy_array = np.load(io.BytesIO(numpy_file.content))
-except:
-    st.warning("No Spectra found for this task. Please check the workflow inputs.")
-    numpy_array = None
-st.session_state['query_spectra_numpy_data'] = numpy_array
-
-############ Protein Heatmap I/O ############
-# read bin counts from url
-bin_counts_df = None
-try:
-    bin_counts_csv = requests.get(bin_counts_url, 60)
-    bin_counts_csv.raise_for_status()
-    bin_counts_df = pd.read_csv(io.StringIO(bin_counts_csv.text), index_col=0)
-except:
-    if numpy_array is not None:
-        st.warning("Unable to retrieve bin counts, this may be an old task.")
-    bin_counts_df = None
-st.session_state['bin_counts_df'] = bin_counts_df
-
-replicate_count_df = None
-try:
-    replicate_count_csv = requests.get(replicate_count_url, 60)
-    replicate_count_csv.raise_for_status()
-    replicate_count_df = pd.read_csv(io.StringIO(replicate_count_csv.text), index_col=1)
-except:
-    if numpy_array is not None:
-        st.warning("Unable to retrieve replicate counts, this may be an old task.")
-    replicate_count_df = None
-st.session_state['replicate_count_df'] = replicate_count_df
-
-heatmap_binned_spectra = None
-try:
-    heatmap_binned_spectra_csv = requests.get(protein_heatmap_binned_url, 60)
-    heatmap_binned_spectra_csv.raise_for_status()
-    heatmap_binned_spectra = pd.read_csv(io.StringIO(heatmap_binned_spectra_csv.text), index_col=0)
-except:
-    if heatmap_binned_spectra is not None:
-        st.warning("Unable to retrieve binned spectra, this may be an old task.")
-    heatmap_binned_spectra = None
-st.session_state['heatmap_binned_spectra'] = heatmap_binned_spectra
-
-################################################
-
-
-# read pandas dataframe from url
-st.session_state['all_spectra_df'] = None
-try:
-    all_spectra_df = pd.read_csv(labels_url, sep="\t")
-    st.session_state['all_spectra_df'] = all_spectra_df
-except:
-    if numpy_array is not None:
-        st.warning("No Spectra found for this task. Please check the workflow inputs.")
-    all_spectra_df = None
-
-# By request, no longer displaying dataframe table
-if False:
-    st.write(all_spectra_df) # Currently, we're not displaying db search results
-
-# Collect the database search results
-db_search_results, db_db_distance_table, query_query_distance_table = collect_database_search_results(task_id, base_url)
 
 if db_db_distance_table is None and db_search_results is not None:
     st.warning("""Knowledgebase-knowledgebase distances are not available for this task, perhaps this is an old task?  
@@ -794,29 +632,8 @@ if st.checkbox("Upload Metadata", help="If left unchecked, the metadata associat
                 metadata_df = metadata_df[list(metadata_df.keys())[0]]
         else:
             st.error("Please upload a .csv, .tsv, or .txt file")
-    else:
-        metadata_df = None
-else:
-    # Getting the metadata
-    if st.session_state['task_id'].startswith("DEV-"):
-        base_url = "http://dev.gnps2.org:4000"
-    elif st.session_state['task_id'].startswith("BETA-"):
-        base_url = "https://beta.gnps2.org"
-    else:
-        base_url = "https://gnps2.org"
-    try:
-        metadata_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/output_histogram_data_directory/metadata.tsv"
-        print("metadata_url", metadata_url, flush=True)
-        metadata_df = pd.read_csv(metadata_url, sep="\t", index_col=False)
-    except:
-        metadata_df = None 
 
-if metadata_df is not None:
-    # Drop anything with a nan filename
-    metadata_df = metadata_df.dropna(subset=["Filename"], axis=0)
-    metadata_validation(metadata_df, all_spectra_df)
-
-st.session_state["metadata_df"] = metadata_df
+        st.session_state["metadata_df"] = metadata_df
 
 if all_spectra_df is None:
     st.stop()
@@ -849,26 +666,26 @@ with st.expander("Incorporate Metadata into Analysis", expanded=False):
                 help="If checked, the metadata will be enriched with GenBank accession numbers.")
 
     # Add Metadata dropdown for scatter plots
-    if metadata_df is None:
+    if st.session_state["metadata_df"] is None:
         # If there is no metadata, then we will disable the dropdown
         st.session_state["metadata_scatter"] = st.multiselect("Select metadata categories that will be displayed as a scatter plot alongside the dendrogram",
                                                                ["No Metadata Available"], default="No Metadata Available", disabled=True, max_selections=5)
     else:
-        columns_available = [c for c in metadata_df.columns if _col_has_data(metadata_df[c])]
+        columns_available = [c for c in st.session_state["metadata_df"].columns if _col_has_data(st.session_state["metadata_df"][c])]
         # Remove forbidden columns
         columns_available =[x for x in columns_available if x.lower().strip() not in ['filename', 'scan/coordinate', 'genbank accession', 'ncbi taxid', 'ms collected by', 'isolate collected by', 'sample collected by', 'pi', '16s sequence', 'small molecule file name', 'blank filename']]
         st.session_state["metadata_scatter"]  = st.multiselect("Select metadata categories that will be displayed as a scatter plot alongside the dendrogram", sorted(columns_available), default=[], max_selections=5)
 
     # Add Metadata dropdown for text
-    if metadata_df is None:
+    if st.session_state["metadata_df"] is None:
         # If there is no metadata, then we will disable the dropdown
         st.session_state["metadata_label"] = st.selectbox("Select a metadata category that will be displayed as text next to the strain ID", ["No Metadata Available"], disabled=True)
     else:
         # Enrich metadata with genebank accession
         if st.session_state["enrich_with_genbank"]:
-            metadata_df = enrich_genbank_metadata(metadata_df)
+            st.session_state["metadata_df"] = enrich_genbank_metadata(st.session_state["metadata_df"])
         
-        filtered_cols = [c for c in metadata_df.columns if _col_has_data(metadata_df[c])]
+        filtered_cols = [c for c in st.session_state["metadata_df"].columns if _col_has_data(st.session_state["metadata_df"][c])]
         columns_available = ["None"] + filtered_cols
         # Remove filename and scan from the metadata
         columns_available =[x for x in columns_available if x.lower().strip() not in ['filename', 'scan/coordinate', 'small molecule file name', 'blank filename']]
@@ -1127,12 +944,12 @@ def get_taxa_coloring_file(labels, metadata, all_spectra_df):
 
 # Creating the dendrogram
 if st.session_state['distance_measure'] is not None:
-    dendro, linkage_matrix, labels = create_dendrogram(     numpy_array,
+    dendro, linkage_matrix, labels = create_dendrogram(     st.session_state['query_spectra_numpy_data'],
                                                             all_spectra_df,
                                                             db_distance_dict,
                                                             plotted_metadata=st.session_state["metadata_scatter"],
                                                             db_label_column=st.session_state["db_search_result_label"],
-                                                            metadata_df=metadata_df,
+                                                            metadata_df=st.session_state["metadata_df"],
                                                             db_search_columns=st.session_state["db_search_result_label"] ,
                                                             cluster_method=st.session_state["clustering_method"],
                                                             coloring_threshold=st.session_state["coloring_threshold"],
@@ -1159,10 +976,10 @@ if st.session_state['distance_measure'] is not None:
         st.markdown(get_svg_download_link(dendro), unsafe_allow_html=True, help="Currently, this feature only officially supports the dendrogram _without_ metadata.")
         # Add option to download as ete tree
         st.markdown(get_newick_tree_download_link(linkage_matrix, labels), unsafe_allow_html=True)
-        st.markdown(get_taxa_annotation_file(labels, metadata_df, all_spectra_df), unsafe_allow_html=True, help="Download an annotation preset for usage in ITOL. \
+        st.markdown(get_taxa_annotation_file(labels, st.session_state["metadata_df"], all_spectra_df), unsafe_allow_html=True, help="Download an annotation preset for usage in ITOL. \
                     This file will replace knowledgebase hits with their NCBI taxonomies. \
                     Include a column 'NCBI taxid' in your metadata to use this feature for queries")
-        st.markdown(get_taxa_coloring_file(labels, metadata_df, all_spectra_df), unsafe_allow_html=True, help="Download a coloring file for usage in ITOL. \
+        st.markdown(get_taxa_coloring_file(labels, st.session_state["metadata_df"], all_spectra_df), unsafe_allow_html=True, help="Download a coloring file for usage in ITOL. \
                     For KB results, genus will be used. Include a column 'genus' in your metadata to use this feature.\
                     To show colors in ITOL after uploading the annotation file, toggle Advanced>Node options>Leaf node symbols. It can be set back to 'Hide' once done.")
 

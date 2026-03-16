@@ -3,12 +3,170 @@ import requests
 import yaml
 import pandas as pd
 import io
+import requests
 from xml.etree import ElementTree
 import time
 import numpy as np
 from psims.mzml.writer import MzMLWriter
 from io import BytesIO
 import logging
+
+def load_task_data(task_id:str):
+    if task_id.startswith("DEV-"):
+        base_url = "http://dev.gnps2.org:4000"
+        task_id = task_id[4:]
+    elif task_id.startswith("BETA-"):
+        base_url = "https://beta.gnps2.org"
+        task_id = task_id[5:]
+    else:
+        base_url = "https://gnps2.org"
+        task_id = task_id
+
+    
+    task_status_url = f"{base_url}/status.json?task={task_id}"
+    labels_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/output_histogram_data_directory/labels_spectra.tsv"
+    numpy_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/output_histogram_data_directory/numerical_spectra.npy"
+    bin_counts_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/bin_counts/bin_counts.csv"
+    replicate_count_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/bin_counts/replicates.csv"
+    protein_heatmap_binned_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/bin_counts/binned_spectra.csv"
+    warnings_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/errors.csv"
+    metadata_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/output_histogram_data_directory/metadata.tsv"
+
+    
+    # Query for successful task completion
+    try:
+        gnps2_task_status = requests.get(task_status_url, timeout=60)
+        if gnps2_task_status.status_code != 200:
+            st.error("Unable to access the data for this task. Please check the Task ID and try again.")
+            st.stop()
+        else:
+            gnps2_task_status_json = gnps2_task_status.json()
+            gnps2_task_status = gnps2_task_status_json.get("task_status", "unknown")
+            gnps2_task_status = str(gnps2_task_status).lower().strip()
+            if gnps2_task_status in ["pending", "running"]:
+                st.warning("This task is still running. Please check again later.")
+                st.stop()
+            elif gnps2_task_status in ["failed", "error"]:
+                st.error("This task has failed. Please check the workflow and try again.")
+                st.stop()
+            elif gnps2_task_status == "unknown":
+                st.warning("Unable to determine task status. Proceed with caution.")
+            else:
+                pass
+    except Exception as e:
+        st.warning("Unable to determine task status. Proceed with caution.")
+
+    # read numpy from url into a numpy array
+    try:
+        numpy_file = requests.get(numpy_url, 60)
+        numpy_file.raise_for_status()
+        numpy_array = np.load(io.BytesIO(numpy_file.content))
+    except:
+        st.warning("No Spectra found for this task. Please check the workflow inputs.")
+        numpy_array = None
+    st.session_state['query_spectra_numpy_data'] = numpy_array
+
+    # read pandas dataframe from url
+    st.session_state['all_spectra_df'] = None
+    try:
+        all_spectra_df = pd.read_csv(labels_url, sep="\t")
+        st.session_state['all_spectra_df'] = all_spectra_df
+    except:
+        if numpy_array is not None:
+            st.warning("No Spectra found for this task. Please check the workflow inputs.")
+        all_spectra_df = None
+
+
+    ############ Protein Heatmap I/O ############
+    bin_counts_df = None
+    try:
+        bin_counts_csv = requests.get(bin_counts_url, 60)
+        bin_counts_csv.raise_for_status()
+        bin_counts_df = pd.read_csv(io.StringIO(bin_counts_csv.text), index_col=0)
+    except:
+        if st.session_state['query_spectra_numpy_data'] is not None:
+            st.warning("Unable to retrieve bin counts, this may be an old task.")
+        bin_counts_df = None
+    st.session_state['bin_counts_df'] = bin_counts_df
+
+    
+    replicate_count_df = None
+    try:
+        replicate_count_csv = requests.get(replicate_count_url, 60)
+        replicate_count_csv.raise_for_status()
+        replicate_count_df = pd.read_csv(io.StringIO(replicate_count_csv.text), index_col=1)
+    except:
+        if st.session_state['query_spectra_numpy_data'] is not None:
+            st.warning("Unable to retrieve replicate counts, this may be an old task.")
+        replicate_count_df = None
+    st.session_state['replicate_count_df'] = replicate_count_df
+
+    heatmap_binned_spectra = None
+    try:
+        heatmap_binned_spectra_csv = requests.get(protein_heatmap_binned_url, 60)
+        heatmap_binned_spectra_csv.raise_for_status()
+        heatmap_binned_spectra = pd.read_csv(io.StringIO(heatmap_binned_spectra_csv.text), index_col=0)
+    except:
+        if heatmap_binned_spectra is not None:
+            st.warning("Unable to retrieve binned spectra, this may be an old task.")
+        heatmap_binned_spectra = None
+    st.session_state['heatmap_binned_spectra'] = heatmap_binned_spectra
+
+
+    ############ Global Session state vars ############
+    if st.checkbox("Show Warnings", value=True, key="show_warnings"):
+        write_warnings(warnings_url)
+
+    st.session_state['workflow_params'] = write_job_params(st.session_state['task_id'])
+
+
+    ############ Database search results ############
+    try:
+        # Getting the database search results
+        # database_search_results_url = f"{base_url}/resultfile?task={task}&file=nf_output/search/enriched_db_results.tsv"
+        database_search_results_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/search/complete_enriched_db_results.tsv"
+        print("Knowledgebase Search Results URL", database_search_results_url, flush=True)
+        database_search_results_df = pd.read_csv(database_search_results_url, sep="\t")
+    except:
+        st.error("This is GNPS task is now out of date. Please clone it to use the interactive dashboard.")
+        st.stop()
+        database_search_results_df = None
+        
+    try:
+        # Get the DB-DB distances
+        database_distance_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/search/db_db_distance.tsv"
+        print("Database Distance URL", database_distance_url, flush=True)
+        database_database_distance_table = pd.read_csv(database_distance_url, sep="\t")
+    except Exception:
+        database_database_distance_table = None
+        
+        if database_search_results_df is not None:
+            if 'distance' not in database_search_results_df.columns:
+                st.warning("This is GNPS task is now out of date. Please clone it to use the interactive dashboard.")
+                st.stop()
+
+    try:
+        # Get the query-query distances
+        query_query_distance_url = f"{base_url}/resultfile?task={task_id}&file=nf_output/search/query_query_distances.tsv"
+        print("Query-Query Distance URL", query_query_distance_url, flush=True)
+        query_query_distance_table = pd.read_csv(query_query_distance_url, sep="\t")
+    except Exception:
+        st.warning("This is GNPS task is now out of date. Please clone it to use the interactive dashboard.")
+        st.stop()
+
+    ############ Metadata ############
+    try:
+        metadata_df = pd.read_csv(metadata_url, sep="\t", index_col=False)
+    except:
+        metadata_df = None 
+    if metadata_df is not None:
+        # Drop anything with a nan filename
+        metadata_df = metadata_df.dropna(subset=["Filename"], axis=0)
+        metadata_validation(metadata_df, all_spectra_df)
+    st.session_state["metadata_df"] = metadata_df
+        
+    return all_spectra_df, database_search_results_df, database_database_distance_table, query_query_distance_table
+
 
 def write_job_params(task_id:str):
     if task_id.startswith("DEV-"):
@@ -107,9 +265,6 @@ def write_warnings(param_url:str)->None:
             st.write(errors_df)
 
     return None
-
-import requests
-from xml.etree import ElementTree
 
 def get_genbank_metadata(genbank_accession: str) -> dict:
     """
