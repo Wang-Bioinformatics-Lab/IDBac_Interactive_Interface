@@ -153,13 +153,10 @@ def generate_network(cluster_dict:dict=None, height=1000, width=600)->Tuple[Dict
     dict: A dictionary of small molecule data {filename: {m/z array: [float], intensity array: [float], frequency array: [float]}}
     networkx.Graph: A networkx graph object
     """
-    # TODO: Right now we don't integrate all_spectra_df which means there could be nodes that aren't truly in the network
-    if st.session_state.get("metadata_df") is None:
-        st.error("Small molecule analysis requires a metadata file. Please ensure your metadata file is uploaded.")
-        st.stop()
-    
-    df = st.session_state["metadata_df"]
-    if 'Small molecule file name' not in df.columns:
+
+    metadata_df = st.session_state.get("metadata_df")
+
+    if metadata_df is not None and 'Small molecule file name' not in metadata_df.columns:
         st.error("Please upload a metadata file with a 'Small molecule file name' column.")
         st.stop()
     
@@ -167,16 +164,18 @@ def generate_network(cluster_dict:dict=None, height=1000, width=600)->Tuple[Dict
     cmap = plt.get_cmap(st.session_state.get("sma_node_color_map"))
     shape_map = ShapeMap()
     
-    # Add nodes from df['Filename'] and df['Small molecule file name']
-    all_filenames = df.loc[~ df['Filename'].isna()].Filename.tolist()
-    all_small_molecule_filenames = df.loc[~ df['Small molecule file name'].isna()]['Small molecule file name'].tolist()
+    if metadata_df is not None:
+        # Add nodes from metadata_df['Filename'] and metadata_df['Small molecule file name']
+        all_filenames = metadata_df.loc[~ metadata_df['Filename'].isna()].Filename.tolist()
+    else:
+        # Add protein nodes for the filenames in the small molecule dic
+        all_filenames = list(get_small_molecule_dict().keys())
+    
     for filename in all_filenames:
         nx_G.add_node(filename, 
                       title=filename, color=colors.to_hex(cmap(0)), 
                       type="Protein",
                       shape=shape_map.get_shape(0)[0])
-    # for small_molecule_filename in all_small_molecule_filenames:
-    #     graph.add_node(small_molecule_filename, title=small_molecule_filename)
         
     small_mol_dict = filter_small_molecule_dict_wrapper(get_small_molecule_dict())
     all_mzs = [small_mol_dict.get('m/z array', []) for small_mol_dict in small_mol_dict.values()]
@@ -197,9 +196,10 @@ def generate_network(cluster_dict:dict=None, height=1000, width=600)->Tuple[Dict
     
     missing_summaries = []
 
-    # Add edges from df['Filename] to m/z's associated with df['Small molecule file name']
-    for index, row in df.iterrows():
-        if not pd.isna(row['Filename']) and not pd.isna(row['Small molecule file name']):
+
+    if metadata_df is not None:
+        # Add edges from df['Filename] to m/z's associated with df['Small molecule file name']
+        for index, row in metadata_df.iterrows():
             if row['Small molecule file name'] not in small_mol_dict:
                 # This happens because users may have uploaded a metadata file that 
                 # references small molecules that are not in the summary.json file
@@ -209,8 +209,13 @@ def generate_network(cluster_dict:dict=None, height=1000, width=600)->Tuple[Dict
                 continue
             
             for mz in small_mol_dict[row['Small molecule file name']]['m/z array']:
-                weight = (1/mz_value_counts.get(mz, 1))+0.5      # Weight inversely propotional to frequency per file
+                weight = (1/mz_value_counts.get(mz, 1))+0.5      # Weight inversely proportionally to frequency per file
                 nx_G.add_edge(row['Filename'], f'{int(mz)}', weight=weight) 
+    else:
+        for key, d in small_mol_dict.items():
+            for mz in d['m/z array']:
+                weight = (1/mz_value_counts.get(mz, 1))+0.5      # Weight inversely proportionally to frequency per file
+                nx_G.add_edge(key, f'{int(mz)}', weight=weight)
                 
     if len(missing_summaries) > 0:
         st.warning(f"The following small molecules files were referenced in the metadata, but were not \
@@ -529,8 +534,7 @@ def make_heatmap():
         st.download_button("Download Current Heatmap Data", df.T.to_csv(), "small_molecule_heatmap.csv", help="Download the data used to generate the heatmap.")
 
 if st.session_state["metadata_df"] is None:
-    st.error("Small molecule analysis requires a metadata file. Please upload a metadata file first.")
-    st.stop()
+    st.warning("Small molecule analysis is running without a metadata file. Strain names will be inferred from the small molecule filenames.")
 
 st.title("Metabolite Association Network Visualization")
 st.markdown("""
@@ -655,9 +659,18 @@ with st.expander("Visualize Small Molecule Data", expanded=True):
         add_button = add_filters_2.button(":arrow_forward:", key="Add")
 
         # Individual Protein Selection
+        multiselect_options = []
+        if st.session_state.get("metadata_df") is not None:
+            multiselect_options = list(st.session_state["metadata_df"]['Filename'])
+        else:
+            # Use the filenames from small mol
+            temp_small_mol_dict = get_small_molecule_dict()
+            if temp_small_mol_dict is not None:
+                multiselect_options = list(temp_small_mol_dict.keys())
+
         sma_selected_proteins = add_filters_3.multiselect(
             "Populate by strain",
-            list(st.session_state["metadata_df"]['Filename']),
+            multiselect_options,
             default=st.session_state['sma_selected_proteins']
         )
             
