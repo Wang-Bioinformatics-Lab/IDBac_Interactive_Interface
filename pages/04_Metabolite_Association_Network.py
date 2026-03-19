@@ -327,14 +327,15 @@ def generate_network(cluster_dict:dict=None, height=1000, width=600)->Tuple[Dict
             # "Transpose Dict"
             spectral_communities = {}
 
-            for node, metadata in cluster_dict.items():
-                cluster = metadata['cluster']
-                if cluster != 0:
-                    if cluster in spectral_communities:
-                        spectral_communities[cluster].append(node)
-                    else:
-                        spectral_communities[cluster] = [node]
-                    
+            if cluster_dict and cluster_dict != [None]:
+                for node, metadata in cluster_dict.items():
+                    cluster = metadata['cluster']
+                    if cluster != 0:
+                        if cluster in spectral_communities:
+                            spectral_communities[cluster].append(node)
+                        else:
+                            spectral_communities[cluster] = [node]
+                        
             for cluster, nodes in spectral_communities.items():
                 for i, node1 in enumerate(nodes):
                     for node2 in nodes[i+1:]:

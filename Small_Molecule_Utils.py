@@ -30,7 +30,7 @@ def get_small_molecule_dict():
     
     response = requests.get(url, timeout=(120,120))
     if response.status_code != 200:
-        st.error(f"Error loading small molecule summary file: {response.status_code}")
+        st.error(f"Could not load small molecule summary file. Is there small molecule data? Status Code:{response.status_code}")
         st.stop()
     
     response_dict = json.loads(response.content)
