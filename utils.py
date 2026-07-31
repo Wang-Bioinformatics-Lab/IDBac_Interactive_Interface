@@ -321,6 +321,29 @@ def metadata_validation(metadata_table:pd.DataFrame, spectrum_df:pd.DataFrame):
             with st.expander(":warning: Filenames in spectrum file not in metadata table:"):
                 st.write(filenames_in_spectrum_not_in_metadata)
 
+# Display names for the knowledgebase search result columns
+KB_COLUMN_DISPLAY_NAMES = {
+    'None': 'None',
+    'db_strain_name': 'Strain Name',
+    'db_culture_collection': 'Culture Collection',
+    'db_sample_name': 'Sample Name',
+    'db_genbank_accession': 'GenBank Accession',
+    'db_taxonomy': 'Taxonomy',
+    'db_family': 'Family',
+    'db_genus': 'Genus',
+    'db_species': 'Species',
+    'NCBI taxid': 'NCBI TaxID',
+}
+
+def format_kb_column_name(column_name:str) -> str:
+    """Converts a knowledgebase search result column name into a human readable display name.
+    Columns without an explicit mapping are title cased with their 'db_' prefix removed.
+    """
+    if column_name in KB_COLUMN_DISPLAY_NAMES:
+        return KB_COLUMN_DISPLAY_NAMES[column_name]
+
+    return str(column_name).removeprefix('db_').replace('_', ' ').title()
+
 def format_proteins_as_strings(df):
     output = []
     for row in df.to_dict(orient="records"):

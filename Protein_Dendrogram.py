@@ -21,7 +21,7 @@ from plotly.graph_objs import graph_objs
 
 import numpy as np
 
-from utils import write_job_params, write_warnings, enrich_genbank_metadata, metadata_validation, custom_css
+from utils import write_job_params, write_warnings, enrich_genbank_metadata, metadata_validation, custom_css, format_kb_column_name
 from Protein_Dendrogram_Components import draw_protein_heatmap, _Dendrogram
 from streamlit.components.v1 import html
 import ete3
@@ -157,10 +157,15 @@ def create_dendrogram(data_np, all_spectra_df, db_distance_dict,
     if db_label_column != "No Database Search Results" and sum(all_spectra_df["db_search_result"]) > 0:
         # all_spectra_df.loc[all_spectra_df["db_search_result"] == True, db_metadata_column].fillna("No Metadata", inplace=True)
         # all_spectra_df.loc[all_spectra_df["db_search_result"] == True, "label"] = 'KB Result - ' + all_spectra_df.loc[all_spectra_df["db_search_result"] == True][db_label_column].astype(str)
-        if db_search_columns != 'None':
-            all_spectra_df.loc[all_spectra_df["db_search_result"] == True, "label"] = 'KB Result - ' \
-                + all_spectra_df.loc[all_spectra_df["db_search_result"] == True][db_search_columns].astype(str) \
-                + ' - ' + all_spectra_df.loc[all_spectra_df["db_search_result"] == True]['db_strain_name'].astype(str)
+        if isinstance(db_search_columns, str) and db_search_columns != 'None' and db_search_columns in all_spectra_df.columns:
+            db_result_rows = all_spectra_df["db_search_result"] == True
+            db_metadata_values = all_spectra_df.loc[db_result_rows, db_search_columns]
+            # Rows without the selected metadata are labeled with the strain name alone
+            db_metadata_prefix = db_metadata_values.astype(str) + ' - '
+            db_metadata_prefix[db_metadata_values.isna() | (db_metadata_values.astype(str).str.strip() == '')] = ''
+            all_spectra_df.loc[db_result_rows, "label"] = 'KB Result - ' \
+                + db_metadata_prefix \
+                + all_spectra_df.loc[db_result_rows, 'db_strain_name'].astype(str)
         else:
             all_spectra_df.loc[all_spectra_df["db_search_result"] == True, "label"] = 'KB Result - ' \
                 + all_spectra_df.loc[all_spectra_df["db_search_result"] == True]['db_strain_name'].astype(str)
@@ -739,7 +744,7 @@ if "clustering_method" not in st.session_state:
     st.session_state["clustering_method"] = "average"
 # Create a session state for the coloring threshold
 if "coloring_threshold" not in st.session_state:
-    st.session_state["coloring_threshold"] = 0.70
+    st.session_state["coloring_threshold"] = 0.60
 # Create a plot for the metadata text labels
 if "metadata_label" not in st.session_state:
     st.session_state["metadata_label"] = "None"
@@ -832,8 +837,8 @@ with st.expander("Clustering Settings", expanded=False):
     st.session_state["clustering_method"] = st.selectbox("Clustering Method", clustering_options, index=0)
     # Add coloring threshold slider
     st.slider("Color code clusters based on a dendrogram cut-height", 0.0, 1.0, step=0.05, key='coloring_threshold',
-            help="All branches that split below the specified height will have the same color. Ex: If this value is set to 0.7, all branches\
-                  splitting below 0.7 will have the same color. Above 0.7, all branches will be blue.")
+            help="All branches that split below the specified height will have the same color. Ex: If this value is set to 0.6, all branches\
+                  splitting below 0.6 will have the same color. Above 0.6, all branches will be blue.")
 
 # Only include columns that contain any non-empty values
 def _col_has_data(col_series):
@@ -892,7 +897,12 @@ with st.expander("Knowledgebase Search Results", expanded=False):
         # Create a 'select all' box for the db taxonomy filter
         # Add DB Search Result dropdown
         db_search_columns_for_selection = ['None'] + [x for x in db_search_columns.copy() if x != 'db_strain_name']
-        st.session_state["db_search_result_label"] = st.selectbox("Select a metadata category that will be displayed as text alongside the DB strain ID", db_search_columns_for_selection)
+        # Default to genus, keeping the previous selection when there is one
+        selected_db_label = st.session_state["db_search_result_label"]
+        if not isinstance(selected_db_label, str) or selected_db_label not in db_search_columns_for_selection:
+            selected_db_label = 'db_genus' if 'db_genus' in db_search_columns_for_selection else 'None'
+        st.session_state["db_search_result_label"] = st.selectbox("Select a metadata category that will be displayed as text alongside the DB strain ID", db_search_columns_for_selection,
+                                                                  index=db_search_columns_for_selection.index(selected_db_label), format_func=format_kb_column_name)
         
 
         

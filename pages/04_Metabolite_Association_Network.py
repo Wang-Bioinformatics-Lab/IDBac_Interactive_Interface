@@ -38,7 +38,7 @@ def basic_dendrogram(disabled=False):
     """
     This function generates a basic dendrogram for the small molecule association page. 
     """
-    st.slider("Coloring Threshold", min_value=0.0, max_value=1.0, value=0.7, step=0.01, key="sma_coloring_threshold")
+    st.slider("Coloring Threshold", min_value=0.0, max_value=1.0, value=0.6, step=0.01, key="sma_coloring_threshold")
     clustering_options = ["average", "single", "complete", "weighted"]
     if st.session_state['distance_measure'] == "euclidean":
         clustering_options += ['ward', 'median', 'centroid']
