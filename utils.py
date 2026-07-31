@@ -170,14 +170,15 @@ def get_genbank_metadata(genbank_accession: str) -> dict:
 
         metadata = {}
         num_results = int(metadata_json['esearchresult'].get('count', 0))
+        idlist = metadata_json['esearchresult'].get('idlist', [])
         if num_results > 1:
             st.warning(f"Multiple results found for GenBank accession {genbank_accession}. Using the first one.")
-        elif num_results == 1:
-            idlist = metadata_json['esearchresult'].get('idlist', [])
-            if len(idlist) > 1:
-                st.warning(f"Multiple taxonomy ids found for GenBank accession {genbank_accession}. Using the first one.")
-            elif len(idlist) == 1:
-                genbank_id = idlist[0]
+        elif len(idlist) > 1:
+            st.warning(f"Multiple taxonomy ids found for GenBank accession {genbank_accession}. Using the first one.")
+        # Both warnings above promise the first hit, so take it rather than falling
+        # through with genbank_id unset, which resolved the accession to nothing.
+        if idlist:
+            genbank_id = idlist[0]
         # at this point taxid will be None if it was not identified            
         # Fetch taxid if genbank_id is found
         if genbank_id:
