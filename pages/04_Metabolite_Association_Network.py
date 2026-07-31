@@ -39,7 +39,12 @@ def basic_dendrogram(disabled=False):
     """
     This function generates a basic dendrogram for the small molecule association page. 
     """
-    st.slider("Coloring Threshold", min_value=0.0, max_value=1.0, value=0.6, step=0.01, key="sma_coloring_threshold")
+    # Range follows the distance measure; euclidean heights are unbounded. Set on the
+    # entry page, which is the only place the distance tables are loaded.
+    threshold_max = float(st.session_state.get('coloring_threshold_max', 1.0))
+    st.slider("Coloring Threshold", min_value=0.0, max_value=threshold_max,
+              value=0.6 * threshold_max, step=threshold_max / 100,
+              key="sma_coloring_threshold")
     clustering_options = ["average", "single", "complete", "weighted"]
     # Must test the workflow parameter STRING, not session_state['distance_measure'],
     # which holds a distance *function* and so never equals "euclidean".

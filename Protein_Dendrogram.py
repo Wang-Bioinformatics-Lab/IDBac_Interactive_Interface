@@ -739,12 +739,33 @@ else:
     db_search_columns = []
     st.session_state['db_search_results'] = None
 ##### Create Session States #####
+# The coloring threshold is a dendrogram cut-height, so its slider has to span the range
+# the heights actually occupy. Cosine and presence distances are bounded by 1.0, but
+# euclidean ones are not: on a real euclidean task merge heights run 154 - 699, so the
+# hard-coded 0.0 - 1.0 range put every branch above the threshold and the dendrogram came
+# out a single color at every setting. Only the euclidean case is rescaled, so cosine and
+# presence tasks (and any shareable link built from one) behave exactly as before.
+if st.session_state.get('given_distance_measure') == 'euclidean':
+    observed_distances = [query_query_distance_table['distance'].max()]
+    if db_search_results is not None:
+        observed_distances.append(db_search_results['distance'].max())
+    if db_db_distance_table is not None:
+        observed_distances.append(db_db_distance_table['distance'].max())
+    coloring_threshold_max = float(max(observed_distances))
+else:
+    coloring_threshold_max = 1.0
+st.session_state['coloring_threshold_max'] = coloring_threshold_max
+
 # Create a session state for the clustering method
 if "clustering_method" not in st.session_state:
     st.session_state["clustering_method"] = "average"
 # Create a session state for the coloring threshold
 if "coloring_threshold" not in st.session_state:
-    st.session_state["coloring_threshold"] = 0.60
+    st.session_state["coloring_threshold"] = 0.60 * coloring_threshold_max
+# Switching tasks can leave a threshold above the new maximum, which the slider rejects
+st.session_state["coloring_threshold"] = min(
+    float(st.session_state["coloring_threshold"]), coloring_threshold_max
+)
 # Create a plot for the metadata text labels
 if "metadata_label" not in st.session_state:
     st.session_state["metadata_label"] = "None"
@@ -838,9 +859,11 @@ with st.expander("Clustering Settings", expanded=False):
         clustering_options += ['ward', 'median', 'centroid']
     st.session_state["clustering_method"] = st.selectbox("Clustering Method", clustering_options, index=0)
     # Add coloring threshold slider
-    st.slider("Color code clusters based on a dendrogram cut-height", 0.0, 1.0, step=0.05, key='coloring_threshold',
-            help="All branches that split below the specified height will have the same color. Ex: If this value is set to 0.6, all branches\
-                  splitting below 0.6 will have the same color. Above 0.6, all branches will be blue.")
+    st.slider("Color code clusters based on a dendrogram cut-height", 0.0, coloring_threshold_max,
+            step=coloring_threshold_max / 20, key='coloring_threshold',
+            help=f"All branches that split below the specified height will have the same color. Ex: If this value is set to \
+                  {0.6 * coloring_threshold_max:.2f}, all branches splitting below {0.6 * coloring_threshold_max:.2f} will have the \
+                  same color. Above {0.6 * coloring_threshold_max:.2f}, all branches will be blue.")
 
 # Only include columns that contain any non-empty values
 def _col_has_data(col_series):
