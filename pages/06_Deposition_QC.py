@@ -321,8 +321,11 @@ display_dataframe(qc_and_metadata_df)
 # Give the option to select a filename and view the per-scan QC results
 if qc_df is not None:
     st.subheader("Per-Scan QC Results")
+    # quote the filename: unescaped '#' truncates the URL at the fragment and '&', '+' and
+    # '%' are all rewritten when the server parses the query, so the resolver receives a
+    # different USI than intended. The ':' separators must stay literal.
     qc_df['View Raw Scan'] = qc_df.apply(
-        lambda row: f"https://metabolomics-usi.gnps2.org/dashinterface/?usi1=mzspec:GNPS2:TASK-{dbc_task_id}-input_spectra_folder/{row['Filename']}:scan:{row['scan']}",
+        lambda row: f"https://metabolomics-usi.gnps2.org/dashinterface/?usi1=mzspec:GNPS2:TASK-{dbc_task_id}-input_spectra_folder/{quote(str(row['Filename']), safe='')}:scan:{row['scan']}",
         axis=1
     )
     try:
