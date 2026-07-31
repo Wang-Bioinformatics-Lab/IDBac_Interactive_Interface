@@ -375,7 +375,11 @@ def get_raw_peaks(filename: str, task:str, mass_range: tuple):
 
     else:
         if task.startswith("BETA-") or task.startswith("DEV-"):
+            # get_peaks_from_USI only resolves against the production USI service, which
+            # cannot see a beta/dev task, and it ends in st.stop() on failure -- that would
+            # abort the whole page instead of just leaving the raw overlay off.
             st.warning("Raw peaks for beta/dev tasks are not supported.")
+            return None
 
         # For query jobs, we can get the raw peaks from the USI
         usi = f"mzspec:GNPS2:TASK-{task.strip('BETA-').strip('DEV-')}-nf_output/raw_merged_for_plotting/{filename}:scan:1"
