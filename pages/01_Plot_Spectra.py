@@ -717,6 +717,10 @@ def draw_mirror_plot(all_spectra_df):
     selected_font_size = st.session_state.get("mp_selected_font_size_multiplier", 1.0)
 
     peaks_a = get_peaks_a(all_spectra_df, selected_one, st.session_state["task_id"], selected_mass_range, db_id=db_id_a)
+    if peaks_a is None:
+        # get_peaks_a has already explained why (no spectrum for this selection); stick_plot
+        # would iterate it and raise TypeError, hiding that message behind a stack trace.
+        return
     peaks_b = None
     if selected_two != 'None':
         peaks_b = get_peaks_b(all_spectra_df, selected_two, st.session_state["task_id"], selected_mass_range, db_id=db_id_b)
