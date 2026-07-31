@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 from matplotlib import colors
 import plotly.figure_factory as ff
 from scipy.cluster.hierarchy import linkage, dendrogram
+from scipy.spatial import KDTree
 from scipy.spatial.distance import squareform
 from utils import custom_css, parse_numerical_input
 from utils import convert_to_mzml
@@ -108,7 +109,7 @@ def basic_dendrogram(disabled=False):
 def filter_small_molecule_dict_wrapper(small_molecule_dict)->Dict[str, Dict[str, List[float]]]:
     return filter_small_molecule_dict(
         small_molecule_dict,
-        st.session_state.get("sma_relative_intensity_threshold", 0.1),
+        st.session_state.get("sma_relative_intensity_threshold", 0.05),
         st.session_state.get("sma_replicate_frequency_threshold", 0.7),
         st.session_state.get("sma_parsed_selected_mzs", []),
         st.session_state.get("sma_mz_tolerance", 0.1),
@@ -140,6 +141,113 @@ class ShapeMap():
             index = index % 8
         return self.shape_map[index], warning
     
+
+# Minimum distance, in pixels, that is kept between two protein nodes at a layout scale of 1.0, and
+# proportionally more as the scale is increased. A protein node is roughly 50px across before its
+# label is drawn, so anything below that overlaps. Raise it to spread the proteins further apart.
+MIN_PROTEIN_SEPARATION = 80
+
+def separate_protein_nodes(coordinates:np.ndarray, min_separation:float=MIN_PROTEIN_SEPARATION, iterations:int=200)->np.ndarray:
+    """Pushes overlapping protein nodes apart until they are at least min_separation pixels from
+    each other. The layout places proteins by their m/z associations, which packs strains sharing a
+    metabolite profile into a clump far tighter than a node is wide. Scaling the layout cannot fix
+    that on its own, because it multiplies the spacing of every node equally.
+
+    Parameters:
+    coordinates (numpy.ndarray): An (n, 2) array of protein node positions, in pixels.
+    min_separation (float): The minimum distance to keep between two protein nodes, in pixels.
+    iterations (int): The maximum number of relaxation passes to run.
+
+    Returns:
+    numpy.ndarray: An (n, 2) array of protein node positions, in pixels.
+    """
+    coordinates = coordinates.copy()
+    # Deterministic jitter, used to break apart nodes that sit on the exact same position
+    jitter = np.random.default_rng(42).uniform(-1, 1, size=coordinates.shape)
+
+    # Pushing nodes apart cannot create room that does not exist, so grow the whole cloud first if
+    # it is too small to hold every node. Packing circles of diameter min_separation needs an area
+    # of roughly 0.87 * min_separation ** 2 per node, which is a radius of 0.53 * min_separation *
+    # sqrt(number of nodes).
+    center = coordinates.mean(axis=0)
+    centered_coordinates = coordinates - center
+    radius = np.linalg.norm(centered_coordinates, axis=1).max()
+    required_radius = 0.53 * min_separation * np.sqrt(len(coordinates))
+    if 0 < radius < required_radius:
+        coordinates = center + centered_coordinates * (required_radius / radius)
+
+    for _ in range(iterations):
+        pairs = KDTree(coordinates).query_pairs(min_separation, output_type='ndarray')
+        if len(pairs) == 0:
+            break
+
+        offsets = coordinates[pairs[:, 0]] - coordinates[pairs[:, 1]]
+        distances = np.linalg.norm(offsets, axis=1)
+
+        # Nodes sharing a position have no direction to be pushed in, so nudge them off each other
+        coincident = distances == 0
+        offsets[coincident] = jitter[pairs[coincident, 0]]
+        distances[coincident] = np.linalg.norm(offsets[coincident], axis=1)
+
+        # Each node of a pair moves half of the overlap, in opposite directions
+        push = (offsets / distances[:, None]) * ((min_separation - distances) / 2)[:, None]
+        displacements = np.zeros_like(coordinates)
+        np.add.at(displacements, pairs[:, 0], push)
+        np.add.at(displacements, pairs[:, 1], -push)
+        coordinates += displacements
+
+    return coordinates
+
+def apply_layout_scale(nx_G:nx.Graph, pos:dict, scale:float, width:int, height:int)->dict:
+    """Applies the layout scale by spreading the protein nodes apart, rather than by scaling every
+    position around the center of the network, and then separates any proteins that still overlap.
+    Each m/z value is moved by the average displacement of the proteins it is attached to, so it
+    travels with its proteins instead of being pushed towards the edge of the canvas.
+
+    Parameters:
+    nx_G (networkx.Graph): The network, used for the node types and the protein-m/z edges.
+    pos (dict): A dictionary of {node: (x, y)} as returned by the networkx layout functions.
+    scale (float): The layout scale requested by the user.
+    width (int): The width of the graph in pixels, which positions are multiplied by.
+    height (int): The height of the graph in pixels, which positions are multiplied by.
+
+    Returns:
+    dict: A dictionary of {node: (x, y)} with the scale applied.
+    """
+    if not pos:
+        return pos
+
+    coordinates = {node: np.asarray(position, dtype=float) for node, position in pos.items()}
+    protein_nodes = [node for node, node_type in nx_G.nodes.data('type') if node_type == "Protein" and node in coordinates]
+
+    # Without proteins to spread there is nothing to anchor the m/z values to, so scale everything
+    if len(protein_nodes) < 2:
+        return {node: position * scale for node, position in coordinates.items()}
+
+    center = np.array([coordinates[node] for node in protein_nodes]).mean(axis=0)
+
+    # Separation is resolved in pixels, because positions are multiplied by the canvas dimensions.
+    # It grows with the scale so that the slider keeps spreading the proteins, but never drops below
+    # the point where nodes overlap again.
+    canvas = np.array([width, height], dtype=float)
+    min_separation = MIN_PROTEIN_SEPARATION * max(scale, 1.0)
+    scaled_proteins = np.array([center + (coordinates[node] - center)*scale for node in protein_nodes])
+    separated_proteins = separate_protein_nodes(scaled_proteins * canvas, min_separation) / canvas
+
+    displacements = {node: separated_proteins[index] - coordinates[node] for index, node in enumerate(protein_nodes)}
+
+    scaled_pos = {}
+    for node, position in coordinates.items():
+        if node in displacements:
+            scaled_pos[node] = position + displacements[node]
+        else:
+            protein_displacements = [displacements[neighbor] for neighbor in nx_G.neighbors(node) if neighbor in displacements]
+            if len(protein_displacements) > 0:
+                scaled_pos[node] = position + np.mean(protein_displacements, axis=0)
+            else:
+                scaled_pos[node] = position
+
+    return scaled_pos
 
 def generate_network(cluster_dict:dict=None, height=1000, width=600)->Tuple[Dict[str, Dict[str, List[float]]], nx.Graph]:
     """ This function generates a network graph of the small molecule data. It uses the pyvis library to create an interactive graph.
@@ -342,8 +450,9 @@ def generate_network(cluster_dict:dict=None, height=1000, width=600)->Tuple[Dict
         # Apply layout
         layout_fn = layout_fn_mapping[st.session_state.get("sma_network_layout")]
         layout_params = layout_default_params[st.session_state.get("sma_network_layout")]
-        layout_params['scale'] = layout_scale  # Update scale parameter
+        layout_params['scale'] = 1.0  # The scale is applied by apply_layout_scale below
         pos = layout_fn(nx_G, **layout_params)
+        pos = apply_layout_scale(nx_G, pos, layout_scale, width, height)
         
         if st.session_state['sma_spectral_similarity_layout'] == 'Yes':
             # Remove edges between protein nodes, we don't want them displayed
@@ -418,7 +527,7 @@ def make_heatmap():
             intensity_array = small_mol_dict[small_molecule_filename]['intensity array']
             
             for mz, intensity in zip(mz_array, intensity_array):
-                if intensity > st.session_state.get("sma_relative_intensity_threshold", 0.1):
+                if intensity > st.session_state.get("sma_relative_intensity_threshold", 0.05):
                     df.at[filename, mz] = intensity
     
     # Remove columns that don't meet the frequency threshold
@@ -543,7 +652,7 @@ st.markdown("""
 
 with st.expander("Small Molecule Filters", expanded=True):
     # Add a slider for the relative intensity threshold
-    st.slider("Relative Intensity Threshold", min_value=0.00, max_value=1.0, value=0.15, step=0.01, 
+    st.slider("Relative Intensity Threshold", min_value=0.00, max_value=1.0, value=0.05, step=0.01,
             key="sma_relative_intensity_threshold")
     st.slider("Replicate Frequency Threshold", min_value=0.00, max_value=1.0, value=0.70, step=0.05, 
             key="sma_replicate_frequency_threshold", help="Only show m/z values that occur in at least this percentage of replicates.")
@@ -589,7 +698,10 @@ with st.expander("Metabolite Association Network Options", expanded=True):
 
     #### Scale
     # Add a slider to adjust the layout scale
-    st.slider("Adjust Layout Scale", min_value=0.5, max_value=5.0, value=1.0, step=0.1, key="sma_layout_scale")
+    st.slider("Adjust Layout Scale", min_value=0.5, max_value=5.0, value=2.0, step=0.1, key="sma_layout_scale",
+            help="Spreads the protein nodes apart, keeping enough distance between them that they do not overlap. \
+                  Each m/z value moves with the proteins it is associated with, so the network grows more slowly \
+                  than the spacing between proteins.")
 
     #### Network Community Detection Options
     # Options for Network Community Detection Node Properties
