@@ -424,7 +424,13 @@ def draw_protein_heatmap(all_spectra_df, bin_counts, replicate_counts, bin_size,
     logging.debug(f"Filtered by replicate threshold: {st.session_state['phm_replicate_threshold']}")
     logging.debug(f"Setting {aggregated_bin_counts.isna().sum().sum()} values to nan based on replicate threshold.")
     logging.debug(f"All aggregated bin counts are nan {aggregated_bin_counts.T.notna().values.all()}")
+    # .where aligns the mask to this frame's columns, and "_metadata" is not a bin so it
+    # aligns to NaN and gets wiped. Carry it across the mask; every other column keeps the
+    # existing behaviour, including bins that are absent from the mask.
+    metadata_labels = all_spectra_df["_metadata"] if "_metadata" in all_spectra_df.columns else None
     all_spectra_df = all_spectra_df.where(aggregated_bin_counts.T.notna())
+    if metadata_labels is not None:
+        all_spectra_df["_metadata"] = metadata_labels
     if logging.getLevelName(logging.getLogger().getEffectiveLevel()) == "DEBUG":
         # Download button
         st.download_button("DEBUG: Download Replicate Count Filtered Protein Spectra", all_spectra_df.to_csv(), "filtered_protein_spectra.csv", help="Download the filtered protein spectra.")
