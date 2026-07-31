@@ -224,7 +224,17 @@ def aggregate_qc_data(df):
     associated with that value. 
     """
 
-    aggregated_df = df.groupby("Filename").apply(lambda group: group.loc[group["Total QC Score"].replace("Error", -1).astype(float).idxmin()]).reset_index(drop=True)
+    def __worst_scoring_scan(group):
+        # errors="coerce": astype(float) raised on any non-numeric value other than the
+        # literal "Error", so one malformed cell took the whole page down. Treat those as
+        # missing, which is how idxmin already treats NaN.
+        scores = pd.to_numeric(group["Total QC Score"].replace("Error", -1), errors="coerce")
+        if scores.isna().all():
+            # idxmin returns NaN here, and .loc[NaN] raises. Keep the file in the table.
+            return group.iloc[0]
+        return group.loc[scores.idxmin()]
+
+    aggregated_df = df.groupby("Filename").apply(__worst_scoring_scan).reset_index(drop=True)
     
     aggregated_df.rename(columns={
         "scan": "Scan with Worst QC Score",
