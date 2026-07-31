@@ -106,16 +106,23 @@ def filter_small_molecule_dict(
                         if start <= mz <= end:
                             mz_filtered_indices.add(i)
                             
-            indices = list(set(indices).intersection(mz_filtered_indices))
-        
-        # Filter mz_array and intensity_array
+            # sorted(): a set has no order, and the arrays below must stay ascending in m/z
+            indices = sorted(set(indices).intersection(mz_filtered_indices))
+
+        # Filter all three arrays by the same indices; they are positionally paired, so
+        # dropping peaks from only two of them makes the frequencies describe the wrong m/z
         mz_array = [mz_array[i] for i in indices]
         intensity_array = [intensity_array[i] for i in indices]
-        
-        d['m/z array'] = mz_array
-        d['intensity array'] = intensity_array
-    
-        output[k] = d
+        frequency_array = [frequency_array[i] for i in indices]
+
+        # A new dict per file: callers pass in the shared dictionary returned by
+        # get_small_molecule_dict(), which must not be filtered out from under them
+        output[k] = {
+            **d,
+            'm/z array': mz_array,
+            'intensity array': intensity_array,
+            'frequency array': frequency_array,
+        }
     return output
 
 def load_small_molecule_dict_as_dataframe(small_molecule_dict, bin_size=1.0):
