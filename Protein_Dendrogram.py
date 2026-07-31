@@ -832,7 +832,9 @@ st.header("Dendrogram Display Options")
 with st.expander("Clustering Settings", expanded=False):
     # Add Clustering Method dropdown
     clustering_options = ["average", "single", "complete", "weighted"]
-    if st.session_state['distance_measure'] == "euclidean":
+    # Must test the workflow parameter STRING, not session_state['distance_measure'],
+    # which holds a distance *function* and so never equals "euclidean".
+    if st.session_state.get('given_distance_measure') == 'euclidean':
         clustering_options += ['ward', 'median', 'centroid']
     st.session_state["clustering_method"] = st.selectbox("Clustering Method", clustering_options, index=0)
     # Add coloring threshold slider

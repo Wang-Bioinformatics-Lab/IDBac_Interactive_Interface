@@ -41,7 +41,9 @@ def basic_dendrogram(disabled=False):
     """
     st.slider("Coloring Threshold", min_value=0.0, max_value=1.0, value=0.6, step=0.01, key="sma_coloring_threshold")
     clustering_options = ["average", "single", "complete", "weighted"]
-    if st.session_state['distance_measure'] == "euclidean":
+    # Must test the workflow parameter STRING, not session_state['distance_measure'],
+    # which holds a distance *function* and so never equals "euclidean".
+    if st.session_state.get('given_distance_measure') == 'euclidean':
         clustering_options += ['ward', 'median', 'centroid']
     st.selectbox("Clustering Method", clustering_options, key="sma_clustering_method")
 
