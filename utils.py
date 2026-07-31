@@ -259,8 +259,11 @@ def enrich_genbank_metadata(df:pd.DataFrame)->pd.DataFrame:
     # Create a DataFrame from the metadata
     metadata_df = pd.DataFrame(metadata)
     
-    # Merge the metadata with the original DataFrame
-    df = df.merge(metadata_df, left_on='Genbank accession', right_on='Genbank accession')
+    # Left join: metadata_df only holds the accessions that resolved, so an inner join
+    # would drop every strain with a blank or unresolved accession as soon as one other
+    # accession resolves. Unmatched rows keep their original data and get NaN for the
+    # added Genbank columns, which the label/scatter code already treats as "no value".
+    df = df.merge(metadata_df, left_on='Genbank accession', right_on='Genbank accession', how='left')
     
     return df
 
