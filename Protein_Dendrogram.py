@@ -383,7 +383,9 @@ def collect_database_search_results(task, base_url):
         # Get the DB-DB distances
         database_distance_url = f"{base_url}/resultfile?task={task}&file=nf_output/search/db_db_distance.tsv"
         print("Database Distance URL", database_distance_url, flush=True)
-        database_database_distance_table = pd.read_csv(database_distance_url, sep="\t")
+        # round_trip: pandas' default float parser is not correctly rounded, so distances
+        # come back up to 2 ULP from the value the file encodes (see the labels_url read).
+        database_database_distance_table = pd.read_csv(database_distance_url, sep="\t", float_precision='round_trip')
     except Exception:
         database_database_distance_table = None
         
@@ -396,7 +398,7 @@ def collect_database_search_results(task, base_url):
         # Get the query-query distances
         query_query_distance_url = f"{base_url}/resultfile?task={task}&file=nf_output/search/query_query_distances.tsv"
         print("Query-Query Distance URL", query_query_distance_url, flush=True)
-        query_query_distance_table = pd.read_csv(query_query_distance_url, sep="\t")
+        query_query_distance_table = pd.read_csv(query_query_distance_url, sep="\t", float_precision='round_trip')
     except Exception:
         st.warning("This is GNPS task is now out of date. Please clone it to use the interactive dashboard.")
         st.stop()
@@ -689,7 +691,7 @@ heatmap_binned_spectra = None
 try:
     heatmap_binned_spectra_csv = requests.get(protein_heatmap_binned_url, 60)
     heatmap_binned_spectra_csv.raise_for_status()
-    heatmap_binned_spectra = pd.read_csv(io.StringIO(heatmap_binned_spectra_csv.text), index_col=0)
+    heatmap_binned_spectra = pd.read_csv(io.StringIO(heatmap_binned_spectra_csv.text), index_col=0, float_precision='round_trip')
 except:
     if heatmap_binned_spectra is not None:
         st.warning("Unable to retrieve binned spectra, this may be an old task.")
@@ -702,7 +704,10 @@ st.session_state['heatmap_binned_spectra'] = heatmap_binned_spectra
 # read pandas dataframe from url
 st.session_state['all_spectra_df'] = None
 try:
-    all_spectra_df = pd.read_csv(labels_url, sep="\t")
+    # round_trip: pandas' default float_precision='high' parser is not correctly rounded
+    # and misreads ~2-4% of the intensities here by 1-2 ULP. The heatmap normalises each
+    # row by its max, so a single mis-parsed cell shifts that whole row.
+    all_spectra_df = pd.read_csv(labels_url, sep="\t", float_precision='round_trip')
     st.session_state['all_spectra_df'] = all_spectra_df
 except:
     if numpy_array is not None:
